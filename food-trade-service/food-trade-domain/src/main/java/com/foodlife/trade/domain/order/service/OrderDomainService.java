@@ -1,65 +1,28 @@
 package com.foodlife.trade.domain.order.service;
 
-import com.foodlife.trade.domain.order.check.OrderCreateCheckChain;
-import com.foodlife.trade.domain.order.check.OrderCreateCheckStage;
 import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
-import com.foodlife.trade.domain.order.factory.OrderFactory;
+import com.foodlife.trade.domain.order.create.OrderCreateTemplateRouter;
 import com.foodlife.trade.domain.order.model.CreateOrderCommand;
 import com.foodlife.trade.domain.order.model.CreateOrderResult;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
-import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
-import com.foodlife.trade.domain.order.model.OrderCreateContext;
 import com.foodlife.trade.domain.order.model.OrderDetailEntity;
-import com.foodlife.trade.domain.order.model.OrderPricingResult;
-import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
-import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
-import com.foodlife.trade.domain.order.pricing.OrderPricingService;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import org.springframework.stereotype.Service;
 
 @Service
 public class OrderDomainService {
 
-    private final IBusinessPackagePort businessPackagePort;
     private final IOrderRepository orderRepository;
-    private final OrderCreateCheckChain orderCreateCheckChain;
-    private final OrderPricingService orderPricingService;
-    private final OrderFactory orderFactory;
+    private final OrderCreateTemplateRouter orderCreateTemplateRouter;
 
-    public OrderDomainService(IBusinessPackagePort businessPackagePort,
-                              IOrderRepository orderRepository,
-                              OrderCreateCheckChain orderCreateCheckChain,
-                              OrderPricingService orderPricingService,
-                              OrderFactory orderFactory) {
-        this.businessPackagePort = businessPackagePort;
+    public OrderDomainService(IOrderRepository orderRepository,
+                              OrderCreateTemplateRouter orderCreateTemplateRouter) {
         this.orderRepository = orderRepository;
-        this.orderCreateCheckChain = orderCreateCheckChain;
-        this.orderPricingService = orderPricingService;
-        this.orderFactory = orderFactory;
+        this.orderCreateTemplateRouter = orderCreateTemplateRouter;
     }
 
     public CreateOrderResult createNormalOrder(CreateOrderCommand command) {
-        OrderCreateContext context = buildCreateContext(TradeTypeConstants.NORMAL, command);
-        orderCreateCheckChain.check(context, OrderCreateCheckStage.COMMAND);
-
-        PackageTradeSnapshot snapshot = businessPackagePort.queryTradeSnapshot(command.getPackageId());
-        context.setPackageSnapshot(snapshot);
-
-        orderCreateCheckChain.check(context, OrderCreateCheckStage.SNAPSHOT);
-        OrderPricingResult pricingResult = orderPricingService.calculate(context);
-
-        DiningOrderEntity order = orderFactory.createOrder(context.getTradeType(), command, snapshot, pricingResult);
-        DiningOrderEntity savedOrder = orderRepository.saveOrder(order);
-
-        DiningOrderItemEntity orderItem = orderFactory.createOrderItem(savedOrder, snapshot, command.getQuantity());
-        orderRepository.saveOrderItem(orderItem);
-
-        CreateOrderResult result = new CreateOrderResult();
-        result.setOrderId(savedOrder.getId());
-        result.setOrderNo(savedOrder.getOrderNo());
-        result.setPayAmount(savedOrder.getPayAmount());
-        result.setOrderStatus(savedOrder.getOrderStatus());
-        return result;
+        return orderCreateTemplateRouter.create(TradeTypeConstants.NORMAL, command);
     }
 
     public OrderDetailEntity queryOrderDetail(Long orderId, Long userId) {
@@ -79,10 +42,4 @@ public class OrderDomainService {
         return detail;
     }
 
-    private OrderCreateContext buildCreateContext(String tradeType, CreateOrderCommand command) {
-        OrderCreateContext context = new OrderCreateContext();
-        context.setTradeType(tradeType);
-        context.setCommand(command);
-        return context;
-    }
 }
