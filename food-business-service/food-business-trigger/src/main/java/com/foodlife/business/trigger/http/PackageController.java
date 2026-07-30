@@ -1,6 +1,7 @@
 package com.foodlife.business.trigger.http;
 
 import com.foodlife.business.domain.packagee.model.MealPackageEntity;
+import com.foodlife.business.domain.packagee.model.PackageTradeSnapshotEntity;
 import com.foodlife.business.domain.packagee.service.PackageDomainService;
 import com.foodlife.business.types.response.Response;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,5 +30,14 @@ public class PackageController {
     @GetMapping("/of/shop")
     public Response<List<MealPackageEntity>> queryPackagesByShopId(@RequestParam Long shopId) {
         return Response.success(packageDomainService.queryPackagesByShopId(shopId));
+    }
+
+    @GetMapping("/trade-snapshot/{packageId}")
+    public Response<PackageTradeSnapshotEntity> queryTradeSnapshot(@PathVariable Long packageId) {
+        PackageTradeSnapshotEntity snapshot = packageDomainService.queryTradeSnapshot(packageId);
+        if (snapshot == null) {
+            return Response.fail("404", "package not found");
+        }
+        return Response.success(snapshot);
     }
 }

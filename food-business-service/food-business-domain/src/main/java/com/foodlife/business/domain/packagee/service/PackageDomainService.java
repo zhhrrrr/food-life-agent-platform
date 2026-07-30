@@ -1,6 +1,7 @@
 package com.foodlife.business.domain.packagee.service;
 
 import com.foodlife.business.domain.packagee.model.MealPackageEntity;
+import com.foodlife.business.domain.packagee.model.PackageTradeSnapshotEntity;
 import com.foodlife.business.domain.packagee.repository.IPackageRepository;
 import org.springframework.stereotype.Service;
 
@@ -21,5 +22,9 @@ public class PackageDomainService {
 
     public List<MealPackageEntity> queryPackagesByShopId(Long shopId) {
         return packageRepository.listByShopId(shopId);
+    }
+
+    public PackageTradeSnapshotEntity queryTradeSnapshot(Long packageId) {
+        return packageRepository.queryTradeSnapshot(packageId);
     }
 }
