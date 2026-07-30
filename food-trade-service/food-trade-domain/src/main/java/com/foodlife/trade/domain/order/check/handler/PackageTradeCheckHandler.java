@@ -1,7 +1,6 @@
 package com.foodlife.trade.domain.order.check.handler;
 
 import com.foodlife.trade.domain.order.check.OrderCreateCheckHandler;
-import com.foodlife.trade.domain.order.constant.OrderPatternGroups;
 import com.foodlife.trade.domain.order.model.OrderCreateContext;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import org.springframework.stereotype.Component;
@@ -10,17 +9,7 @@ import org.springframework.stereotype.Component;
 public class PackageTradeCheckHandler implements OrderCreateCheckHandler {
 
     @Override
-    public String group() {
-        return OrderPatternGroups.CREATE_SNAPSHOT_CHECK;
-    }
-
-    @Override
-    public int order() {
-        return 20;
-    }
-
-    @Override
-    public void handle(OrderCreateContext context) {
+    public Void apply(OrderCreateContext context, OrderCreateContext dynamicContext) {
         PackageTradeSnapshot snapshot = context == null ? null : context.getPackageSnapshot();
         if (snapshot == null) {
             throw new IllegalArgumentException("package not found");
@@ -31,5 +20,6 @@ public class PackageTradeCheckHandler implements OrderCreateCheckHandler {
         if (snapshot.getStock() == null || snapshot.getStock() < context.getCommand().getQuantity()) {
             throw new IllegalArgumentException("package stock not enough");
         }
+        return next(context, dynamicContext);
     }
 }

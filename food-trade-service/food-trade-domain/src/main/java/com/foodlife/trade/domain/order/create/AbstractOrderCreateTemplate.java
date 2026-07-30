@@ -12,9 +12,8 @@ import com.foodlife.trade.domain.order.model.OrderPricingResult;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import com.foodlife.trade.domain.order.pricing.OrderPricingService;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
-import com.foodlife.patterns.template.BusinessProcessTemplate;
 
-public abstract class AbstractOrderCreateTemplate extends BusinessProcessTemplate<CreateOrderCommand, CreateOrderResult> implements OrderCreateTemplate {
+public abstract class AbstractOrderCreateTemplate implements OrderCreateTemplate {
 
     private final OrderCreateCheckChain orderCreateCheckChain;
     private final OrderPricingService orderPricingService;
@@ -33,33 +32,34 @@ public abstract class AbstractOrderCreateTemplate extends BusinessProcessTemplat
 
     @Override
     public CreateOrderResult create(CreateOrderCommand command) {
-        return execute(command);
-    }
+        try {
+            OrderCreateContext context = buildCreateContext(command);
+            beforeCommandCheck(context);
+            orderCreateCheckChain.check(context, OrderCreateCheckStage.COMMAND);
 
-    @Override
-    protected CreateOrderResult doProcess(CreateOrderCommand command) {
-        OrderCreateContext context = buildCreateContext(command);
-        beforeCommandCheck(context);
-        orderCreateCheckChain.check(context, OrderCreateCheckStage.COMMAND);
+            PackageTradeSnapshot snapshot = loadPackageSnapshot(context);
+            context.setPackageSnapshot(snapshot);
 
-        PackageTradeSnapshot snapshot = loadPackageSnapshot(context);
-        context.setPackageSnapshot(snapshot);
+            beforeSnapshotCheck(context);
+            orderCreateCheckChain.check(context, OrderCreateCheckStage.SNAPSHOT);
 
-        beforeSnapshotCheck(context);
-        orderCreateCheckChain.check(context, OrderCreateCheckStage.SNAPSHOT);
+            beforePricing(context);
+            OrderPricingResult pricingResult = orderPricingService.calculate(context);
 
-        beforePricing(context);
-        OrderPricingResult pricingResult = orderPricingService.calculate(context);
+            beforeCreateOrder(context, pricingResult);
+            DiningOrderEntity order = orderFactory.createOrder(context.getTradeType(), command, snapshot, pricingResult);
+            DiningOrderEntity savedOrder = orderRepository.saveOrder(order);
 
-        beforeCreateOrder(context, pricingResult);
-        DiningOrderEntity order = orderFactory.createOrder(context.getTradeType(), command, snapshot, pricingResult);
-        DiningOrderEntity savedOrder = orderRepository.saveOrder(order);
+            DiningOrderItemEntity orderItem = orderFactory.createOrderItem(savedOrder, snapshot, command.getQuantity());
+            orderRepository.saveOrderItem(orderItem);
 
-        DiningOrderItemEntity orderItem = orderFactory.createOrderItem(savedOrder, snapshot, command.getQuantity());
-        orderRepository.saveOrderItem(orderItem);
-
-        afterOrderSaved(context, savedOrder, orderItem);
-        return buildResult(savedOrder);
+            afterOrderSaved(context, savedOrder, orderItem);
+            return buildResult(savedOrder);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("order create failed", e);
+        }
     }
 
     protected OrderCreateContext buildCreateContext(CreateOrderCommand command) {

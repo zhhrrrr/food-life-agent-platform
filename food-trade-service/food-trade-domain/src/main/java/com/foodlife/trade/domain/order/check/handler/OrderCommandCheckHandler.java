@@ -1,7 +1,6 @@
 package com.foodlife.trade.domain.order.check.handler;
 
 import com.foodlife.trade.domain.order.check.OrderCreateCheckHandler;
-import com.foodlife.trade.domain.order.constant.OrderPatternGroups;
 import com.foodlife.trade.domain.order.model.CreateOrderCommand;
 import com.foodlife.trade.domain.order.model.OrderCreateContext;
 import org.springframework.stereotype.Component;
@@ -10,17 +9,7 @@ import org.springframework.stereotype.Component;
 public class OrderCommandCheckHandler implements OrderCreateCheckHandler {
 
     @Override
-    public String group() {
-        return OrderPatternGroups.CREATE_COMMAND_CHECK;
-    }
-
-    @Override
-    public int order() {
-        return 10;
-    }
-
-    @Override
-    public void handle(OrderCreateContext context) {
+    public Void apply(OrderCreateContext context, OrderCreateContext dynamicContext) {
         CreateOrderCommand command = context == null ? null : context.getCommand();
         if (command == null || command.getUserId() == null) {
             throw new IllegalArgumentException("user not login");
@@ -31,5 +20,6 @@ public class OrderCommandCheckHandler implements OrderCreateCheckHandler {
         if (command.getQuantity() == null || command.getQuantity() <= 0) {
             throw new IllegalArgumentException("quantity invalid");
         }
+        return next(context, dynamicContext);
     }
 }

@@ -1,21 +1,31 @@
 package com.foodlife.trade.domain.order.pricing;
 
-import com.foodlife.trade.domain.order.constant.OrderPatternGroups;
 import com.foodlife.trade.domain.order.model.OrderCreateContext;
 import com.foodlife.trade.domain.order.model.OrderPricingResult;
-import com.foodlife.patterns.strategy.BusinessStrategyRouter;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 @Component
 public class OrderPricingService {
 
-    private final BusinessStrategyRouter businessStrategyRouter;
+    private final List<OrderPricingStrategy> pricingStrategies;
 
-    public OrderPricingService(BusinessStrategyRouter businessStrategyRouter) {
-        this.businessStrategyRouter = businessStrategyRouter;
+    public OrderPricingService(List<OrderPricingStrategy> pricingStrategies) {
+        this.pricingStrategies = pricingStrategies;
     }
 
     public OrderPricingResult calculate(OrderCreateContext context) {
-        return businessStrategyRouter.apply(OrderPatternGroups.PRICING, context);
+        try {
+            return pricingStrategies.stream()
+                    .filter(strategy -> strategy.support(context.getTradeType()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("trade type not supported"))
+                    .apply(context, context);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("order pricing failed", e);
+        }
     }
 }
