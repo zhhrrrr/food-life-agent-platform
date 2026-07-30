@@ -8,4 +8,8 @@ public interface IOrderRepository {
     DiningOrderEntity saveOrder(DiningOrderEntity order);
 
     void saveOrderItem(DiningOrderItemEntity orderItem);
+
+    DiningOrderEntity findOrderByIdAndUserId(Long orderId, Long userId);
+
+    java.util.List<DiningOrderItemEntity> listOrderItems(Long orderId);
 }

@@ -1,5 +1,6 @@
 package com.foodlife.trade.infrastructure.repository;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
@@ -9,6 +10,9 @@ import com.foodlife.trade.infrastructure.dao.po.DiningOrderItemPO;
 import com.foodlife.trade.infrastructure.dao.po.DiningOrderPO;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Repository
 public class OrderRepository implements IOrderRepository {
@@ -35,6 +39,24 @@ public class OrderRepository implements IOrderRepository {
         diningOrderItemMapper.insert(toOrderItemPO(orderItem));
     }
 
+    @Override
+    public DiningOrderEntity findOrderByIdAndUserId(Long orderId, Long userId) {
+        DiningOrderPO orderPO = diningOrderMapper.selectOne(new LambdaQueryWrapper<DiningOrderPO>()
+                .eq(DiningOrderPO::getId, orderId)
+                .eq(DiningOrderPO::getUserId, userId)
+                .last("limit 1"));
+        return toOrderEntity(orderPO);
+    }
+
+    @Override
+    public List<DiningOrderItemEntity> listOrderItems(Long orderId) {
+        return diningOrderItemMapper.selectList(new LambdaQueryWrapper<DiningOrderItemPO>()
+                        .eq(DiningOrderItemPO::getOrderId, orderId))
+                .stream()
+                .map(this::toOrderItemEntity)
+                .collect(Collectors.toList());
+    }
+
     private DiningOrderPO toOrderPO(DiningOrderEntity entity) {
         DiningOrderPO po = new DiningOrderPO();
         po.setId(entity.getId());
@@ -52,6 +74,26 @@ public class OrderRepository implements IOrderRepository {
         return po;
     }
 
+    private DiningOrderEntity toOrderEntity(DiningOrderPO po) {
+        if (po == null) {
+            return null;
+        }
+        DiningOrderEntity entity = new DiningOrderEntity();
+        entity.setId(po.getId());
+        entity.setOrderNo(po.getOrderNo());
+        entity.setUserId(po.getUserId());
+        entity.setShopId(po.getShopId());
+        entity.setPackageId(po.getPackageId());
+        entity.setQuantity(po.getQuantity());
+        entity.setTotalAmount(po.getTotalAmount());
+        entity.setPayAmount(po.getPayAmount());
+        entity.setTradeType(po.getTradeType());
+        entity.setOrderStatus(po.getOrderStatus());
+        entity.setCreateTime(po.getCreateTime());
+        entity.setUpdateTime(po.getUpdateTime());
+        return entity;
+    }
+
     private DiningOrderItemPO toOrderItemPO(DiningOrderItemEntity entity) {
         DiningOrderItemPO po = new DiningOrderItemPO();
         po.setId(entity.getId());
@@ -67,5 +109,22 @@ public class OrderRepository implements IOrderRepository {
         po.setQuantity(entity.getQuantity());
         po.setUseRuleSnapshot(entity.getUseRuleSnapshot());
         return po;
+    }
+
+    private DiningOrderItemEntity toOrderItemEntity(DiningOrderItemPO po) {
+        DiningOrderItemEntity entity = new DiningOrderItemEntity();
+        entity.setId(po.getId());
+        entity.setOrderId(po.getOrderId());
+        entity.setShopId(po.getShopId());
+        entity.setShopNameSnapshot(po.getShopNameSnapshot());
+        entity.setPackageId(po.getPackageId());
+        entity.setPackageNameSnapshot(po.getPackageNameSnapshot());
+        entity.setPackageDescriptionSnapshot(po.getPackageDescriptionSnapshot());
+        entity.setCoverImageSnapshot(po.getCoverImageSnapshot());
+        entity.setPackagePriceSnapshot(po.getPackagePriceSnapshot());
+        entity.setActualPrice(po.getActualPrice());
+        entity.setQuantity(po.getQuantity());
+        entity.setUseRuleSnapshot(po.getUseRuleSnapshot());
+        return entity;
     }
 }

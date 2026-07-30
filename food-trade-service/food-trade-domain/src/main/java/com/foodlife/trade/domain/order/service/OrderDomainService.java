@@ -4,6 +4,7 @@ import com.foodlife.trade.domain.order.model.CreateOrderCommand;
 import com.foodlife.trade.domain.order.model.CreateOrderResult;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
+import com.foodlife.trade.domain.order.model.OrderDetailEntity;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
@@ -49,6 +50,23 @@ public class OrderDomainService {
         result.setPayAmount(savedOrder.getPayAmount());
         result.setOrderStatus(savedOrder.getOrderStatus());
         return result;
+    }
+
+    public OrderDetailEntity queryOrderDetail(Long orderId, Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("user not login");
+        }
+        if (orderId == null) {
+            throw new IllegalArgumentException("orderId required");
+        }
+        DiningOrderEntity order = orderRepository.findOrderByIdAndUserId(orderId, userId);
+        if (order == null) {
+            throw new IllegalArgumentException("order not found");
+        }
+        OrderDetailEntity detail = new OrderDetailEntity();
+        detail.setOrder(order);
+        detail.setItems(orderRepository.listOrderItems(orderId));
+        return detail;
     }
 
     private void validateCommand(CreateOrderCommand command) {
