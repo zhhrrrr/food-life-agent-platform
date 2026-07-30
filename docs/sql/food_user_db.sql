@@ -1,0 +1,18 @@
+CREATE DATABASE IF NOT EXISTS food_user_db
+  DEFAULT CHARACTER SET utf8mb4
+  DEFAULT COLLATE utf8mb4_general_ci;
+
+USE food_user_db;
+
+CREATE TABLE IF NOT EXISTS user (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'user id',
+  phone VARCHAR(20) NOT NULL COMMENT 'phone',
+  password VARCHAR(128) DEFAULT NULL COMMENT 'password, nullable for sms login',
+  nick_name VARCHAR(64) NOT NULL COMMENT 'nickname',
+  icon VARCHAR(255) DEFAULT '' COMMENT 'avatar',
+  status TINYINT NOT NULL DEFAULT 1 COMMENT '1 normal, 0 disabled',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_phone (phone)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='user table';

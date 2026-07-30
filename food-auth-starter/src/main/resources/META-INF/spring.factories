@@ -1,0 +1,5 @@
+# com.foodlife.user
+#└── 所有子包
+# 是user 微服务调用 所以需要引入
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+com.foodlife.auth.config.AuthAutoConfiguration
