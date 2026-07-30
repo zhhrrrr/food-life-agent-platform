@@ -21,6 +21,7 @@
         <module>food-auth-starter</module>
         <module>food-user-service</module>
         <module>food-business-service</module>
+        <module>food-trade-service</module>
     </modules>
 
     <properties>
@@ -120,6 +121,36 @@
             <dependency>
                 <groupId>com.foodlife</groupId>
                 <artifactId>food-business-types</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.foodlife</groupId>
+                <artifactId>food-trade-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.foodlife</groupId>
+                <artifactId>food-trade-app</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.foodlife</groupId>
+                <artifactId>food-trade-trigger</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.foodlife</groupId>
+                <artifactId>food-trade-domain</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.foodlife</groupId>
+                <artifactId>food-trade-infrastructure</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.foodlife</groupId>
+                <artifactId>food-trade-types</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

@@ -1,0 +1,35 @@
+server:
+  port: 8301
+
+spring:
+  application:
+    name: food-trade-service
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/food_trade_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+  redis:
+    host: localhost
+    port: 6379
+    database: 0
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+food:
+  business-service:
+    base-url: http://localhost:8201
+  auth:
+    enabled: true
+    token-header: authorization
+    token-prefix: "food:login:token:"
+    token-ttl-minutes: 30
+    include-paths:
+      - /**
+    exclude-paths:
+      - /health
