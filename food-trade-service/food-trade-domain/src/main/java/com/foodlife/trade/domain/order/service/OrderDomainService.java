@@ -1,7 +1,6 @@
 package com.foodlife.trade.domain.order.service;
 
 import com.foodlife.trade.domain.order.check.OrderCreateCheckChain;
-import com.foodlife.trade.domain.order.check.OrderCreateCheckStage;
 import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
 import com.foodlife.trade.domain.order.factory.OrderFactory;
 import com.foodlife.trade.domain.order.model.CreateOrderCommand;
@@ -12,7 +11,6 @@ import com.foodlife.trade.domain.order.model.OrderCreateContext;
 import com.foodlife.trade.domain.order.model.OrderDetailEntity;
 import com.foodlife.trade.domain.order.model.OrderPricingResult;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
-import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
 import com.foodlife.trade.domain.order.pricing.OrderPricingService;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import org.springframework.stereotype.Service;
@@ -21,18 +19,15 @@ import org.springframework.stereotype.Service;
 public class OrderDomainService {
 
     private final IOrderRepository orderRepository;
-    private final IBusinessPackagePort businessPackagePort;
     private final OrderCreateCheckChain orderCreateCheckChain;
     private final OrderPricingService orderPricingService;
     private final OrderFactory orderFactory;
 
     public OrderDomainService(IOrderRepository orderRepository,
-                              IBusinessPackagePort businessPackagePort,
                               OrderCreateCheckChain orderCreateCheckChain,
                               OrderPricingService orderPricingService,
                               OrderFactory orderFactory) {
         this.orderRepository = orderRepository;
-        this.businessPackagePort = businessPackagePort;
         this.orderCreateCheckChain = orderCreateCheckChain;
         this.orderPricingService = orderPricingService;
         this.orderFactory = orderFactory;
@@ -41,12 +36,9 @@ public class OrderDomainService {
     public CreateOrderResult createNormalOrder(CreateOrderCommand command) {
         try {
             OrderCreateContext context = buildCreateContext(TradeTypeConstants.NORMAL, command);
-            orderCreateCheckChain.check(context, OrderCreateCheckStage.COMMAND);
+            orderCreateCheckChain.checkNormalOrder(context);
 
-            PackageTradeSnapshot snapshot = businessPackagePort.queryTradeSnapshot(command.getPackageId());
-            context.setPackageSnapshot(snapshot);
-
-            orderCreateCheckChain.check(context, OrderCreateCheckStage.SNAPSHOT);
+            PackageTradeSnapshot snapshot = context.getPackageSnapshot();
             OrderPricingResult pricingResult = orderPricingService.calculate(context);
 
             DiningOrderEntity order = orderFactory.createOrder(context.getTradeType(), command, snapshot, pricingResult);

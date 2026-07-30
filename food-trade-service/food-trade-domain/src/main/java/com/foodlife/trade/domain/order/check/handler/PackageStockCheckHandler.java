@@ -6,16 +6,13 @@ import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import org.springframework.stereotype.Component;
 
 @Component
-public class PackageTradeCheckHandler implements OrderCreateCheckHandler {
+public class PackageStockCheckHandler implements OrderCreateCheckHandler {
 
     @Override
     public Void apply(OrderCreateContext context, OrderCreateContext dynamicContext) {
-        PackageTradeSnapshot snapshot = context == null ? null : context.getPackageSnapshot();
+        PackageTradeSnapshot snapshot = dynamicContext == null ? null : dynamicContext.getPackageSnapshot();
         if (snapshot == null) {
             throw new IllegalArgumentException("package not found");
-        }
-        if (snapshot.getPackageStatus() == null || snapshot.getPackageStatus() != 1) {
-            throw new IllegalArgumentException("package offline");
         }
         if (snapshot.getStock() == null || snapshot.getStock() < context.getCommand().getQuantity()) {
             throw new IllegalArgumentException("package stock not enough");
