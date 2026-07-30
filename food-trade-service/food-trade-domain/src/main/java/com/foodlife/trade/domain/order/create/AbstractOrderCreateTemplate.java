@@ -12,8 +12,9 @@ import com.foodlife.trade.domain.order.model.OrderPricingResult;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import com.foodlife.trade.domain.order.pricing.OrderPricingService;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
+import com.foodlife.patterns.template.BusinessProcessTemplate;
 
-public abstract class AbstractOrderCreateTemplate implements OrderCreateTemplate {
+public abstract class AbstractOrderCreateTemplate extends BusinessProcessTemplate<CreateOrderCommand, CreateOrderResult> implements OrderCreateTemplate {
 
     private final OrderCreateCheckChain orderCreateCheckChain;
     private final OrderPricingService orderPricingService;
@@ -32,6 +33,11 @@ public abstract class AbstractOrderCreateTemplate implements OrderCreateTemplate
 
     @Override
     public CreateOrderResult create(CreateOrderCommand command) {
+        return execute(command);
+    }
+
+    @Override
+    protected CreateOrderResult doProcess(CreateOrderCommand command) {
         OrderCreateContext context = buildCreateContext(command);
         beforeCommandCheck(context);
         orderCreateCheckChain.check(context, OrderCreateCheckStage.COMMAND);

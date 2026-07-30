@@ -15,6 +15,10 @@
     <dependencies>
         <dependency>
             <groupId>com.foodlife</groupId>
+            <artifactId>food-domain-patterns</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.foodlife</groupId>
             <artifactId>food-trade-api</artifactId>
         </dependency>
         <dependency>

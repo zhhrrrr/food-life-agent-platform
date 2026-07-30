@@ -1,24 +1,19 @@
 package com.foodlife.trade.domain.order.check;
 
 import com.foodlife.trade.domain.order.model.OrderCreateContext;
+import com.foodlife.patterns.chain.BusinessChainRouter;
 import org.springframework.stereotype.Component;
-
-import java.util.List;
 
 @Component
 public class OrderCreateCheckChain {
 
-    private final List<OrderCreateCheckHandler> handlers;
+    private final BusinessChainRouter businessChainRouter;
 
-    public OrderCreateCheckChain(List<OrderCreateCheckHandler> handlers) {
-        this.handlers = handlers;
+    public OrderCreateCheckChain(BusinessChainRouter businessChainRouter) {
+        this.businessChainRouter = businessChainRouter;
     }
 
     public void check(OrderCreateContext context, OrderCreateCheckStage stage) {
-        for (OrderCreateCheckHandler handler : handlers) {
-            if (handler.support(stage)) {
-                handler.check(context);
-            }
-        }
+        businessChainRouter.execute(stage.group(), context);
     }
 }

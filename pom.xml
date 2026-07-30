@@ -18,6 +18,7 @@
     <name>food-life-agent-platform</name>
 
     <modules>
+        <module>food-domain-patterns</module>
         <module>food-auth-starter</module>
         <module>food-user-service</module>
         <module>food-business-service</module>
@@ -58,6 +59,11 @@
                 <version>${hutool.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>com.foodlife</groupId>
+                <artifactId>food-domain-patterns</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.foodlife</groupId>
                 <artifactId>food-auth-starter</artifactId>

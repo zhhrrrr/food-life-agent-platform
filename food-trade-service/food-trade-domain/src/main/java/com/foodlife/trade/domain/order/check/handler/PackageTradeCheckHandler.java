@@ -1,23 +1,26 @@
 package com.foodlife.trade.domain.order.check.handler;
 
 import com.foodlife.trade.domain.order.check.OrderCreateCheckHandler;
-import com.foodlife.trade.domain.order.check.OrderCreateCheckStage;
+import com.foodlife.trade.domain.order.constant.OrderPatternGroups;
 import com.foodlife.trade.domain.order.model.OrderCreateContext;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
-import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
-@Order(20)
 @Component
 public class PackageTradeCheckHandler implements OrderCreateCheckHandler {
 
     @Override
-    public boolean support(OrderCreateCheckStage stage) {
-        return OrderCreateCheckStage.SNAPSHOT == stage;
+    public String group() {
+        return OrderPatternGroups.CREATE_SNAPSHOT_CHECK;
     }
 
     @Override
-    public void check(OrderCreateContext context) {
+    public int order() {
+        return 20;
+    }
+
+    @Override
+    public void handle(OrderCreateContext context) {
         PackageTradeSnapshot snapshot = context == null ? null : context.getPackageSnapshot();
         if (snapshot == null) {
             throw new IllegalArgumentException("package not found");

@@ -1,23 +1,26 @@
 package com.foodlife.trade.domain.order.check.handler;
 
 import com.foodlife.trade.domain.order.check.OrderCreateCheckHandler;
-import com.foodlife.trade.domain.order.check.OrderCreateCheckStage;
+import com.foodlife.trade.domain.order.constant.OrderPatternGroups;
 import com.foodlife.trade.domain.order.model.CreateOrderCommand;
 import com.foodlife.trade.domain.order.model.OrderCreateContext;
-import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
-@Order(10)
 @Component
 public class OrderCommandCheckHandler implements OrderCreateCheckHandler {
 
     @Override
-    public boolean support(OrderCreateCheckStage stage) {
-        return OrderCreateCheckStage.COMMAND == stage;
+    public String group() {
+        return OrderPatternGroups.CREATE_COMMAND_CHECK;
     }
 
     @Override
-    public void check(OrderCreateContext context) {
+    public int order() {
+        return 10;
+    }
+
+    @Override
+    public void handle(OrderCreateContext context) {
         CreateOrderCommand command = context == null ? null : context.getCommand();
         if (command == null || command.getUserId() == null) {
             throw new IllegalArgumentException("user not login");
