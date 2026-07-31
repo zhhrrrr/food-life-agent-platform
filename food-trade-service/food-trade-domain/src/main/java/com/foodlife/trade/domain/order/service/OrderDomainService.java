@@ -15,10 +15,13 @@ import com.foodlife.trade.domain.order.model.OrderListResult;
 import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
 import com.foodlife.trade.domain.order.model.OrderPaySuccessEntity;
 import com.foodlife.trade.domain.order.model.OrderPricingResult;
+import com.foodlife.trade.domain.order.model.OrderRefundBehaviorEntity;
+import com.foodlife.trade.domain.order.model.OrderRefundCommandEntity;
 import com.foodlife.trade.domain.order.model.OrderSummaryEntity;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import com.foodlife.trade.domain.order.pricing.OrderPricingService;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
+import com.foodlife.trade.domain.order.service.refund.OrderRefundService;
 import com.foodlife.trade.domain.order.service.settlement.OrderPaySettlementService;
 import org.springframework.stereotype.Service;
 
@@ -33,17 +36,20 @@ public class OrderDomainService {
     private final OrderPricingService orderPricingService;
     private final OrderFactory orderFactory;
     private final OrderPaySettlementService orderPaySettlementService;
+    private final OrderRefundService orderRefundService;
 
     public OrderDomainService(IOrderRepository orderRepository,
                               OrderCreateCheckChain orderCreateCheckChain,
                               OrderPricingService orderPricingService,
                               OrderFactory orderFactory,
-                              OrderPaySettlementService orderPaySettlementService) {
+                              OrderPaySettlementService orderPaySettlementService,
+                              OrderRefundService orderRefundService) {
         this.orderRepository = orderRepository;
         this.orderCreateCheckChain = orderCreateCheckChain;
         this.orderPricingService = orderPricingService;
         this.orderFactory = orderFactory;
         this.orderPaySettlementService = orderPaySettlementService;
+        this.orderRefundService = orderRefundService;
     }
 
     public CreateOrderResult createNormalOrder(CreateOrderCommand command) {
@@ -134,6 +140,10 @@ public class OrderDomainService {
 
     public OrderPaySettlementEntity payOrderMock(OrderPaySuccessEntity paySuccessEntity) {
         return orderPaySettlementService.settlementOrderPaySuccess(paySuccessEntity);
+    }
+
+    public OrderRefundBehaviorEntity refundOrderMock(OrderRefundCommandEntity command) {
+        return orderRefundService.refundOrder(command);
     }
 
     private int normalizePageSize(Integer pageSize) {
