@@ -1,10 +1,12 @@
 package com.foodlife.trade.trigger.http;
 
 import com.foodlife.auth.context.UserHolder;
+import com.foodlife.trade.api.dto.CancelOrderResponseDTO;
 import com.foodlife.trade.api.dto.CreateOrderRequestDTO;
 import com.foodlife.trade.api.dto.CreateOrderResponseDTO;
 import com.foodlife.trade.api.dto.OrderDetailResponseDTO;
 import com.foodlife.trade.api.dto.OrderItemResponseDTO;
+import com.foodlife.trade.domain.order.model.CancelOrderResult;
 import com.foodlife.trade.domain.order.model.CreateOrderCommand;
 import com.foodlife.trade.domain.order.model.CreateOrderResult;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
@@ -52,6 +54,16 @@ public class OrderController {
         }
     }
 
+    @PostMapping("/orders/{orderId}/cancel")
+    public Response<CancelOrderResponseDTO> cancelOrder(@PathVariable Long orderId) {
+        try {
+            CancelOrderResult result = orderDomainService.cancelOrder(orderId, UserHolder.getUserId());
+            return Response.success(toCancelResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
+    }
+
     private CreateOrderCommand toCommand(CreateOrderRequestDTO request) {
         CreateOrderCommand command = new CreateOrderCommand();
         command.setUserId(UserHolder.getUserId());
@@ -65,6 +77,14 @@ public class OrderController {
         response.setOrderId(result.getOrderId());
         response.setOrderNo(result.getOrderNo());
         response.setPayAmount(result.getPayAmount());
+        response.setOrderStatus(result.getOrderStatus());
+        return response;
+    }
+
+    private CancelOrderResponseDTO toCancelResponse(CancelOrderResult result) {
+        CancelOrderResponseDTO response = new CancelOrderResponseDTO();
+        response.setOrderId(result.getOrderId());
+        response.setOrderNo(result.getOrderNo());
         response.setOrderStatus(result.getOrderStatus());
         return response;
     }

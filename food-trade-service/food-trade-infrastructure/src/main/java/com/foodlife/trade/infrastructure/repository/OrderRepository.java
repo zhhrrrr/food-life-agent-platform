@@ -1,6 +1,7 @@
 package com.foodlife.trade.infrastructure.repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
@@ -11,6 +12,7 @@ import com.foodlife.trade.infrastructure.dao.po.DiningOrderPO;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -46,6 +48,17 @@ public class OrderRepository implements IOrderRepository {
                 .eq(DiningOrderPO::getUserId, userId)
                 .last("limit 1"));
         return toOrderEntity(orderPO);
+    }
+
+    @Override
+    public boolean updateOrderStatus(Long orderId, String fromStatus, String toStatus) {
+        DiningOrderPO updatePO = new DiningOrderPO();
+        updatePO.setOrderStatus(toStatus);
+        updatePO.setUpdateTime(LocalDateTime.now());
+        int updated = diningOrderMapper.update(updatePO, new LambdaUpdateWrapper<DiningOrderPO>()
+                .eq(DiningOrderPO::getId, orderId)
+                .eq(DiningOrderPO::getOrderStatus, fromStatus));
+        return updated > 0;
     }
 
     @Override

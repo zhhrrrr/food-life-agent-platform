@@ -1,8 +1,10 @@
 package com.foodlife.trade.domain.order.service;
 
 import com.foodlife.trade.domain.order.check.OrderCreateCheckChain;
+import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
 import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
 import com.foodlife.trade.domain.order.factory.OrderFactory;
+import com.foodlife.trade.domain.order.model.CancelOrderResult;
 import com.foodlife.trade.domain.order.model.CreateOrderCommand;
 import com.foodlife.trade.domain.order.model.CreateOrderResult;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
@@ -70,6 +72,31 @@ public class OrderDomainService {
         detail.setOrder(order);
         detail.setItems(orderRepository.listOrderItems(orderId));
         return detail;
+    }
+
+    public CancelOrderResult cancelOrder(Long orderId, Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("user not login");
+        }
+        if (orderId == null) {
+            throw new IllegalArgumentException("orderId required");
+        }
+        DiningOrderEntity order = orderRepository.findOrderByIdAndUserId(orderId, userId);
+        if (order == null) {
+            throw new IllegalArgumentException("order not found");
+        }
+        if (!OrderStatusConstants.WAIT_PAY.equals(order.getOrderStatus())) {
+            throw new IllegalArgumentException("order status can not cancel");
+        }
+        boolean success = orderRepository.updateOrderStatus(orderId, OrderStatusConstants.WAIT_PAY, OrderStatusConstants.CANCELED);
+        if (!success) {
+            throw new IllegalArgumentException("order status can not cancel");
+        }
+        CancelOrderResult result = new CancelOrderResult();
+        result.setOrderId(order.getId());
+        result.setOrderNo(order.getOrderNo());
+        result.setOrderStatus(OrderStatusConstants.CANCELED);
+        return result;
     }
 
     private OrderCreateContext buildCreateContext(String tradeType, CreateOrderCommand command) {
