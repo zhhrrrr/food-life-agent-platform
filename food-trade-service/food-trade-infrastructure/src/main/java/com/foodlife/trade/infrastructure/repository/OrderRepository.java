@@ -51,6 +51,21 @@ public class OrderRepository implements IOrderRepository {
     }
 
     @Override
+    public List<DiningOrderEntity> listUserOrders(Long userId, Long lastId, Integer pageSize) {
+        LambdaQueryWrapper<DiningOrderPO> queryWrapper = new LambdaQueryWrapper<DiningOrderPO>()
+                .eq(DiningOrderPO::getUserId, userId)
+                .orderByAsc(DiningOrderPO::getId)
+                .last("limit " + pageSize);
+        if (lastId != null) {
+            queryWrapper.gt(DiningOrderPO::getId, lastId);
+        }
+        return diningOrderMapper.selectList(queryWrapper)
+                .stream()
+                .map(this::toOrderEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public boolean updateOrderStatus(Long orderId, String fromStatus, String toStatus) {
         DiningOrderPO updatePO = new DiningOrderPO();
         updatePO.setOrderStatus(toStatus);

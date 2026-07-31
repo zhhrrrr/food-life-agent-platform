@@ -6,6 +6,7 @@ import com.foodlife.trade.api.dto.CreateOrderRequestDTO;
 import com.foodlife.trade.api.dto.CreateOrderResponseDTO;
 import com.foodlife.trade.api.dto.OrderDetailResponseDTO;
 import com.foodlife.trade.api.dto.OrderItemResponseDTO;
+import com.foodlife.trade.api.dto.OrderListResponseDTO;
 import com.foodlife.trade.api.dto.PayOrderRequestDTO;
 import com.foodlife.trade.api.dto.PayOrderResponseDTO;
 import com.foodlife.trade.domain.order.model.CancelOrderResult;
@@ -14,8 +15,10 @@ import com.foodlife.trade.domain.order.model.CreateOrderResult;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
 import com.foodlife.trade.domain.order.model.OrderDetailEntity;
+import com.foodlife.trade.domain.order.model.OrderListResult;
 import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
 import com.foodlife.trade.domain.order.model.OrderPaySuccessEntity;
+import com.foodlife.trade.domain.order.model.OrderSummaryEntity;
 import com.foodlife.trade.domain.order.service.OrderDomainService;
 import com.foodlife.trade.types.response.Response;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
@@ -56,6 +60,17 @@ public class OrderController {
             return Response.success(toDetailResponse(detail));
         } catch (IllegalArgumentException e) {
             return Response.fail("404", e.getMessage());
+        }
+    }
+
+    @GetMapping("/orders")
+    public Response<OrderListResponseDTO> queryUserOrderList(@RequestParam(required = false) Long lastId,
+                                                             @RequestParam(required = false) Integer pageSize) {
+        try {
+            OrderListResult result = orderDomainService.queryUserOrderList(UserHolder.getUserId(), lastId, pageSize);
+            return Response.success(toOrderListResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
         }
     }
 
@@ -134,6 +149,33 @@ public class OrderController {
             return defaultValue;
         }
         return value.trim();
+    }
+
+    private OrderListResponseDTO toOrderListResponse(OrderListResult result) {
+        OrderListResponseDTO response = new OrderListResponseDTO();
+        response.setOrders(result.getOrders().stream().map(this::toOrderInfoResponse).collect(Collectors.toList()));
+        response.setHasMore(result.getHasMore());
+        response.setLastId(result.getLastId());
+        return response;
+    }
+
+    private OrderListResponseDTO.OrderInfo toOrderInfoResponse(OrderSummaryEntity order) {
+        OrderListResponseDTO.OrderInfo response = new OrderListResponseDTO.OrderInfo();
+        response.setOrderId(order.getOrderId());
+        response.setOrderNo(order.getOrderNo());
+        response.setUserId(order.getUserId());
+        response.setShopId(order.getShopId());
+        response.setShopNameSnapshot(order.getShopNameSnapshot());
+        response.setPackageId(order.getPackageId());
+        response.setPackageNameSnapshot(order.getPackageNameSnapshot());
+        response.setCoverImageSnapshot(order.getCoverImageSnapshot());
+        response.setQuantity(order.getQuantity());
+        response.setTotalAmount(order.getTotalAmount());
+        response.setPayAmount(order.getPayAmount());
+        response.setTradeType(order.getTradeType());
+        response.setOrderStatus(order.getOrderStatus());
+        response.setCreateTime(order.getCreateTime());
+        return response;
     }
 
     private OrderDetailResponseDTO toDetailResponse(OrderDetailEntity detail) {
