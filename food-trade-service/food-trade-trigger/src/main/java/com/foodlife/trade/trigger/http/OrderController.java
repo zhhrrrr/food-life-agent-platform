@@ -6,12 +6,16 @@ import com.foodlife.trade.api.dto.CreateOrderRequestDTO;
 import com.foodlife.trade.api.dto.CreateOrderResponseDTO;
 import com.foodlife.trade.api.dto.OrderDetailResponseDTO;
 import com.foodlife.trade.api.dto.OrderItemResponseDTO;
+import com.foodlife.trade.api.dto.PayOrderRequestDTO;
+import com.foodlife.trade.api.dto.PayOrderResponseDTO;
 import com.foodlife.trade.domain.order.model.CancelOrderResult;
 import com.foodlife.trade.domain.order.model.CreateOrderCommand;
 import com.foodlife.trade.domain.order.model.CreateOrderResult;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
 import com.foodlife.trade.domain.order.model.OrderDetailEntity;
+import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
+import com.foodlife.trade.domain.order.model.OrderPaySuccessEntity;
 import com.foodlife.trade.domain.order.service.OrderDomainService;
 import com.foodlife.trade.types.response.Response;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -64,6 +69,17 @@ public class OrderController {
         }
     }
 
+    @PostMapping("/orders/{orderId}/pay/mock")
+    public Response<PayOrderResponseDTO> payOrderMock(@PathVariable Long orderId,
+                                                      @RequestBody(required = false) PayOrderRequestDTO request) {
+        try {
+            OrderPaySettlementEntity result = orderDomainService.payOrderMock(toPaySuccessEntity(orderId, request));
+            return Response.success(toPayResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
+    }
+
     private CreateOrderCommand toCommand(CreateOrderRequestDTO request) {
         CreateOrderCommand command = new CreateOrderCommand();
         command.setUserId(UserHolder.getUserId());
@@ -87,6 +103,37 @@ public class OrderController {
         response.setOrderNo(result.getOrderNo());
         response.setOrderStatus(result.getOrderStatus());
         return response;
+    }
+
+    private OrderPaySuccessEntity toPaySuccessEntity(Long orderId, PayOrderRequestDTO request) {
+        OrderPaySuccessEntity entity = new OrderPaySuccessEntity();
+        entity.setSource(readOrDefault(request == null ? null : request.getSource(), "FOOD_LIFE"));
+        entity.setChannel(readOrDefault(request == null ? null : request.getChannel(), "MOCK_PAY"));
+        entity.setUserId(UserHolder.getUserId());
+        entity.setOrderId(orderId);
+        entity.setOutTradeNo(readOrDefault(request == null ? null : request.getOutTradeNo(), "MOCK" + System.currentTimeMillis()));
+        entity.setOutTradeTime(LocalDateTime.now());
+        return entity;
+    }
+
+    private PayOrderResponseDTO toPayResponse(OrderPaySettlementEntity result) {
+        PayOrderResponseDTO response = new PayOrderResponseDTO();
+        response.setSource(result.getSource());
+        response.setChannel(result.getChannel());
+        response.setUserId(result.getUserId());
+        response.setOrderId(result.getOrderId());
+        response.setOrderNo(result.getOrderNo());
+        response.setOrderStatus(result.getOrderStatus());
+        response.setOutTradeNo(result.getOutTradeNo());
+        response.setOutTradeTime(result.getOutTradeTime());
+        return response;
+    }
+
+    private String readOrDefault(String value, String defaultValue) {
+        if (value == null || value.trim().isEmpty()) {
+            return defaultValue;
+        }
+        return value.trim();
     }
 
     private OrderDetailResponseDTO toDetailResponse(OrderDetailEntity detail) {

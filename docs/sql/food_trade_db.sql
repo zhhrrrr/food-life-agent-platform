@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS dining_order (
   total_amount BIGINT NOT NULL COMMENT 'total amount in cents',
   pay_amount BIGINT NOT NULL COMMENT 'pay amount in cents',
   trade_type VARCHAR(32) NOT NULL COMMENT 'NORMAL/GROUP_BUY/SECKILL',
-  order_status VARCHAR(32) NOT NULL COMMENT 'order status',
+  order_status VARCHAR(32) NOT NULL COMMENT 'order status: WAIT_PAY/PAID/CANCELED',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
   PRIMARY KEY (id),

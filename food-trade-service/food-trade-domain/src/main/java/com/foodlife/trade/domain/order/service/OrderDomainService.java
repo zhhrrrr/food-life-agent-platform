@@ -11,10 +11,13 @@ import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
 import com.foodlife.trade.domain.order.model.OrderCreateContext;
 import com.foodlife.trade.domain.order.model.OrderDetailEntity;
+import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
+import com.foodlife.trade.domain.order.model.OrderPaySuccessEntity;
 import com.foodlife.trade.domain.order.model.OrderPricingResult;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import com.foodlife.trade.domain.order.pricing.OrderPricingService;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
+import com.foodlife.trade.domain.order.service.settlement.OrderPaySettlementService;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -24,15 +27,18 @@ public class OrderDomainService {
     private final OrderCreateCheckChain orderCreateCheckChain;
     private final OrderPricingService orderPricingService;
     private final OrderFactory orderFactory;
+    private final OrderPaySettlementService orderPaySettlementService;
 
     public OrderDomainService(IOrderRepository orderRepository,
                               OrderCreateCheckChain orderCreateCheckChain,
                               OrderPricingService orderPricingService,
-                              OrderFactory orderFactory) {
+                              OrderFactory orderFactory,
+                              OrderPaySettlementService orderPaySettlementService) {
         this.orderRepository = orderRepository;
         this.orderCreateCheckChain = orderCreateCheckChain;
         this.orderPricingService = orderPricingService;
         this.orderFactory = orderFactory;
+        this.orderPaySettlementService = orderPaySettlementService;
     }
 
     public CreateOrderResult createNormalOrder(CreateOrderCommand command) {
@@ -97,6 +103,10 @@ public class OrderDomainService {
         result.setOrderNo(order.getOrderNo());
         result.setOrderStatus(OrderStatusConstants.CANCELED);
         return result;
+    }
+
+    public OrderPaySettlementEntity payOrderMock(OrderPaySuccessEntity paySuccessEntity) {
+        return orderPaySettlementService.settlementOrderPaySuccess(paySuccessEntity);
     }
 
     private OrderCreateContext buildCreateContext(String tradeType, CreateOrderCommand command) {
