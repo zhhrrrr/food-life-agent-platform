@@ -11,9 +11,11 @@ import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
 import com.foodlife.trade.domain.order.model.OrderCreateContext;
 import com.foodlife.trade.domain.order.model.OrderDetailEntity;
+import com.foodlife.trade.domain.order.model.OrderListResult;
 import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
 import com.foodlife.trade.domain.order.model.OrderPaySuccessEntity;
 import com.foodlife.trade.domain.order.model.OrderPricingResult;
+import com.foodlife.trade.domain.order.model.OrderSummaryEntity;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import com.foodlife.trade.domain.order.pricing.OrderPricingService;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
@@ -22,6 +24,9 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class OrderDomainService {
+
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 50;
 
     private final IOrderRepository orderRepository;
     private final OrderCreateCheckChain orderCreateCheckChain;
@@ -80,6 +85,28 @@ public class OrderDomainService {
         return detail;
     }
 
+    public OrderListResult queryUserOrderList(Long userId, Long lastId, Integer pageSize) {
+        if (userId == null) {
+            throw new IllegalArgumentException("user not login");
+        }
+        int normalizedPageSize = normalizePageSize(pageSize);
+        java.util.List<DiningOrderEntity> orders = orderRepository.listUserOrders(userId, lastId, normalizedPageSize + 1);
+        boolean hasMore = orders.size() > normalizedPageSize;
+        if (hasMore) {
+            orders = orders.subList(0, normalizedPageSize);
+        }
+
+        java.util.List<OrderSummaryEntity> summaries = orders.stream()
+                .map(this::toOrderSummary)
+                .collect(java.util.stream.Collectors.toList());
+
+        OrderListResult result = new OrderListResult();
+        result.setOrders(summaries);
+        result.setHasMore(hasMore);
+        result.setLastId(summaries.isEmpty() ? null : summaries.get(summaries.size() - 1).getOrderId());
+        return result;
+    }
+
     public CancelOrderResult cancelOrder(Long orderId, Long userId) {
         if (userId == null) {
             throw new IllegalArgumentException("user not login");
@@ -107,6 +134,39 @@ public class OrderDomainService {
 
     public OrderPaySettlementEntity payOrderMock(OrderPaySuccessEntity paySuccessEntity) {
         return orderPaySettlementService.settlementOrderPaySuccess(paySuccessEntity);
+    }
+
+    private int normalizePageSize(Integer pageSize) {
+        if (pageSize == null || pageSize <= 0) {
+            return DEFAULT_PAGE_SIZE;
+        }
+        return Math.min(pageSize, MAX_PAGE_SIZE);
+    }
+
+    private OrderSummaryEntity toOrderSummary(DiningOrderEntity order) {
+        DiningOrderItemEntity firstItem = orderRepository.listOrderItems(order.getId())
+                .stream()
+                .findFirst()
+                .orElse(null);
+
+        OrderSummaryEntity summary = new OrderSummaryEntity();
+        summary.setOrderId(order.getId());
+        summary.setOrderNo(order.getOrderNo());
+        summary.setUserId(order.getUserId());
+        summary.setShopId(order.getShopId());
+        summary.setPackageId(order.getPackageId());
+        summary.setQuantity(order.getQuantity());
+        summary.setTotalAmount(order.getTotalAmount());
+        summary.setPayAmount(order.getPayAmount());
+        summary.setTradeType(order.getTradeType());
+        summary.setOrderStatus(order.getOrderStatus());
+        summary.setCreateTime(order.getCreateTime());
+        if (firstItem != null) {
+            summary.setShopNameSnapshot(firstItem.getShopNameSnapshot());
+            summary.setPackageNameSnapshot(firstItem.getPackageNameSnapshot());
+            summary.setCoverImageSnapshot(firstItem.getCoverImageSnapshot());
+        }
+        return summary;
     }
 
     private OrderCreateContext buildCreateContext(String tradeType, CreateOrderCommand command) {

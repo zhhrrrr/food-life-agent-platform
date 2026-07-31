@@ -11,6 +11,8 @@ public interface IOrderRepository {
 
     DiningOrderEntity findOrderByIdAndUserId(Long orderId, Long userId);
 
+    java.util.List<DiningOrderEntity> listUserOrders(Long userId, Long lastId, Integer pageSize);
+
     boolean updateOrderStatus(Long orderId, String fromStatus, String toStatus);
 
     java.util.List<DiningOrderItemEntity> listOrderItems(Long orderId);
