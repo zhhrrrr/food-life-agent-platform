@@ -15,5 +15,7 @@ public interface IOrderRepository {
 
     boolean updateOrderStatus(Long orderId, String fromStatus, String toStatus);
 
+    boolean updateOrderStatusAndUseTime(Long orderId, String fromStatus, String toStatus, java.time.LocalDateTime useTime);
+
     java.util.List<DiningOrderItemEntity> listOrderItems(Long orderId);
 }

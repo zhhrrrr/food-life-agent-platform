@@ -19,6 +19,7 @@ public class OrderDetailResponseDTO implements Serializable {
     private Long payAmount;
     private String tradeType;
     private String orderStatus;
+    private LocalDateTime useTime;
     private LocalDateTime createTime;
     private List<OrderItemResponseDTO> items;
 }

@@ -23,6 +23,7 @@ public class DiningOrderPO implements Serializable {
     private Long payAmount;
     private String tradeType;
     private String orderStatus;
+    private LocalDateTime useTime;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

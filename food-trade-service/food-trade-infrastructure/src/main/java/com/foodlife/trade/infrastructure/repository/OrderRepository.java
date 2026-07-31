@@ -77,6 +77,18 @@ public class OrderRepository implements IOrderRepository {
     }
 
     @Override
+    public boolean updateOrderStatusAndUseTime(Long orderId, String fromStatus, String toStatus, LocalDateTime useTime) {
+        DiningOrderPO updatePO = new DiningOrderPO();
+        updatePO.setOrderStatus(toStatus);
+        updatePO.setUseTime(useTime);
+        updatePO.setUpdateTime(LocalDateTime.now());
+        int updated = diningOrderMapper.update(updatePO, new LambdaUpdateWrapper<DiningOrderPO>()
+                .eq(DiningOrderPO::getId, orderId)
+                .eq(DiningOrderPO::getOrderStatus, fromStatus));
+        return updated > 0;
+    }
+
+    @Override
     public List<DiningOrderItemEntity> listOrderItems(Long orderId) {
         return diningOrderItemMapper.selectList(new LambdaQueryWrapper<DiningOrderItemPO>()
                         .eq(DiningOrderItemPO::getOrderId, orderId))
@@ -97,6 +109,7 @@ public class OrderRepository implements IOrderRepository {
         po.setPayAmount(entity.getPayAmount());
         po.setTradeType(entity.getTradeType());
         po.setOrderStatus(entity.getOrderStatus());
+        po.setUseTime(entity.getUseTime());
         po.setCreateTime(entity.getCreateTime());
         po.setUpdateTime(entity.getUpdateTime());
         return po;
@@ -117,6 +130,7 @@ public class OrderRepository implements IOrderRepository {
         entity.setPayAmount(po.getPayAmount());
         entity.setTradeType(po.getTradeType());
         entity.setOrderStatus(po.getOrderStatus());
+        entity.setUseTime(po.getUseTime());
         entity.setCreateTime(po.getCreateTime());
         entity.setUpdateTime(po.getUpdateTime());
         return entity;

@@ -18,11 +18,14 @@ import com.foodlife.trade.domain.order.model.OrderPricingResult;
 import com.foodlife.trade.domain.order.model.OrderRefundBehaviorEntity;
 import com.foodlife.trade.domain.order.model.OrderRefundCommandEntity;
 import com.foodlife.trade.domain.order.model.OrderSummaryEntity;
+import com.foodlife.trade.domain.order.model.OrderUseCommandEntity;
+import com.foodlife.trade.domain.order.model.OrderUseResult;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import com.foodlife.trade.domain.order.pricing.OrderPricingService;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import com.foodlife.trade.domain.order.service.refund.OrderRefundService;
 import com.foodlife.trade.domain.order.service.settlement.OrderPaySettlementService;
+import com.foodlife.trade.domain.order.service.use.OrderUseService;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -37,19 +40,22 @@ public class OrderDomainService {
     private final OrderFactory orderFactory;
     private final OrderPaySettlementService orderPaySettlementService;
     private final OrderRefundService orderRefundService;
+    private final OrderUseService orderUseService;
 
     public OrderDomainService(IOrderRepository orderRepository,
                               OrderCreateCheckChain orderCreateCheckChain,
                               OrderPricingService orderPricingService,
                               OrderFactory orderFactory,
                               OrderPaySettlementService orderPaySettlementService,
-                              OrderRefundService orderRefundService) {
+                              OrderRefundService orderRefundService,
+                              OrderUseService orderUseService) {
         this.orderRepository = orderRepository;
         this.orderCreateCheckChain = orderCreateCheckChain;
         this.orderPricingService = orderPricingService;
         this.orderFactory = orderFactory;
         this.orderPaySettlementService = orderPaySettlementService;
         this.orderRefundService = orderRefundService;
+        this.orderUseService = orderUseService;
     }
 
     public CreateOrderResult createNormalOrder(CreateOrderCommand command) {
@@ -146,6 +152,10 @@ public class OrderDomainService {
         return orderRefundService.refundOrder(command);
     }
 
+    public OrderUseResult useOrderMock(OrderUseCommandEntity command) {
+        return orderUseService.useOrder(command);
+    }
+
     private int normalizePageSize(Integer pageSize) {
         if (pageSize == null || pageSize <= 0) {
             return DEFAULT_PAGE_SIZE;
@@ -170,6 +180,7 @@ public class OrderDomainService {
         summary.setPayAmount(order.getPayAmount());
         summary.setTradeType(order.getTradeType());
         summary.setOrderStatus(order.getOrderStatus());
+        summary.setUseTime(order.getUseTime());
         summary.setCreateTime(order.getCreateTime());
         if (firstItem != null) {
             summary.setShopNameSnapshot(firstItem.getShopNameSnapshot());
