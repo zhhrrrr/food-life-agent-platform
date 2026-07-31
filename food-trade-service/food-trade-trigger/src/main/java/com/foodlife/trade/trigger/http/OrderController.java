@@ -11,6 +11,7 @@ import com.foodlife.trade.api.dto.PayOrderRequestDTO;
 import com.foodlife.trade.api.dto.PayOrderResponseDTO;
 import com.foodlife.trade.api.dto.RefundOrderRequestDTO;
 import com.foodlife.trade.api.dto.RefundOrderResponseDTO;
+import com.foodlife.trade.api.dto.UseOrderResponseDTO;
 import com.foodlife.trade.domain.order.model.CancelOrderResult;
 import com.foodlife.trade.domain.order.model.CreateOrderCommand;
 import com.foodlife.trade.domain.order.model.CreateOrderResult;
@@ -23,6 +24,8 @@ import com.foodlife.trade.domain.order.model.OrderPaySuccessEntity;
 import com.foodlife.trade.domain.order.model.OrderRefundBehaviorEntity;
 import com.foodlife.trade.domain.order.model.OrderRefundCommandEntity;
 import com.foodlife.trade.domain.order.model.OrderSummaryEntity;
+import com.foodlife.trade.domain.order.model.OrderUseCommandEntity;
+import com.foodlife.trade.domain.order.model.OrderUseResult;
 import com.foodlife.trade.domain.order.service.OrderDomainService;
 import com.foodlife.trade.types.response.Response;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -110,6 +113,16 @@ public class OrderController {
         }
     }
 
+    @PostMapping("/orders/{orderId}/use/mock")
+    public Response<UseOrderResponseDTO> useOrderMock(@PathVariable Long orderId) {
+        try {
+            OrderUseResult result = orderDomainService.useOrderMock(toUseCommand(orderId));
+            return Response.success(toUseResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
+    }
+
     private CreateOrderCommand toCommand(CreateOrderRequestDTO request) {
         CreateOrderCommand command = new CreateOrderCommand();
         command.setUserId(UserHolder.getUserId());
@@ -180,6 +193,24 @@ public class OrderController {
         return response;
     }
 
+    private OrderUseCommandEntity toUseCommand(Long orderId) {
+        OrderUseCommandEntity command = new OrderUseCommandEntity();
+        command.setUserId(UserHolder.getUserId());
+        command.setOrderId(orderId);
+        return command;
+    }
+
+    private UseOrderResponseDTO toUseResponse(OrderUseResult result) {
+        UseOrderResponseDTO response = new UseOrderResponseDTO();
+        response.setUserId(result.getUserId());
+        response.setOrderId(result.getOrderId());
+        response.setOrderNo(result.getOrderNo());
+        response.setOrderStatus(result.getOrderStatus());
+        response.setUseBehavior(result.getUseBehavior());
+        response.setUseTime(result.getUseTime());
+        return response;
+    }
+
     private String readOrDefault(String value, String defaultValue) {
         if (value == null || value.trim().isEmpty()) {
             return defaultValue;
@@ -210,6 +241,7 @@ public class OrderController {
         response.setPayAmount(order.getPayAmount());
         response.setTradeType(order.getTradeType());
         response.setOrderStatus(order.getOrderStatus());
+        response.setUseTime(order.getUseTime());
         response.setCreateTime(order.getCreateTime());
         return response;
     }
@@ -227,6 +259,7 @@ public class OrderController {
         response.setPayAmount(order.getPayAmount());
         response.setTradeType(order.getTradeType());
         response.setOrderStatus(order.getOrderStatus());
+        response.setUseTime(order.getUseTime());
         response.setCreateTime(order.getCreateTime());
         response.setItems(toItemResponses(detail.getItems()));
         return response;
