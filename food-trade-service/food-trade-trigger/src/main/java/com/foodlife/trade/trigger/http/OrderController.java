@@ -9,6 +9,8 @@ import com.foodlife.trade.api.dto.OrderItemResponseDTO;
 import com.foodlife.trade.api.dto.OrderListResponseDTO;
 import com.foodlife.trade.api.dto.PayOrderRequestDTO;
 import com.foodlife.trade.api.dto.PayOrderResponseDTO;
+import com.foodlife.trade.api.dto.RefundOrderRequestDTO;
+import com.foodlife.trade.api.dto.RefundOrderResponseDTO;
 import com.foodlife.trade.domain.order.model.CancelOrderResult;
 import com.foodlife.trade.domain.order.model.CreateOrderCommand;
 import com.foodlife.trade.domain.order.model.CreateOrderResult;
@@ -18,6 +20,8 @@ import com.foodlife.trade.domain.order.model.OrderDetailEntity;
 import com.foodlife.trade.domain.order.model.OrderListResult;
 import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
 import com.foodlife.trade.domain.order.model.OrderPaySuccessEntity;
+import com.foodlife.trade.domain.order.model.OrderRefundBehaviorEntity;
+import com.foodlife.trade.domain.order.model.OrderRefundCommandEntity;
 import com.foodlife.trade.domain.order.model.OrderSummaryEntity;
 import com.foodlife.trade.domain.order.service.OrderDomainService;
 import com.foodlife.trade.types.response.Response;
@@ -95,6 +99,17 @@ public class OrderController {
         }
     }
 
+    @PostMapping("/orders/{orderId}/refund/mock")
+    public Response<RefundOrderResponseDTO> refundOrderMock(@PathVariable Long orderId,
+                                                            @RequestBody(required = false) RefundOrderRequestDTO request) {
+        try {
+            OrderRefundBehaviorEntity result = orderDomainService.refundOrderMock(toRefundCommand(orderId, request));
+            return Response.success(toRefundResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
+    }
+
     private CreateOrderCommand toCommand(CreateOrderRequestDTO request) {
         CreateOrderCommand command = new CreateOrderCommand();
         command.setUserId(UserHolder.getUserId());
@@ -141,6 +156,27 @@ public class OrderController {
         response.setOrderStatus(result.getOrderStatus());
         response.setOutTradeNo(result.getOutTradeNo());
         response.setOutTradeTime(result.getOutTradeTime());
+        return response;
+    }
+
+    private OrderRefundCommandEntity toRefundCommand(Long orderId, RefundOrderRequestDTO request) {
+        OrderRefundCommandEntity command = new OrderRefundCommandEntity();
+        command.setSource(readOrDefault(request == null ? null : request.getSource(), "FOOD_LIFE"));
+        command.setChannel(readOrDefault(request == null ? null : request.getChannel(), "MOCK_REFUND"));
+        command.setUserId(UserHolder.getUserId());
+        command.setOrderId(orderId);
+        return command;
+    }
+
+    private RefundOrderResponseDTO toRefundResponse(OrderRefundBehaviorEntity result) {
+        RefundOrderResponseDTO response = new RefundOrderResponseDTO();
+        response.setSource(result.getSource());
+        response.setChannel(result.getChannel());
+        response.setUserId(result.getUserId());
+        response.setOrderId(result.getOrderId());
+        response.setOrderNo(result.getOrderNo());
+        response.setOrderStatus(result.getOrderStatus());
+        response.setRefundBehavior(result.getRefundBehavior().getCode());
         return response;
     }
 
