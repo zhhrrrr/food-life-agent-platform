@@ -7,9 +7,12 @@ import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyActivityEntity;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockAggregate;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockResult;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyOrderListEntity;
+import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyParticipantView;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyStatusConstants;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyTeamEntity;
+import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyTeamView;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyTimeoutCompensateDetail;
+import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyUserOrderView;
 import com.foodlife.trade.domain.order.groupbuy.repository.IGroupBuyRepository;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
@@ -27,7 +30,9 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Repository
 public class GroupBuyRepository implements IGroupBuyRepository {
@@ -405,6 +410,163 @@ public class GroupBuyRepository implements IGroupBuyRepository {
         if (orderListUpdated <= 0) {
             throw new IllegalArgumentException("timeout group buy order list can not refund");
         }
+    }
+
+    @Override
+    public List<GroupBuyTeamView> listAvailableGroupBuyTeams(Long packageId, LocalDateTime now, int limit) {
+        List<GroupBuyTeamPO> teams = groupBuyTeamMapper.selectList(new LambdaQueryWrapper<GroupBuyTeamPO>()
+                .eq(GroupBuyTeamPO::getPackageId, packageId)
+                .eq(GroupBuyTeamPO::getTeamStatus, GroupBuyStatusConstants.IN_PROGRESS)
+                .gt(GroupBuyTeamPO::getValidEndTime, now)
+                .apply("lock_count < target_count")
+                .orderByAsc(GroupBuyTeamPO::getValidEndTime)
+                .last("limit " + limit));
+        return teams.stream().map(team -> toTeamView(team, now, false)).collect(Collectors.toList());
+    }
+
+    @Override
+    public GroupBuyTeamView queryGroupBuyTeamDetail(String teamId, LocalDateTime now) {
+        GroupBuyTeamPO teamPO = groupBuyTeamMapper.selectOne(new LambdaQueryWrapper<GroupBuyTeamPO>()
+                .eq(GroupBuyTeamPO::getTeamId, teamId)
+                .last("limit 1"));
+        if (teamPO == null) {
+            return null;
+        }
+        GroupBuyTeamView view = toTeamView(teamPO, now, true);
+        view.setParticipants(listParticipants(teamId));
+        return view;
+    }
+
+    @Override
+    public List<GroupBuyUserOrderView> listUserGroupBuyOrders(Long userId, Long lastId, int limit, LocalDateTime now) {
+        LambdaQueryWrapper<GroupBuyOrderListPO> wrapper = new LambdaQueryWrapper<GroupBuyOrderListPO>()
+                .eq(GroupBuyOrderListPO::getUserId, userId)
+                .orderByDesc(GroupBuyOrderListPO::getId)
+                .last("limit " + limit);
+        if (lastId != null && lastId > 0) {
+            wrapper.lt(GroupBuyOrderListPO::getId, lastId);
+        }
+        List<GroupBuyOrderListPO> orderLists = groupBuyOrderListMapper.selectList(wrapper);
+        List<GroupBuyUserOrderView> views = new ArrayList<>();
+        for (GroupBuyOrderListPO orderListPO : orderLists) {
+            GroupBuyTeamPO teamPO = groupBuyTeamMapper.selectOne(new LambdaQueryWrapper<GroupBuyTeamPO>()
+                    .eq(GroupBuyTeamPO::getTeamId, orderListPO.getTeamId())
+                    .last("limit 1"));
+            DiningOrderPO orderPO = diningOrderMapper.selectById(orderListPO.getOrderId());
+            views.add(toUserOrderView(orderListPO, teamPO, orderPO, now));
+        }
+        return views;
+    }
+
+    private List<GroupBuyParticipantView> listParticipants(String teamId) {
+        List<GroupBuyOrderListPO> participants = groupBuyOrderListMapper.selectList(new LambdaQueryWrapper<GroupBuyOrderListPO>()
+                .eq(GroupBuyOrderListPO::getTeamId, teamId)
+                .orderByAsc(GroupBuyOrderListPO::getId));
+        return participants.stream().map(this::toParticipantView).collect(Collectors.toList());
+    }
+
+    private GroupBuyParticipantView toParticipantView(GroupBuyOrderListPO po) {
+        DiningOrderPO orderPO = diningOrderMapper.selectById(po.getOrderId());
+        GroupBuyParticipantView view = new GroupBuyParticipantView();
+        view.setUserId(po.getUserId());
+        view.setOrderId(po.getOrderId());
+        view.setOrderNo(po.getOrderNo());
+        view.setGroupBuyOrderStatus(po.getOrderStatus());
+        view.setOrderStatus(orderPO == null ? null : orderPO.getOrderStatus());
+        view.setOutTradeTime(po.getOutTradeTime());
+        view.setCreateTime(po.getCreateTime());
+        return view;
+    }
+
+    private GroupBuyTeamView toTeamView(GroupBuyTeamPO po, LocalDateTime now, boolean includeParticipants) {
+        GroupBuyTeamView view = new GroupBuyTeamView();
+        view.setTeamId(po.getTeamId());
+        view.setActivityId(po.getActivityId());
+        view.setPackageId(po.getPackageId());
+        view.setTargetCount(po.getTargetCount());
+        view.setLockCount(po.getLockCount());
+        view.setCompleteCount(po.getCompleteCount());
+        view.setRemainingCount(calculateRemainingCount(po.getTargetCount(), po.getLockCount()));
+        view.setTeamStatus(po.getTeamStatus());
+        view.setValidStartTime(po.getValidStartTime());
+        view.setValidEndTime(po.getValidEndTime());
+        view.setCanJoin(canJoinTeam(po, now));
+        if (includeParticipants) {
+            view.setParticipants(new ArrayList<>());
+        }
+        return view;
+    }
+
+    private GroupBuyUserOrderView toUserOrderView(GroupBuyOrderListPO orderListPO, GroupBuyTeamPO teamPO, DiningOrderPO orderPO, LocalDateTime now) {
+        GroupBuyUserOrderView view = new GroupBuyUserOrderView();
+        view.setGroupBuyOrderListId(orderListPO.getId());
+        view.setUserId(orderListPO.getUserId());
+        view.setTeamId(orderListPO.getTeamId());
+        view.setOrderId(orderListPO.getOrderId());
+        view.setOrderNo(orderListPO.getOrderNo());
+        view.setActivityId(orderListPO.getActivityId());
+        view.setPackageId(orderListPO.getPackageId());
+        view.setPayAmount(orderPO == null ? null : orderPO.getPayAmount());
+        view.setGroupBuyOrderStatus(orderListPO.getOrderStatus());
+        view.setOrderStatus(orderPO == null ? null : orderPO.getOrderStatus());
+        view.setTeamStatus(teamPO == null ? null : teamPO.getTeamStatus());
+        view.setTargetCount(teamPO == null ? null : teamPO.getTargetCount());
+        view.setLockCount(teamPO == null ? null : teamPO.getLockCount());
+        view.setCompleteCount(teamPO == null ? null : teamPO.getCompleteCount());
+        view.setRemainingCount(teamPO == null ? null : calculateRemainingCount(teamPO.getTargetCount(), teamPO.getLockCount()));
+        view.setOutTradeTime(orderListPO.getOutTradeTime());
+        view.setValidEndTime(teamPO == null ? null : teamPO.getValidEndTime());
+        view.setCreateTime(orderListPO.getCreateTime());
+        view.setCanPay(canPay(orderListPO, teamPO, orderPO, now));
+        view.setCanCancel(canCancel(orderListPO, teamPO, orderPO));
+        view.setCanRefund(canRefund(orderListPO, teamPO, orderPO));
+        return view;
+    }
+
+    private boolean canJoinTeam(GroupBuyTeamPO teamPO, LocalDateTime now) {
+        return isTeamAliveInProgress(teamPO, now)
+                && teamPO.getLockCount() != null
+                && teamPO.getTargetCount() != null
+                && teamPO.getLockCount() < teamPO.getTargetCount();
+    }
+
+    private boolean isTeamAliveInProgress(GroupBuyTeamPO teamPO, LocalDateTime now) {
+        return teamPO != null
+                && GroupBuyStatusConstants.IN_PROGRESS.equals(teamPO.getTeamStatus())
+                && teamPO.getValidEndTime() != null
+                && teamPO.getValidEndTime().isAfter(now);
+    }
+
+    private boolean canPay(GroupBuyOrderListPO orderListPO, GroupBuyTeamPO teamPO, DiningOrderPO orderPO, LocalDateTime now) {
+        return orderPO != null
+                && OrderStatusConstants.WAIT_PAY.equals(orderPO.getOrderStatus())
+                && GroupBuyStatusConstants.LOCKED.equals(orderListPO.getOrderStatus())
+                && isTeamAliveInProgress(teamPO, now);
+    }
+
+    private boolean canCancel(GroupBuyOrderListPO orderListPO, GroupBuyTeamPO teamPO, DiningOrderPO orderPO) {
+        return orderPO != null
+                && teamPO != null
+                && OrderStatusConstants.WAIT_PAY.equals(orderPO.getOrderStatus())
+                && GroupBuyStatusConstants.LOCKED.equals(orderListPO.getOrderStatus())
+                && GroupBuyStatusConstants.IN_PROGRESS.equals(teamPO.getTeamStatus());
+    }
+
+    private boolean canRefund(GroupBuyOrderListPO orderListPO, GroupBuyTeamPO teamPO, DiningOrderPO orderPO) {
+        return orderPO != null
+                && teamPO != null
+                && OrderStatusConstants.PAID.equals(orderPO.getOrderStatus())
+                && GroupBuyStatusConstants.PAID.equals(orderListPO.getOrderStatus())
+                && (GroupBuyStatusConstants.IN_PROGRESS.equals(teamPO.getTeamStatus())
+                || GroupBuyStatusConstants.SUCCESS.equals(teamPO.getTeamStatus())
+                || GroupBuyStatusConstants.COMPLETE_FAIL.equals(teamPO.getTeamStatus()));
+    }
+
+    private Integer calculateRemainingCount(Integer targetCount, Integer lockCount) {
+        if (targetCount == null || lockCount == null) {
+            return null;
+        }
+        return Math.max(targetCount - lockCount, 0);
     }
 
     private GroupBuyOrderListPO queryPaidOrderListPO(DiningOrderEntity order) {
