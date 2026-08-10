@@ -224,6 +224,108 @@ public class GroupBuyRepository implements IGroupBuyRepository {
                 .eq(GroupBuyActivityPO::getId, orderListPO.getActivityId()));
     }
 
+    @Override
+    public GroupBuyOrderListEntity queryOrderListByOrderIdAndUserId(Long orderId, Long userId) {
+        GroupBuyOrderListPO po = groupBuyOrderListMapper.selectOne(new LambdaQueryWrapper<GroupBuyOrderListPO>()
+                .eq(GroupBuyOrderListPO::getOrderId, orderId)
+                .eq(GroupBuyOrderListPO::getUserId, userId)
+                .last("limit 1"));
+        return toOrderListEntity(po);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public GroupBuyTeamEntity refundPaidUnformedGroupBuyOrder(DiningOrderEntity order) {
+        GroupBuyOrderListPO orderListPO = queryPaidOrderListPO(order);
+        updateDiningOrderRefunded(order);
+        updateGroupBuyOrderListRefunded(orderListPO);
+
+        int teamUpdated = groupBuyTeamMapper.update(null, new LambdaUpdateWrapper<GroupBuyTeamPO>()
+                .setSql("lock_count = lock_count - 1")
+                .setSql("complete_count = complete_count - 1")
+                .set(GroupBuyTeamPO::getUpdateTime, LocalDateTime.now())
+                .eq(GroupBuyTeamPO::getTeamId, orderListPO.getTeamId())
+                .eq(GroupBuyTeamPO::getTeamStatus, GroupBuyStatusConstants.IN_PROGRESS)
+                .gt(GroupBuyTeamPO::getLockCount, 0)
+                .gt(GroupBuyTeamPO::getCompleteCount, 0));
+        if (teamUpdated <= 0) {
+            throw new IllegalArgumentException("group buy team can not refund");
+        }
+
+        groupBuyActivityMapper.update(null, new LambdaUpdateWrapper<GroupBuyActivityPO>()
+                .setSql("stock = stock + 1")
+                .set(GroupBuyActivityPO::getUpdateTime, LocalDateTime.now())
+                .eq(GroupBuyActivityPO::getId, orderListPO.getActivityId()));
+        return queryTeamByTeamId(orderListPO.getTeamId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public GroupBuyTeamEntity refundPaidFormedGroupBuyOrder(DiningOrderEntity order) {
+        GroupBuyOrderListPO orderListPO = queryPaidOrderListPO(order);
+        GroupBuyTeamEntity teamBefore = queryTeamByTeamId(orderListPO.getTeamId());
+        if (teamBefore == null) {
+            throw new IllegalArgumentException("group buy team not found");
+        }
+        String targetStatus = teamBefore.getCompleteCount() != null && teamBefore.getCompleteCount() <= 1
+                ? GroupBuyStatusConstants.FAILED
+                : GroupBuyStatusConstants.COMPLETE_FAIL;
+
+        updateDiningOrderRefunded(order);
+        updateGroupBuyOrderListRefunded(orderListPO);
+
+        int teamUpdated = groupBuyTeamMapper.update(null, new LambdaUpdateWrapper<GroupBuyTeamPO>()
+                .setSql("lock_count = lock_count - 1")
+                .setSql("complete_count = complete_count - 1")
+                .set(GroupBuyTeamPO::getTeamStatus, targetStatus)
+                .set(GroupBuyTeamPO::getUpdateTime, LocalDateTime.now())
+                .eq(GroupBuyTeamPO::getTeamId, orderListPO.getTeamId())
+                .in(GroupBuyTeamPO::getTeamStatus, GroupBuyStatusConstants.SUCCESS, GroupBuyStatusConstants.COMPLETE_FAIL)
+                .gt(GroupBuyTeamPO::getLockCount, 0)
+                .gt(GroupBuyTeamPO::getCompleteCount, 0));
+        if (teamUpdated <= 0) {
+            throw new IllegalArgumentException("formed group buy team can not refund");
+        }
+        return queryTeamByTeamId(orderListPO.getTeamId());
+    }
+
+    private GroupBuyOrderListPO queryPaidOrderListPO(DiningOrderEntity order) {
+        GroupBuyOrderListPO orderListPO = groupBuyOrderListMapper.selectOne(new LambdaQueryWrapper<GroupBuyOrderListPO>()
+                .eq(GroupBuyOrderListPO::getOrderId, order.getId())
+                .eq(GroupBuyOrderListPO::getUserId, order.getUserId())
+                .last("limit 1"));
+        if (orderListPO == null) {
+            throw new IllegalArgumentException("group buy order list not found");
+        }
+        if (!GroupBuyStatusConstants.PAID.equals(orderListPO.getOrderStatus())) {
+            throw new IllegalArgumentException("group buy order status can not refund");
+        }
+        return orderListPO;
+    }
+
+    private void updateDiningOrderRefunded(DiningOrderEntity order) {
+        int orderUpdated = diningOrderMapper.update(null, new LambdaUpdateWrapper<DiningOrderPO>()
+                .set(DiningOrderPO::getOrderStatus, OrderStatusConstants.REFUNDED)
+                .set(DiningOrderPO::getUpdateTime, LocalDateTime.now())
+                .eq(DiningOrderPO::getId, order.getId())
+                .eq(DiningOrderPO::getUserId, order.getUserId())
+                .eq(DiningOrderPO::getOrderStatus, OrderStatusConstants.PAID));
+        if (orderUpdated <= 0) {
+            throw new IllegalArgumentException("order status can not refund");
+        }
+    }
+
+    private void updateGroupBuyOrderListRefunded(GroupBuyOrderListPO orderListPO) {
+        int orderListUpdated = groupBuyOrderListMapper.update(null, new LambdaUpdateWrapper<GroupBuyOrderListPO>()
+                .set(GroupBuyOrderListPO::getOrderStatus, GroupBuyStatusConstants.REFUNDED)
+                .set(GroupBuyOrderListPO::getUpdateTime, LocalDateTime.now())
+                .eq(GroupBuyOrderListPO::getId, orderListPO.getId())
+                .eq(GroupBuyOrderListPO::getOrderStatus, GroupBuyStatusConstants.PAID));
+        if (orderListUpdated <= 0) {
+            throw new IllegalArgumentException("group buy order status can not refund");
+        }
+    }
+
     private GroupBuyLockResult toLockResult(DiningOrderPO orderPO, GroupBuyTeamEntity team) {
         GroupBuyLockResult result = new GroupBuyLockResult();
         result.setOrderId(orderPO.getId());
@@ -310,6 +412,25 @@ public class GroupBuyRepository implements IGroupBuyRepository {
         po.setCreateTime(entity.getCreateTime());
         po.setUpdateTime(entity.getUpdateTime());
         return po;
+    }
+
+    private GroupBuyOrderListEntity toOrderListEntity(GroupBuyOrderListPO po) {
+        if (po == null) {
+            return null;
+        }
+        GroupBuyOrderListEntity entity = new GroupBuyOrderListEntity();
+        entity.setId(po.getId());
+        entity.setUserId(po.getUserId());
+        entity.setTeamId(po.getTeamId());
+        entity.setOrderId(po.getOrderId());
+        entity.setOrderNo(po.getOrderNo());
+        entity.setActivityId(po.getActivityId());
+        entity.setPackageId(po.getPackageId());
+        entity.setOrderStatus(po.getOrderStatus());
+        entity.setOutTradeTime(po.getOutTradeTime());
+        entity.setCreateTime(po.getCreateTime());
+        entity.setUpdateTime(po.getUpdateTime());
+        return entity;
     }
 
     private DiningOrderPO toOrderPO(DiningOrderEntity entity) {

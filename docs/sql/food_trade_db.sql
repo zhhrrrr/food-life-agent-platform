@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS group_buy_order (
   target_count INT NOT NULL COMMENT 'team target count',
   complete_count INT NOT NULL DEFAULT 0 COMMENT 'paid participant count',
   lock_count INT NOT NULL DEFAULT 0 COMMENT 'locked participant count',
-  team_status VARCHAR(32) NOT NULL COMMENT 'team status: IN_PROGRESS/SUCCESS/FAILED',
+  team_status VARCHAR(32) NOT NULL COMMENT 'team status: IN_PROGRESS/SUCCESS/FAILED/COMPLETE_FAIL',
   valid_start_time DATETIME NOT NULL COMMENT 'team start time',
   valid_end_time DATETIME NOT NULL COMMENT 'team end time',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
