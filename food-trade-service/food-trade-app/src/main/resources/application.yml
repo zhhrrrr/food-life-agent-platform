@@ -22,6 +22,11 @@ mybatis-plus:
       id-type: auto
 
 food:
+  trade:
+    group-buy:
+      timeout-compensation:
+        enabled: true
+        fixed-delay-ms: 60000
   business-service:
     base-url: http://localhost:8201
   auth:

@@ -5,9 +5,11 @@ import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockAggregate;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockResult;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyOrderListEntity;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyTeamEntity;
+import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyTimeoutCompensateDetail;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public interface IGroupBuyRepository {
 
@@ -30,4 +32,8 @@ public interface IGroupBuyRepository {
     GroupBuyTeamEntity refundPaidUnformedGroupBuyOrder(DiningOrderEntity order);
 
     GroupBuyTeamEntity refundPaidFormedGroupBuyOrder(DiningOrderEntity order);
+
+    List<GroupBuyTeamEntity> queryTimeoutInProgressTeams(LocalDateTime now, int limit);
+
+    GroupBuyTimeoutCompensateDetail compensateTimeoutTeam(String teamId, LocalDateTime now);
 }
