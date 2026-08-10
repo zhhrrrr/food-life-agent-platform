@@ -16,4 +16,10 @@ public class OrderPaySettlementEntity implements Serializable {
     private String orderStatus;
     private String outTradeNo;
     private LocalDateTime outTradeTime;
+    private String teamId;
+    private Long activityId;
+    private String teamStatus;
+    private Integer targetCount;
+    private Integer lockCount;
+    private Integer completeCount;
 }
