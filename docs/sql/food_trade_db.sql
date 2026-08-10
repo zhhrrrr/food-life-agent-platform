@@ -94,11 +94,44 @@ CREATE TABLE IF NOT EXISTS group_buy_order_list (
   KEY idx_team_id (team_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='group buy participant order list';
 
+CREATE TABLE IF NOT EXISTS seckill_activity (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'seckill activity id',
+  package_id BIGINT NOT NULL COMMENT 'meal package id',
+  activity_name VARCHAR(128) NOT NULL COMMENT 'activity name',
+  seckill_price BIGINT NOT NULL COMMENT 'seckill price in cents',
+  activity_status TINYINT NOT NULL DEFAULT 1 COMMENT 'activity status: 1 enabled, 0 disabled',
+  valid_start_time DATETIME NOT NULL COMMENT 'activity start time',
+  valid_end_time DATETIME NOT NULL COMMENT 'activity end time',
+  stock INT NOT NULL DEFAULT 0 COMMENT 'activity stock',
+  user_take_limit INT NOT NULL DEFAULT 1 COMMENT 'user take limit in this activity',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_package_id (package_id),
+  KEY idx_valid_time (valid_start_time, valid_end_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='seckill activity';
+
+CREATE TABLE IF NOT EXISTS seckill_order (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'seckill order id',
+  user_id BIGINT NOT NULL COMMENT 'user id',
+  activity_id BIGINT NOT NULL COMMENT 'seckill activity id',
+  package_id BIGINT NOT NULL COMMENT 'meal package id',
+  order_id BIGINT NOT NULL COMMENT 'dining order id',
+  order_no VARCHAR(64) NOT NULL COMMENT 'dining order no',
+  order_status VARCHAR(32) NOT NULL COMMENT 'seckill order status: WAIT_PAY/PAID/CANCELED',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_order_id (order_id),
+  UNIQUE KEY uk_user_activity (user_id, activity_id),
+  KEY idx_activity_id (activity_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='seckill participant order';
+
 INSERT INTO group_buy_activity (
   package_id, activity_name, target_count, user_take_limit, group_price,
   activity_status, valid_start_time, valid_end_time, stock
 ) VALUES (
-  1, '双人火锅套餐拼团', 2, 1, 12800,
+  1, 'local group buy meal package', 2, 1, 12800,
   1, '2026-01-01 00:00:00', '2026-12-31 23:59:59', 100
 ) ON DUPLICATE KEY UPDATE
   activity_name = VALUES(activity_name),
@@ -109,3 +142,18 @@ INSERT INTO group_buy_activity (
   valid_start_time = VALUES(valid_start_time),
   valid_end_time = VALUES(valid_end_time),
   stock = IF(stock < 1, VALUES(stock), stock);
+
+INSERT INTO seckill_activity (
+  package_id, activity_name, seckill_price, activity_status,
+  valid_start_time, valid_end_time, stock, user_take_limit
+) VALUES (
+  1, 'local seckill meal package', 9800, 1,
+  '2026-01-01 00:00:00', '2026-12-31 23:59:59', 20, 1
+) ON DUPLICATE KEY UPDATE
+  activity_name = VALUES(activity_name),
+  seckill_price = VALUES(seckill_price),
+  activity_status = VALUES(activity_status),
+  valid_start_time = VALUES(valid_start_time),
+  valid_end_time = VALUES(valid_end_time),
+  stock = IF(stock < 1, VALUES(stock), stock),
+  user_take_limit = VALUES(user_take_limit);

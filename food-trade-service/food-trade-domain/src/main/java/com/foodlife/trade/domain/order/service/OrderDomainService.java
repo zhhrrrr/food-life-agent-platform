@@ -27,6 +27,11 @@ import com.foodlife.trade.domain.order.model.OrderUseResult;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import com.foodlife.trade.domain.order.pricing.OrderPricingService;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
+import com.foodlife.trade.domain.order.seckill.model.SeckillActivityView;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderCommand;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderResult;
+import com.foodlife.trade.domain.order.seckill.repository.ISeckillRepository;
+import com.foodlife.trade.domain.order.seckill.service.SeckillOrderService;
 import com.foodlife.trade.domain.order.service.refund.OrderRefundService;
 import com.foodlife.trade.domain.order.service.settlement.OrderPaySettlementService;
 import com.foodlife.trade.domain.order.service.use.OrderUseService;
@@ -47,6 +52,8 @@ public class OrderDomainService {
     private final OrderUseService orderUseService;
     private final GroupBuyLockOrderService groupBuyLockOrderService;
     private final IGroupBuyRepository groupBuyRepository;
+    private final SeckillOrderService seckillOrderService;
+    private final ISeckillRepository seckillRepository;
 
     public OrderDomainService(IOrderRepository orderRepository,
                               OrderCreateCheckChain orderCreateCheckChain,
@@ -56,7 +63,9 @@ public class OrderDomainService {
                               OrderRefundService orderRefundService,
                               OrderUseService orderUseService,
                               GroupBuyLockOrderService groupBuyLockOrderService,
-                              IGroupBuyRepository groupBuyRepository) {
+                              IGroupBuyRepository groupBuyRepository,
+                              SeckillOrderService seckillOrderService,
+                              ISeckillRepository seckillRepository) {
         this.orderRepository = orderRepository;
         this.orderCreateCheckChain = orderCreateCheckChain;
         this.orderPricingService = orderPricingService;
@@ -66,6 +75,8 @@ public class OrderDomainService {
         this.orderUseService = orderUseService;
         this.groupBuyLockOrderService = groupBuyLockOrderService;
         this.groupBuyRepository = groupBuyRepository;
+        this.seckillOrderService = seckillOrderService;
+        this.seckillRepository = seckillRepository;
     }
 
     public CreateOrderResult createNormalOrder(CreateOrderCommand command) {
@@ -149,6 +160,11 @@ public class OrderDomainService {
             return buildCancelOrderResult(order);
         }
 
+        if (TradeTypeConstants.SECKILL.equals(order.getTradeType())) {
+            seckillRepository.cancelUnpaidSeckillOrder(order);
+            return buildCancelOrderResult(order);
+        }
+
         boolean success = orderRepository.updateOrderStatus(orderId, OrderStatusConstants.WAIT_PAY, OrderStatusConstants.CANCELED);
         if (!success) {
             throw new IllegalArgumentException("order status can not cancel");
@@ -170,6 +186,14 @@ public class OrderDomainService {
 
     public GroupBuyLockResult createGroupBuyOrder(GroupBuyLockOrderCommand command) {
         return groupBuyLockOrderService.lockOrder(command);
+    }
+
+    public java.util.List<SeckillActivityView> querySeckillActivities(Long packageId, Integer limit) {
+        return seckillOrderService.queryAvailableActivities(packageId, limit);
+    }
+
+    public SeckillOrderResult createSeckillOrder(SeckillOrderCommand command) {
+        return seckillOrderService.createSeckillOrder(command);
     }
 
     private int normalizePageSize(Integer pageSize) {

@@ -11,6 +11,7 @@ import com.foodlife.trade.domain.order.model.OrderPaySuccessEntity;
 import com.foodlife.trade.domain.order.model.OrderSettlementRuleCommandEntity;
 import com.foodlife.trade.domain.order.model.OrderSettlementRuleFilterBackEntity;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
+import com.foodlife.trade.domain.order.seckill.repository.ISeckillRepository;
 import com.foodlife.trade.domain.order.settlement.factory.OrderSettlementRuleFilterFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -20,14 +21,17 @@ public class OrderPaySettlementService {
 
     private final IOrderRepository orderRepository;
     private final IGroupBuyRepository groupBuyRepository;
+    private final ISeckillRepository seckillRepository;
     private final BusinessLinkedList<OrderSettlementRuleCommandEntity, OrderSettlementRuleFilterFactory.DynamicContext, OrderSettlementRuleFilterBackEntity> orderPaySettlementRuleFilter;
 
     public OrderPaySettlementService(IOrderRepository orderRepository,
                                      IGroupBuyRepository groupBuyRepository,
+                                     ISeckillRepository seckillRepository,
                                      @Qualifier("orderPaySettlementRuleFilter")
                                      BusinessLinkedList<OrderSettlementRuleCommandEntity, OrderSettlementRuleFilterFactory.DynamicContext, OrderSettlementRuleFilterBackEntity> orderPaySettlementRuleFilter) {
         this.orderRepository = orderRepository;
         this.groupBuyRepository = groupBuyRepository;
+        this.seckillRepository = seckillRepository;
         this.orderPaySettlementRuleFilter = orderPaySettlementRuleFilter;
     }
 
@@ -42,6 +46,13 @@ public class OrderPaySettlementService {
             if (TradeTypeConstants.GROUP_BUY.equals(order.getTradeType())) {
                 GroupBuyTeamEntity team = groupBuyRepository.settlementGroupBuyPaySuccess(order, orderPaySuccessEntity.getOutTradeTime());
                 return buildSettlementEntity(orderPaySuccessEntity, order, team);
+            }
+
+            if (TradeTypeConstants.SECKILL.equals(order.getTradeType())) {
+                Long activityId = seckillRepository.settlementSeckillPaySuccess(order);
+                OrderPaySettlementEntity settlementEntity = buildSettlementEntity(orderPaySuccessEntity, order, null);
+                settlementEntity.setActivityId(activityId);
+                return settlementEntity;
             }
 
             boolean success = orderRepository.updateOrderStatus(order.getId(), OrderStatusConstants.WAIT_PAY, OrderStatusConstants.PAID);
