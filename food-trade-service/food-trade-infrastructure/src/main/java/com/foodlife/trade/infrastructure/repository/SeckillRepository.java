@@ -2,23 +2,31 @@ package com.foodlife.trade.infrastructure.repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.foodlife.trade.domain.order.message.constant.LocalMessageStatusConstants;
+import com.foodlife.trade.domain.order.message.model.TradeLocalMessageEntity;
 import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
+import com.foodlife.trade.domain.order.seckill.constant.SeckillRequestStatusConstants;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityEntity;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityView;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderAggregate;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderEntity;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestEntity;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderResult;
 import com.foodlife.trade.domain.order.seckill.repository.ISeckillRepository;
 import com.foodlife.trade.infrastructure.dao.IDiningOrderItemMapper;
 import com.foodlife.trade.infrastructure.dao.IDiningOrderMapper;
 import com.foodlife.trade.infrastructure.dao.ISeckillActivityMapper;
 import com.foodlife.trade.infrastructure.dao.ISeckillOrderMapper;
+import com.foodlife.trade.infrastructure.dao.ISeckillOrderRequestMapper;
+import com.foodlife.trade.infrastructure.dao.ITradeLocalMessageMapper;
 import com.foodlife.trade.infrastructure.dao.po.DiningOrderItemPO;
 import com.foodlife.trade.infrastructure.dao.po.DiningOrderPO;
 import com.foodlife.trade.infrastructure.dao.po.SeckillActivityPO;
 import com.foodlife.trade.infrastructure.dao.po.SeckillOrderPO;
+import com.foodlife.trade.infrastructure.dao.po.SeckillOrderRequestPO;
+import com.foodlife.trade.infrastructure.dao.po.TradeLocalMessagePO;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,15 +40,21 @@ public class SeckillRepository implements ISeckillRepository {
 
     private final ISeckillActivityMapper seckillActivityMapper;
     private final ISeckillOrderMapper seckillOrderMapper;
+    private final ISeckillOrderRequestMapper seckillOrderRequestMapper;
+    private final ITradeLocalMessageMapper tradeLocalMessageMapper;
     private final IDiningOrderMapper diningOrderMapper;
     private final IDiningOrderItemMapper diningOrderItemMapper;
 
     public SeckillRepository(ISeckillActivityMapper seckillActivityMapper,
                              ISeckillOrderMapper seckillOrderMapper,
+                             ISeckillOrderRequestMapper seckillOrderRequestMapper,
+                             ITradeLocalMessageMapper tradeLocalMessageMapper,
                              IDiningOrderMapper diningOrderMapper,
                              IDiningOrderItemMapper diningOrderItemMapper) {
         this.seckillActivityMapper = seckillActivityMapper;
         this.seckillOrderMapper = seckillOrderMapper;
+        this.seckillOrderRequestMapper = seckillOrderRequestMapper;
+        this.tradeLocalMessageMapper = tradeLocalMessageMapper;
         this.diningOrderMapper = diningOrderMapper;
         this.diningOrderItemMapper = diningOrderItemMapper;
     }
@@ -111,6 +125,104 @@ public class SeckillRepository implements ISeckillRepository {
 
         SeckillActivityPO activityPO = seckillActivityMapper.selectById(activity.getId());
         return toOrderResult(orderPO, activityPO);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveSeckillOrderRequestAndMessage(SeckillOrderRequestEntity request, TradeLocalMessageEntity message) {
+        seckillOrderRequestMapper.insert(toSeckillOrderRequestPO(request));
+        tradeLocalMessageMapper.insert(toTradeLocalMessagePO(message));
+    }
+
+    @Override
+    public SeckillOrderRequestEntity querySeckillOrderRequest(String requestNo) {
+        SeckillOrderRequestPO po = seckillOrderRequestMapper.selectOne(new LambdaQueryWrapper<SeckillOrderRequestPO>()
+                .eq(SeckillOrderRequestPO::getRequestNo, requestNo)
+                .last("limit 1"));
+        return toSeckillOrderRequestEntity(po);
+    }
+
+    @Override
+    public List<TradeLocalMessageEntity> queryPendingSeckillOrderMessages(LocalDateTime now, int limit) {
+        return tradeLocalMessageMapper.selectList(new LambdaQueryWrapper<TradeLocalMessagePO>()
+                        .eq(TradeLocalMessagePO::getMessageType, "SECKILL_ORDER_CREATE")
+                        .eq(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.INIT)
+                        .le(TradeLocalMessagePO::getNextRetryTime, now)
+                        .orderByAsc(TradeLocalMessagePO::getId)
+                        .last("limit " + limit))
+                .stream()
+                .map(this::toTradeLocalMessageEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public boolean markLocalMessageProcessing(Long messageId) {
+        int updated = tradeLocalMessageMapper.update(null, new LambdaUpdateWrapper<TradeLocalMessagePO>()
+                .set(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.PROCESSING)
+                .set(TradeLocalMessagePO::getUpdateTime, LocalDateTime.now())
+                .eq(TradeLocalMessagePO::getId, messageId)
+                .eq(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.INIT));
+        return updated > 0;
+    }
+
+    @Override
+    public void markLocalMessageSuccess(Long messageId) {
+        tradeLocalMessageMapper.update(null, new LambdaUpdateWrapper<TradeLocalMessagePO>()
+                .set(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.SUCCESS)
+                .set(TradeLocalMessagePO::getUpdateTime, LocalDateTime.now())
+                .eq(TradeLocalMessagePO::getId, messageId));
+    }
+
+    @Override
+    public void markLocalMessageRetry(Long messageId, String failReason, LocalDateTime nextRetryTime) {
+        tradeLocalMessageMapper.update(null, new LambdaUpdateWrapper<TradeLocalMessagePO>()
+                .setSql("retry_count = retry_count + 1")
+                .set(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.INIT)
+                .set(TradeLocalMessagePO::getFailReason, limitText(failReason, 512))
+                .set(TradeLocalMessagePO::getNextRetryTime, nextRetryTime)
+                .set(TradeLocalMessagePO::getUpdateTime, LocalDateTime.now())
+                .eq(TradeLocalMessagePO::getId, messageId));
+    }
+
+    @Override
+    public void markLocalMessageFailed(Long messageId, String failReason) {
+        tradeLocalMessageMapper.update(null, new LambdaUpdateWrapper<TradeLocalMessagePO>()
+                .set(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.FAILED)
+                .set(TradeLocalMessagePO::getFailReason, limitText(failReason, 512))
+                .set(TradeLocalMessagePO::getUpdateTime, LocalDateTime.now())
+                .eq(TradeLocalMessagePO::getId, messageId));
+    }
+
+    @Override
+    public boolean markSeckillOrderRequestProcessing(String requestNo) {
+        int updated = seckillOrderRequestMapper.update(null, new LambdaUpdateWrapper<SeckillOrderRequestPO>()
+                .set(SeckillOrderRequestPO::getRequestStatus, SeckillRequestStatusConstants.PROCESSING)
+                .set(SeckillOrderRequestPO::getUpdateTime, LocalDateTime.now())
+                .eq(SeckillOrderRequestPO::getRequestNo, requestNo)
+                .in(SeckillOrderRequestPO::getRequestStatus,
+                        SeckillRequestStatusConstants.INIT,
+                        SeckillRequestStatusConstants.FAILED));
+        return updated > 0;
+    }
+
+    @Override
+    public void markSeckillOrderRequestSuccess(String requestNo, SeckillOrderResult result) {
+        seckillOrderRequestMapper.update(null, new LambdaUpdateWrapper<SeckillOrderRequestPO>()
+                .set(SeckillOrderRequestPO::getRequestStatus, SeckillRequestStatusConstants.SUCCESS)
+                .set(SeckillOrderRequestPO::getOrderId, result.getOrderId())
+                .set(SeckillOrderRequestPO::getOrderNo, result.getOrderNo())
+                .set(SeckillOrderRequestPO::getFailReason, null)
+                .set(SeckillOrderRequestPO::getUpdateTime, LocalDateTime.now())
+                .eq(SeckillOrderRequestPO::getRequestNo, requestNo));
+    }
+
+    @Override
+    public void markSeckillOrderRequestFailed(String requestNo, String failReason) {
+        seckillOrderRequestMapper.update(null, new LambdaUpdateWrapper<SeckillOrderRequestPO>()
+                .set(SeckillOrderRequestPO::getRequestStatus, SeckillRequestStatusConstants.FAILED)
+                .set(SeckillOrderRequestPO::getFailReason, limitText(failReason, 512))
+                .set(SeckillOrderRequestPO::getUpdateTime, LocalDateTime.now())
+                .eq(SeckillOrderRequestPO::getRequestNo, requestNo));
     }
 
     @Override
@@ -248,6 +360,86 @@ public class SeckillRepository implements ISeckillRepository {
         po.setCreateTime(entity.getCreateTime());
         po.setUpdateTime(entity.getUpdateTime());
         return po;
+    }
+
+    private SeckillOrderRequestPO toSeckillOrderRequestPO(SeckillOrderRequestEntity entity) {
+        SeckillOrderRequestPO po = new SeckillOrderRequestPO();
+        po.setId(entity.getId());
+        po.setRequestNo(entity.getRequestNo());
+        po.setUserId(entity.getUserId());
+        po.setActivityId(entity.getActivityId());
+        po.setPackageId(entity.getPackageId());
+        po.setQuantity(entity.getQuantity());
+        po.setOrderId(entity.getOrderId());
+        po.setOrderNo(entity.getOrderNo());
+        po.setRequestStatus(entity.getRequestStatus());
+        po.setFailReason(entity.getFailReason());
+        po.setCreateTime(entity.getCreateTime());
+        po.setUpdateTime(entity.getUpdateTime());
+        return po;
+    }
+
+    private SeckillOrderRequestEntity toSeckillOrderRequestEntity(SeckillOrderRequestPO po) {
+        if (po == null) {
+            return null;
+        }
+        SeckillOrderRequestEntity entity = new SeckillOrderRequestEntity();
+        entity.setId(po.getId());
+        entity.setRequestNo(po.getRequestNo());
+        entity.setUserId(po.getUserId());
+        entity.setActivityId(po.getActivityId());
+        entity.setPackageId(po.getPackageId());
+        entity.setQuantity(po.getQuantity());
+        entity.setOrderId(po.getOrderId());
+        entity.setOrderNo(po.getOrderNo());
+        entity.setRequestStatus(po.getRequestStatus());
+        entity.setFailReason(po.getFailReason());
+        entity.setCreateTime(po.getCreateTime());
+        entity.setUpdateTime(po.getUpdateTime());
+        return entity;
+    }
+
+    private TradeLocalMessagePO toTradeLocalMessagePO(TradeLocalMessageEntity entity) {
+        TradeLocalMessagePO po = new TradeLocalMessagePO();
+        po.setId(entity.getId());
+        po.setMessageId(entity.getMessageId());
+        po.setMessageType(entity.getMessageType());
+        po.setBizType(entity.getBizType());
+        po.setBizId(entity.getBizId());
+        po.setMessageStatus(entity.getMessageStatus());
+        po.setRetryCount(entity.getRetryCount());
+        po.setMaxRetryCount(entity.getMaxRetryCount());
+        po.setNextRetryTime(entity.getNextRetryTime());
+        po.setContent(entity.getContent());
+        po.setFailReason(entity.getFailReason());
+        po.setCreateTime(entity.getCreateTime());
+        po.setUpdateTime(entity.getUpdateTime());
+        return po;
+    }
+
+    private TradeLocalMessageEntity toTradeLocalMessageEntity(TradeLocalMessagePO po) {
+        TradeLocalMessageEntity entity = new TradeLocalMessageEntity();
+        entity.setId(po.getId());
+        entity.setMessageId(po.getMessageId());
+        entity.setMessageType(po.getMessageType());
+        entity.setBizType(po.getBizType());
+        entity.setBizId(po.getBizId());
+        entity.setMessageStatus(po.getMessageStatus());
+        entity.setRetryCount(po.getRetryCount());
+        entity.setMaxRetryCount(po.getMaxRetryCount());
+        entity.setNextRetryTime(po.getNextRetryTime());
+        entity.setContent(po.getContent());
+        entity.setFailReason(po.getFailReason());
+        entity.setCreateTime(po.getCreateTime());
+        entity.setUpdateTime(po.getUpdateTime());
+        return entity;
+    }
+
+    private String limitText(String text, int maxLength) {
+        if (text == null || text.length() <= maxLength) {
+            return text;
+        }
+        return text.substring(0, maxLength);
     }
 
     private DiningOrderPO toOrderPO(DiningOrderEntity entity) {

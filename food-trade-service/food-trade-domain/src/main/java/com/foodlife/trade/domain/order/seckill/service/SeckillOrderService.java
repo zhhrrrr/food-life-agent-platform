@@ -3,17 +3,23 @@ package com.foodlife.trade.domain.order.seckill.service;
 import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
 import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
 import com.foodlife.trade.domain.order.factory.OrderFactory;
+import com.foodlife.trade.domain.order.message.constant.LocalMessageStatusConstants;
+import com.foodlife.trade.domain.order.message.model.TradeLocalMessageEntity;
 import com.foodlife.trade.domain.order.model.CreateOrderCommand;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
 import com.foodlife.trade.domain.order.model.OrderPricingResult;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
+import com.foodlife.trade.domain.order.seckill.constant.SeckillRequestStatusConstants;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityEntity;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityView;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderAggregate;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderCommand;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderEntity;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestEntity;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestProcessResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillStockOccupyResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillStockPreheatResult;
@@ -23,6 +29,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,6 +37,11 @@ public class SeckillOrderService {
 
     private static final int DEFAULT_ACTIVITY_LIMIT = 20;
     private static final int MAX_ACTIVITY_LIMIT = 50;
+    private static final int DEFAULT_PROCESS_LIMIT = 20;
+    private static final int MAX_PROCESS_LIMIT = 100;
+    private static final int MAX_MESSAGE_RETRY_COUNT = 3;
+    private static final String MESSAGE_TYPE_SECKILL_ORDER_CREATE = "SECKILL_ORDER_CREATE";
+    private static final String BIZ_TYPE_SECKILL_ORDER_REQUEST = "SECKILL_ORDER_REQUEST";
 
     private final ISeckillRepository seckillRepository;
     private final ISeckillStockRepository seckillStockRepository;
@@ -91,6 +103,64 @@ public class SeckillOrderService {
         }
     }
 
+    public SeckillOrderRequestResult createSeckillOrderRequest(SeckillOrderCommand command) {
+        boolean stockOccupied = false;
+        SeckillActivityEntity activity = null;
+        try {
+            checkCommand(command);
+            LocalDateTime now = LocalDateTime.now();
+            activity = queryAndCheckActivity(command, now);
+            checkUserTakeLimit(command, activity);
+            SeckillStockOccupyResult stockOccupyResult = occupyActivityStock(activity, command.getUserId(), now);
+            stockOccupied = true;
+
+            String requestNo = generateRequestNo(command.getUserId());
+            SeckillOrderRequestEntity request = buildOrderRequest(command, activity, requestNo, now);
+            TradeLocalMessageEntity message = buildLocalMessage(request, now);
+            seckillRepository.saveSeckillOrderRequestAndMessage(request, message);
+
+            SeckillOrderRequestResult result = toRequestResult(request);
+            result.setRemainingStock(stockOccupyResult.getRemainingStock());
+            return result;
+        } catch (IllegalArgumentException e) {
+            releaseOccupiedStock(stockOccupied, activity, command);
+            throw e;
+        } catch (Exception e) {
+            releaseOccupiedStock(stockOccupied, activity, command);
+            throw new IllegalStateException("seckill order request create failed", e);
+        }
+    }
+
+    public SeckillOrderRequestResult querySeckillOrderRequest(String requestNo, Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("user not login");
+        }
+        if (requestNo == null || requestNo.trim().isEmpty()) {
+            throw new IllegalArgumentException("requestNo required");
+        }
+        SeckillOrderRequestEntity request = seckillRepository.querySeckillOrderRequest(requestNo.trim());
+        if (request == null || !userId.equals(request.getUserId())) {
+            throw new IllegalArgumentException("seckill order request not found");
+        }
+        return toRequestResult(request);
+    }
+
+    public SeckillOrderRequestProcessResult processPendingOrderRequests(Integer limit) {
+        int normalizedLimit = normalizeProcessLimit(limit);
+        LocalDateTime now = LocalDateTime.now();
+        List<TradeLocalMessageEntity> messages = seckillRepository.queryPendingSeckillOrderMessages(now, normalizedLimit);
+
+        SeckillOrderRequestProcessResult result = new SeckillOrderRequestProcessResult();
+        result.setScannedCount(messages.size());
+        for (TradeLocalMessageEntity message : messages) {
+            if (!seckillRepository.markLocalMessageProcessing(message.getId())) {
+                continue;
+            }
+            processSingleOrderRequestMessage(message, result);
+        }
+        return result;
+    }
+
     private void checkCommand(SeckillOrderCommand command) {
         if (command == null || command.getUserId() == null) {
             throw new IllegalArgumentException("user not login");
@@ -145,6 +215,65 @@ public class SeckillOrderService {
         return result;
     }
 
+    private void processSingleOrderRequestMessage(TradeLocalMessageEntity message,
+                                                  SeckillOrderRequestProcessResult processResult) {
+        SeckillOrderRequestEntity request = seckillRepository.querySeckillOrderRequest(message.getBizId());
+        if (request == null) {
+            seckillRepository.markLocalMessageFailed(message.getId(), "seckill order request not found");
+            processResult.setFailedCount(processResult.getFailedCount() + 1);
+            return;
+        }
+        if (SeckillRequestStatusConstants.SUCCESS.equals(request.getRequestStatus())) {
+            seckillRepository.markLocalMessageSuccess(message.getId());
+            processResult.setSuccessCount(processResult.getSuccessCount() + 1);
+            return;
+        }
+        if (!seckillRepository.markSeckillOrderRequestProcessing(request.getRequestNo())) {
+            seckillRepository.markLocalMessageRetry(message.getId(), "request status can not process", LocalDateTime.now().plusSeconds(30));
+            processResult.setRetryCount(processResult.getRetryCount() + 1);
+            return;
+        }
+
+        try {
+            SeckillOrderResult orderResult = createActualOrderFromRequest(request);
+            seckillRepository.markSeckillOrderRequestSuccess(request.getRequestNo(), orderResult);
+            seckillRepository.markLocalMessageSuccess(message.getId());
+            processResult.setSuccessCount(processResult.getSuccessCount() + 1);
+        } catch (Exception e) {
+            String failReason = rootMessage(e);
+            if (message.getRetryCount() + 1 >= message.getMaxRetryCount()) {
+                seckillRepository.markSeckillOrderRequestFailed(request.getRequestNo(), failReason);
+                seckillRepository.markLocalMessageFailed(message.getId(), failReason);
+                seckillStockRepository.releaseActivityStock(request.getActivityId(), request.getUserId());
+                processResult.setFailedCount(processResult.getFailedCount() + 1);
+                return;
+            }
+            seckillRepository.markSeckillOrderRequestFailed(request.getRequestNo(), failReason);
+            seckillRepository.markLocalMessageRetry(message.getId(), failReason, LocalDateTime.now().plusSeconds(30));
+            processResult.setRetryCount(processResult.getRetryCount() + 1);
+        }
+    }
+
+    private SeckillOrderResult createActualOrderFromRequest(SeckillOrderRequestEntity request) {
+        LocalDateTime now = LocalDateTime.now();
+        SeckillActivityEntity activity = seckillRepository.queryActivityById(request.getActivityId());
+        if (activity == null) {
+            throw new IllegalArgumentException("seckill activity not found");
+        }
+        if (activity.getActivityStatus() == null || activity.getActivityStatus() != 1) {
+            throw new IllegalArgumentException("seckill activity disabled");
+        }
+        PackageTradeSnapshot snapshot = queryAndCheckSnapshot(activity);
+
+        SeckillOrderCommand command = new SeckillOrderCommand();
+        command.setUserId(request.getUserId());
+        command.setActivityId(request.getActivityId());
+        command.setQuantity(request.getQuantity());
+
+        SeckillOrderAggregate aggregate = buildAggregate(command, activity, snapshot);
+        return seckillRepository.saveSeckillOrder(aggregate, now);
+    }
+
     private void releaseOccupiedStock(boolean stockOccupied, SeckillActivityEntity activity, SeckillOrderCommand command) {
         if (!stockOccupied || activity == null || command == null || command.getUserId() == null) {
             return;
@@ -192,6 +321,80 @@ public class SeckillOrderService {
         aggregate.setOrderItem(orderItem);
         aggregate.setSeckillOrder(seckillOrder);
         return aggregate;
+    }
+
+    private SeckillOrderRequestEntity buildOrderRequest(SeckillOrderCommand command,
+                                                        SeckillActivityEntity activity,
+                                                        String requestNo,
+                                                        LocalDateTime now) {
+        SeckillOrderRequestEntity request = new SeckillOrderRequestEntity();
+        request.setRequestNo(requestNo);
+        request.setUserId(command.getUserId());
+        request.setActivityId(activity.getId());
+        request.setPackageId(activity.getPackageId());
+        request.setQuantity(command.getQuantity());
+        request.setRequestStatus(SeckillRequestStatusConstants.INIT);
+        request.setCreateTime(now);
+        request.setUpdateTime(now);
+        return request;
+    }
+
+    private TradeLocalMessageEntity buildLocalMessage(SeckillOrderRequestEntity request, LocalDateTime now) {
+        TradeLocalMessageEntity message = new TradeLocalMessageEntity();
+        message.setMessageId("MSG" + UUID.randomUUID().toString().replace("-", ""));
+        message.setMessageType(MESSAGE_TYPE_SECKILL_ORDER_CREATE);
+        message.setBizType(BIZ_TYPE_SECKILL_ORDER_REQUEST);
+        message.setBizId(request.getRequestNo());
+        message.setMessageStatus(LocalMessageStatusConstants.INIT);
+        message.setRetryCount(0);
+        message.setMaxRetryCount(MAX_MESSAGE_RETRY_COUNT);
+        message.setNextRetryTime(now);
+        message.setContent(buildMessageContent(request));
+        message.setCreateTime(now);
+        message.setUpdateTime(now);
+        return message;
+    }
+
+    private SeckillOrderRequestResult toRequestResult(SeckillOrderRequestEntity request) {
+        SeckillOrderRequestResult result = new SeckillOrderRequestResult();
+        result.setRequestNo(request.getRequestNo());
+        result.setUserId(request.getUserId());
+        result.setActivityId(request.getActivityId());
+        result.setPackageId(request.getPackageId());
+        result.setQuantity(request.getQuantity());
+        result.setOrderId(request.getOrderId());
+        result.setOrderNo(request.getOrderNo());
+        result.setRequestStatus(request.getRequestStatus());
+        result.setFailReason(request.getFailReason());
+        return result;
+    }
+
+    private String buildMessageContent(SeckillOrderRequestEntity request) {
+        return "{\"requestNo\":\"" + request.getRequestNo()
+                + "\",\"userId\":" + request.getUserId()
+                + ",\"activityId\":" + request.getActivityId()
+                + ",\"packageId\":" + request.getPackageId()
+                + ",\"quantity\":" + request.getQuantity()
+                + "}";
+    }
+
+    private String generateRequestNo(Long userId) {
+        return "SK" + System.currentTimeMillis() + userId;
+    }
+
+    private int normalizeProcessLimit(Integer limit) {
+        if (limit == null || limit <= 0) {
+            return DEFAULT_PROCESS_LIMIT;
+        }
+        return Math.min(limit, MAX_PROCESS_LIMIT);
+    }
+
+    private String rootMessage(Exception e) {
+        Throwable current = e;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current.getMessage() == null ? e.getMessage() : current.getMessage();
     }
 
     private SeckillActivityView fillRedisStock(SeckillActivityView view) {

@@ -29,6 +29,8 @@ import com.foodlife.trade.domain.order.pricing.OrderPricingService;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityView;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderCommand;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestProcessResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillStockPreheatResult;
 import com.foodlife.trade.domain.order.seckill.repository.ISeckillRepository;
@@ -204,6 +206,18 @@ public class OrderDomainService {
 
     public SeckillOrderResult createSeckillOrder(SeckillOrderCommand command) {
         return seckillOrderService.createSeckillOrder(command);
+    }
+
+    public SeckillOrderRequestResult createSeckillOrderRequest(SeckillOrderCommand command) {
+        return seckillOrderService.createSeckillOrderRequest(command);
+    }
+
+    public SeckillOrderRequestResult querySeckillOrderRequest(String requestNo, Long userId) {
+        return seckillOrderService.querySeckillOrderRequest(requestNo, userId);
+    }
+
+    public SeckillOrderRequestProcessResult processPendingSeckillOrderRequests(Integer limit) {
+        return seckillOrderService.processPendingOrderRequests(limit);
     }
 
     private int normalizePageSize(Integer pageSize) {
