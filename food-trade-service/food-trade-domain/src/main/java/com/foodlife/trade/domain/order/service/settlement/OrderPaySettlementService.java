@@ -2,6 +2,9 @@ package com.foodlife.trade.domain.order.service.settlement;
 
 import com.foodlife.patterns.framework.link.model2.chain.BusinessLinkedList;
 import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
+import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
+import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyTeamEntity;
+import com.foodlife.trade.domain.order.groupbuy.repository.IGroupBuyRepository;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
 import com.foodlife.trade.domain.order.model.OrderPaySuccessEntity;
@@ -16,12 +19,15 @@ import org.springframework.stereotype.Service;
 public class OrderPaySettlementService {
 
     private final IOrderRepository orderRepository;
+    private final IGroupBuyRepository groupBuyRepository;
     private final BusinessLinkedList<OrderSettlementRuleCommandEntity, OrderSettlementRuleFilterFactory.DynamicContext, OrderSettlementRuleFilterBackEntity> orderPaySettlementRuleFilter;
 
     public OrderPaySettlementService(IOrderRepository orderRepository,
+                                     IGroupBuyRepository groupBuyRepository,
                                      @Qualifier("orderPaySettlementRuleFilter")
                                      BusinessLinkedList<OrderSettlementRuleCommandEntity, OrderSettlementRuleFilterFactory.DynamicContext, OrderSettlementRuleFilterBackEntity> orderPaySettlementRuleFilter) {
         this.orderRepository = orderRepository;
+        this.groupBuyRepository = groupBuyRepository;
         this.orderPaySettlementRuleFilter = orderPaySettlementRuleFilter;
     }
 
@@ -33,11 +39,16 @@ public class OrderPaySettlementService {
             );
 
             DiningOrderEntity order = filterBackEntity.getOrder();
+            if (TradeTypeConstants.GROUP_BUY.equals(order.getTradeType())) {
+                GroupBuyTeamEntity team = groupBuyRepository.settlementGroupBuyPaySuccess(order, orderPaySuccessEntity.getOutTradeTime());
+                return buildSettlementEntity(orderPaySuccessEntity, order, team);
+            }
+
             boolean success = orderRepository.updateOrderStatus(order.getId(), OrderStatusConstants.WAIT_PAY, OrderStatusConstants.PAID);
             if (!success) {
                 throw new IllegalArgumentException("order status can not pay");
             }
-            return buildSettlementEntity(orderPaySuccessEntity, order);
+            return buildSettlementEntity(orderPaySuccessEntity, order, null);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
@@ -58,7 +69,7 @@ public class OrderPaySettlementService {
         return command;
     }
 
-    private OrderPaySettlementEntity buildSettlementEntity(OrderPaySuccessEntity paySuccessEntity, DiningOrderEntity order) {
+    private OrderPaySettlementEntity buildSettlementEntity(OrderPaySuccessEntity paySuccessEntity, DiningOrderEntity order, GroupBuyTeamEntity team) {
         OrderPaySettlementEntity settlementEntity = new OrderPaySettlementEntity();
         settlementEntity.setSource(paySuccessEntity.getSource());
         settlementEntity.setChannel(paySuccessEntity.getChannel());
@@ -68,6 +79,14 @@ public class OrderPaySettlementService {
         settlementEntity.setOrderStatus(OrderStatusConstants.PAID);
         settlementEntity.setOutTradeNo(paySuccessEntity.getOutTradeNo());
         settlementEntity.setOutTradeTime(paySuccessEntity.getOutTradeTime());
+        if (team != null) {
+            settlementEntity.setTeamId(team.getTeamId());
+            settlementEntity.setActivityId(team.getActivityId());
+            settlementEntity.setTeamStatus(team.getTeamStatus());
+            settlementEntity.setTargetCount(team.getTargetCount());
+            settlementEntity.setLockCount(team.getLockCount());
+            settlementEntity.setCompleteCount(team.getCompleteCount());
+        }
         return settlementEntity;
     }
 }

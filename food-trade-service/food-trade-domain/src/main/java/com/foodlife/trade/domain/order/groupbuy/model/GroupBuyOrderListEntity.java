@@ -16,6 +16,7 @@ public class GroupBuyOrderListEntity implements Serializable {
     private Long activityId;
     private Long packageId;
     private String orderStatus;
+    private LocalDateTime outTradeTime;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

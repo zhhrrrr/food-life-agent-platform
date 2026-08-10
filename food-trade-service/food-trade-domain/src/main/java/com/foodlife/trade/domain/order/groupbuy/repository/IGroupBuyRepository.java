@@ -4,6 +4,9 @@ import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyActivityEntity;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockAggregate;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockResult;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyTeamEntity;
+import com.foodlife.trade.domain.order.model.DiningOrderEntity;
+
+import java.time.LocalDateTime;
 
 public interface IGroupBuyRepository {
 
@@ -16,4 +19,6 @@ public interface IGroupBuyRepository {
     boolean occupyActivityStock(Long activityId);
 
     GroupBuyLockResult saveGroupBuyLockOrder(GroupBuyLockAggregate aggregate);
+
+    GroupBuyTeamEntity settlementGroupBuyPaySuccess(DiningOrderEntity order, LocalDateTime outTradeTime);
 }

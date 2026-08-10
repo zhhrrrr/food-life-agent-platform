@@ -2,6 +2,7 @@ package com.foodlife.trade.infrastructure.repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyActivityEntity;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockAggregate;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockResult;
@@ -122,6 +123,60 @@ public class GroupBuyRepository implements IGroupBuyRepository {
         return toLockResult(orderPO, team);
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public GroupBuyTeamEntity settlementGroupBuyPaySuccess(DiningOrderEntity order, LocalDateTime outTradeTime) {
+        int orderUpdated = diningOrderMapper.update(null, new LambdaUpdateWrapper<DiningOrderPO>()
+                .set(DiningOrderPO::getOrderStatus, OrderStatusConstants.PAID)
+                .set(DiningOrderPO::getUpdateTime, LocalDateTime.now())
+                .eq(DiningOrderPO::getId, order.getId())
+                .eq(DiningOrderPO::getUserId, order.getUserId())
+                .eq(DiningOrderPO::getOrderStatus, OrderStatusConstants.WAIT_PAY));
+        if (orderUpdated <= 0) {
+            throw new IllegalArgumentException("order status can not pay");
+        }
+
+        GroupBuyOrderListPO orderListPO = groupBuyOrderListMapper.selectOne(new LambdaQueryWrapper<GroupBuyOrderListPO>()
+                .eq(GroupBuyOrderListPO::getOrderId, order.getId())
+                .eq(GroupBuyOrderListPO::getUserId, order.getUserId())
+                .last("limit 1"));
+        if (orderListPO == null) {
+            throw new IllegalArgumentException("group buy order list not found");
+        }
+
+        int orderListUpdated = groupBuyOrderListMapper.update(null, new LambdaUpdateWrapper<GroupBuyOrderListPO>()
+                .set(GroupBuyOrderListPO::getOrderStatus, GroupBuyStatusConstants.PAID)
+                .set(GroupBuyOrderListPO::getOutTradeTime, outTradeTime)
+                .set(GroupBuyOrderListPO::getUpdateTime, LocalDateTime.now())
+                .eq(GroupBuyOrderListPO::getId, orderListPO.getId())
+                .eq(GroupBuyOrderListPO::getOrderStatus, GroupBuyStatusConstants.LOCKED));
+        if (orderListUpdated <= 0) {
+            throw new IllegalArgumentException("group buy order status can not pay");
+        }
+
+        int teamUpdated = groupBuyTeamMapper.update(null, new LambdaUpdateWrapper<GroupBuyTeamPO>()
+                .setSql("complete_count = complete_count + 1")
+                .set(GroupBuyTeamPO::getUpdateTime, LocalDateTime.now())
+                .eq(GroupBuyTeamPO::getTeamId, orderListPO.getTeamId())
+                .eq(GroupBuyTeamPO::getTeamStatus, GroupBuyStatusConstants.IN_PROGRESS)
+                .apply("complete_count < target_count"));
+        if (teamUpdated <= 0) {
+            throw new IllegalArgumentException("group buy team can not settlement");
+        }
+
+        GroupBuyTeamEntity team = queryTeamByTeamId(orderListPO.getTeamId());
+        if (team.getCompleteCount() >= team.getTargetCount()) {
+            groupBuyTeamMapper.update(null, new LambdaUpdateWrapper<GroupBuyTeamPO>()
+                    .set(GroupBuyTeamPO::getTeamStatus, GroupBuyStatusConstants.SUCCESS)
+                    .set(GroupBuyTeamPO::getUpdateTime, LocalDateTime.now())
+                    .eq(GroupBuyTeamPO::getTeamId, orderListPO.getTeamId())
+                    .eq(GroupBuyTeamPO::getTeamStatus, GroupBuyStatusConstants.IN_PROGRESS)
+                    .apply("complete_count >= target_count"));
+            team = queryTeamByTeamId(orderListPO.getTeamId());
+        }
+        return team;
+    }
+
     private GroupBuyLockResult toLockResult(DiningOrderPO orderPO, GroupBuyTeamEntity team) {
         GroupBuyLockResult result = new GroupBuyLockResult();
         result.setOrderId(orderPO.getId());
@@ -204,6 +259,7 @@ public class GroupBuyRepository implements IGroupBuyRepository {
         po.setActivityId(entity.getActivityId());
         po.setPackageId(entity.getPackageId());
         po.setOrderStatus(entity.getOrderStatus());
+        po.setOutTradeTime(entity.getOutTradeTime());
         po.setCreateTime(entity.getCreateTime());
         po.setUpdateTime(entity.getUpdateTime());
         return po;
