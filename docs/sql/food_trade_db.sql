@@ -127,6 +127,45 @@ CREATE TABLE IF NOT EXISTS seckill_order (
   KEY idx_activity_id (activity_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='seckill participant order';
 
+CREATE TABLE IF NOT EXISTS seckill_order_request (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'seckill order request id',
+  request_no VARCHAR(64) NOT NULL COMMENT 'seckill request no',
+  user_id BIGINT NOT NULL COMMENT 'user id',
+  activity_id BIGINT NOT NULL COMMENT 'seckill activity id',
+  package_id BIGINT NOT NULL COMMENT 'meal package id',
+  quantity INT NOT NULL DEFAULT 1 COMMENT 'quantity',
+  order_id BIGINT DEFAULT NULL COMMENT 'created dining order id',
+  order_no VARCHAR(64) DEFAULT NULL COMMENT 'created dining order no',
+  request_status VARCHAR(32) NOT NULL COMMENT 'request status: INIT/PROCESSING/SUCCESS/FAILED',
+  fail_reason VARCHAR(512) DEFAULT NULL COMMENT 'fail reason',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_request_no (request_no),
+  KEY idx_user_activity (user_id, activity_id),
+  KEY idx_status_update_time (request_status, update_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='seckill async order request';
+
+CREATE TABLE IF NOT EXISTS trade_local_message (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'local message id',
+  message_id VARCHAR(64) NOT NULL COMMENT 'message id',
+  message_type VARCHAR(64) NOT NULL COMMENT 'message type',
+  biz_type VARCHAR(64) NOT NULL COMMENT 'biz type',
+  biz_id VARCHAR(64) NOT NULL COMMENT 'biz id',
+  message_status VARCHAR(32) NOT NULL COMMENT 'message status: INIT/PROCESSING/SUCCESS/FAILED',
+  retry_count INT NOT NULL DEFAULT 0 COMMENT 'retry count',
+  max_retry_count INT NOT NULL DEFAULT 3 COMMENT 'max retry count',
+  next_retry_time DATETIME NOT NULL COMMENT 'next retry time',
+  content VARCHAR(1024) DEFAULT NULL COMMENT 'message content',
+  fail_reason VARCHAR(512) DEFAULT NULL COMMENT 'fail reason',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_message_id (message_id),
+  KEY idx_status_retry_time (message_status, next_retry_time),
+  KEY idx_biz_id (biz_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='trade local reliable message';
+
 INSERT INTO group_buy_activity (
   package_id, activity_name, target_count, user_take_limit, group_price,
   activity_status, valid_start_time, valid_end_time, stock

@@ -7,6 +7,7 @@ import com.foodlife.trade.api.dto.CreateGroupBuyOrderResponseDTO;
 import com.foodlife.trade.api.dto.CreateOrderRequestDTO;
 import com.foodlife.trade.api.dto.CreateOrderResponseDTO;
 import com.foodlife.trade.api.dto.CreateSeckillOrderRequestDTO;
+import com.foodlife.trade.api.dto.CreateSeckillOrderRequestResponseDTO;
 import com.foodlife.trade.api.dto.CreateSeckillOrderResponseDTO;
 import com.foodlife.trade.api.dto.OrderDetailResponseDTO;
 import com.foodlife.trade.api.dto.OrderItemResponseDTO;
@@ -16,6 +17,8 @@ import com.foodlife.trade.api.dto.PayOrderResponseDTO;
 import com.foodlife.trade.api.dto.RefundOrderRequestDTO;
 import com.foodlife.trade.api.dto.RefundOrderResponseDTO;
 import com.foodlife.trade.api.dto.SeckillActivityListResponseDTO;
+import com.foodlife.trade.api.dto.SeckillOrderRequestProcessResponseDTO;
+import com.foodlife.trade.api.dto.SeckillOrderRequestQueryResponseDTO;
 import com.foodlife.trade.api.dto.SeckillStockPreheatResponseDTO;
 import com.foodlife.trade.api.dto.UseOrderResponseDTO;
 import com.foodlife.trade.domain.order.model.CancelOrderResult;
@@ -27,6 +30,8 @@ import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockOrderCommand;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityView;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderCommand;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestProcessResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillStockPreheatResult;
 import com.foodlife.trade.domain.order.model.OrderDetailEntity;
@@ -101,6 +106,32 @@ public class OrderController {
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
+    }
+
+    @PostMapping("/orders/seckill/async")
+    public Response<CreateSeckillOrderRequestResponseDTO> createSeckillOrderAsync(@RequestBody CreateSeckillOrderRequestDTO request) {
+        try {
+            SeckillOrderRequestResult result = orderDomainService.createSeckillOrderRequest(toSeckillCommand(request));
+            return Response.success(toSeckillOrderRequestResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
+    }
+
+    @GetMapping("/seckill/order-requests/{requestNo}")
+    public Response<SeckillOrderRequestQueryResponseDTO> querySeckillOrderRequest(@PathVariable String requestNo) {
+        try {
+            SeckillOrderRequestResult result = orderDomainService.querySeckillOrderRequest(requestNo, UserHolder.getUserId());
+            return Response.success(toSeckillOrderRequestQueryResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("404", e.getMessage());
+        }
+    }
+
+    @PostMapping("/seckill/order-requests/process")
+    public Response<SeckillOrderRequestProcessResponseDTO> processSeckillOrderRequests(@RequestParam(required = false) Integer limit) {
+        SeckillOrderRequestProcessResult result = orderDomainService.processPendingSeckillOrderRequests(limit);
+        return Response.success(toSeckillOrderRequestProcessResponse(result));
     }
 
     @PostMapping("/seckill/activities/{activityId}/stock/preheat")
@@ -255,6 +286,40 @@ public class OrderController {
         response.setPayAmount(result.getPayAmount());
         response.setOrderStatus(result.getOrderStatus());
         response.setRemainingStock(result.getRemainingStock());
+        return response;
+    }
+
+    private CreateSeckillOrderRequestResponseDTO toSeckillOrderRequestResponse(SeckillOrderRequestResult result) {
+        CreateSeckillOrderRequestResponseDTO response = new CreateSeckillOrderRequestResponseDTO();
+        response.setRequestNo(result.getRequestNo());
+        response.setActivityId(result.getActivityId());
+        response.setPackageId(result.getPackageId());
+        response.setQuantity(result.getQuantity());
+        response.setRequestStatus(result.getRequestStatus());
+        response.setRemainingStock(result.getRemainingStock());
+        return response;
+    }
+
+    private SeckillOrderRequestQueryResponseDTO toSeckillOrderRequestQueryResponse(SeckillOrderRequestResult result) {
+        SeckillOrderRequestQueryResponseDTO response = new SeckillOrderRequestQueryResponseDTO();
+        response.setRequestNo(result.getRequestNo());
+        response.setUserId(result.getUserId());
+        response.setActivityId(result.getActivityId());
+        response.setPackageId(result.getPackageId());
+        response.setQuantity(result.getQuantity());
+        response.setOrderId(result.getOrderId());
+        response.setOrderNo(result.getOrderNo());
+        response.setRequestStatus(result.getRequestStatus());
+        response.setFailReason(result.getFailReason());
+        return response;
+    }
+
+    private SeckillOrderRequestProcessResponseDTO toSeckillOrderRequestProcessResponse(SeckillOrderRequestProcessResult result) {
+        SeckillOrderRequestProcessResponseDTO response = new SeckillOrderRequestProcessResponseDTO();
+        response.setScannedCount(result.getScannedCount());
+        response.setSuccessCount(result.getSuccessCount());
+        response.setFailedCount(result.getFailedCount());
+        response.setRetryCount(result.getRetryCount());
         return response;
     }
 

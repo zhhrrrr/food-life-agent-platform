@@ -27,6 +27,10 @@ food:
       timeout-compensation:
         enabled: true
         fixed-delay-ms: 60000
+    seckill:
+      order-request-process:
+        enabled: true
+        fixed-delay-ms: 30000
   business-service:
     base-url: http://localhost:8201
   auth:
