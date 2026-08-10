@@ -68,7 +68,8 @@ public class GroupBuyRepository implements IGroupBuyRepository {
     public int queryUserTakeOrderCount(Long activityId, Long userId) {
         Long count = groupBuyOrderListMapper.selectCount(new LambdaQueryWrapper<GroupBuyOrderListPO>()
                 .eq(GroupBuyOrderListPO::getActivityId, activityId)
-                .eq(GroupBuyOrderListPO::getUserId, userId));
+                .eq(GroupBuyOrderListPO::getUserId, userId)
+                .in(GroupBuyOrderListPO::getOrderStatus, GroupBuyStatusConstants.LOCKED, GroupBuyStatusConstants.PAID));
         return count == null ? 0 : count.intValue();
     }
 
@@ -175,6 +176,52 @@ public class GroupBuyRepository implements IGroupBuyRepository {
             team = queryTeamByTeamId(orderListPO.getTeamId());
         }
         return team;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void cancelUnpaidGroupBuyOrder(DiningOrderEntity order) {
+        GroupBuyOrderListPO orderListPO = groupBuyOrderListMapper.selectOne(new LambdaQueryWrapper<GroupBuyOrderListPO>()
+                .eq(GroupBuyOrderListPO::getOrderId, order.getId())
+                .eq(GroupBuyOrderListPO::getUserId, order.getUserId())
+                .last("limit 1"));
+        if (orderListPO == null) {
+            throw new IllegalArgumentException("group buy order list not found");
+        }
+
+        int orderUpdated = diningOrderMapper.update(null, new LambdaUpdateWrapper<DiningOrderPO>()
+                .set(DiningOrderPO::getOrderStatus, OrderStatusConstants.CANCELED)
+                .set(DiningOrderPO::getUpdateTime, LocalDateTime.now())
+                .eq(DiningOrderPO::getId, order.getId())
+                .eq(DiningOrderPO::getUserId, order.getUserId())
+                .eq(DiningOrderPO::getOrderStatus, OrderStatusConstants.WAIT_PAY));
+        if (orderUpdated <= 0) {
+            throw new IllegalArgumentException("order status can not cancel");
+        }
+
+        int orderListUpdated = groupBuyOrderListMapper.update(null, new LambdaUpdateWrapper<GroupBuyOrderListPO>()
+                .set(GroupBuyOrderListPO::getOrderStatus, GroupBuyStatusConstants.CANCELED)
+                .set(GroupBuyOrderListPO::getUpdateTime, LocalDateTime.now())
+                .eq(GroupBuyOrderListPO::getId, orderListPO.getId())
+                .eq(GroupBuyOrderListPO::getOrderStatus, GroupBuyStatusConstants.LOCKED));
+        if (orderListUpdated <= 0) {
+            throw new IllegalArgumentException("group buy order status can not cancel");
+        }
+
+        int teamUpdated = groupBuyTeamMapper.update(null, new LambdaUpdateWrapper<GroupBuyTeamPO>()
+                .setSql("lock_count = lock_count - 1")
+                .set(GroupBuyTeamPO::getUpdateTime, LocalDateTime.now())
+                .eq(GroupBuyTeamPO::getTeamId, orderListPO.getTeamId())
+                .eq(GroupBuyTeamPO::getTeamStatus, GroupBuyStatusConstants.IN_PROGRESS)
+                .gt(GroupBuyTeamPO::getLockCount, 0));
+        if (teamUpdated <= 0) {
+            throw new IllegalArgumentException("group buy team lock count can not rollback");
+        }
+
+        groupBuyActivityMapper.update(null, new LambdaUpdateWrapper<GroupBuyActivityPO>()
+                .setSql("stock = stock + 1")
+                .set(GroupBuyActivityPO::getUpdateTime, LocalDateTime.now())
+                .eq(GroupBuyActivityPO::getId, orderListPO.getActivityId()));
     }
 
     private GroupBuyLockResult toLockResult(DiningOrderPO orderPO, GroupBuyTeamEntity team) {

@@ -6,6 +6,7 @@ import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
 import com.foodlife.trade.domain.order.factory.OrderFactory;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockOrderCommand;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockResult;
+import com.foodlife.trade.domain.order.groupbuy.repository.IGroupBuyRepository;
 import com.foodlife.trade.domain.order.groupbuy.service.GroupBuyLockOrderService;
 import com.foodlife.trade.domain.order.model.CancelOrderResult;
 import com.foodlife.trade.domain.order.model.CreateOrderCommand;
@@ -45,6 +46,7 @@ public class OrderDomainService {
     private final OrderRefundService orderRefundService;
     private final OrderUseService orderUseService;
     private final GroupBuyLockOrderService groupBuyLockOrderService;
+    private final IGroupBuyRepository groupBuyRepository;
 
     public OrderDomainService(IOrderRepository orderRepository,
                               OrderCreateCheckChain orderCreateCheckChain,
@@ -53,7 +55,8 @@ public class OrderDomainService {
                               OrderPaySettlementService orderPaySettlementService,
                               OrderRefundService orderRefundService,
                               OrderUseService orderUseService,
-                              GroupBuyLockOrderService groupBuyLockOrderService) {
+                              GroupBuyLockOrderService groupBuyLockOrderService,
+                              IGroupBuyRepository groupBuyRepository) {
         this.orderRepository = orderRepository;
         this.orderCreateCheckChain = orderCreateCheckChain;
         this.orderPricingService = orderPricingService;
@@ -62,6 +65,7 @@ public class OrderDomainService {
         this.orderRefundService = orderRefundService;
         this.orderUseService = orderUseService;
         this.groupBuyLockOrderService = groupBuyLockOrderService;
+        this.groupBuyRepository = groupBuyRepository;
     }
 
     public CreateOrderResult createNormalOrder(CreateOrderCommand command) {
@@ -139,15 +143,17 @@ public class OrderDomainService {
         if (!OrderStatusConstants.WAIT_PAY.equals(order.getOrderStatus())) {
             throw new IllegalArgumentException("order status can not cancel");
         }
+
+        if (TradeTypeConstants.GROUP_BUY.equals(order.getTradeType())) {
+            groupBuyRepository.cancelUnpaidGroupBuyOrder(order);
+            return buildCancelOrderResult(order);
+        }
+
         boolean success = orderRepository.updateOrderStatus(orderId, OrderStatusConstants.WAIT_PAY, OrderStatusConstants.CANCELED);
         if (!success) {
             throw new IllegalArgumentException("order status can not cancel");
         }
-        CancelOrderResult result = new CancelOrderResult();
-        result.setOrderId(order.getId());
-        result.setOrderNo(order.getOrderNo());
-        result.setOrderStatus(OrderStatusConstants.CANCELED);
-        return result;
+        return buildCancelOrderResult(order);
     }
 
     public OrderPaySettlementEntity payOrderMock(OrderPaySuccessEntity paySuccessEntity) {
@@ -213,6 +219,14 @@ public class OrderDomainService {
         result.setOrderNo(savedOrder.getOrderNo());
         result.setPayAmount(savedOrder.getPayAmount());
         result.setOrderStatus(savedOrder.getOrderStatus());
+        return result;
+    }
+
+    private CancelOrderResult buildCancelOrderResult(DiningOrderEntity order) {
+        CancelOrderResult result = new CancelOrderResult();
+        result.setOrderId(order.getId());
+        result.setOrderNo(order.getOrderNo());
+        result.setOrderStatus(OrderStatusConstants.CANCELED);
         return result;
     }
 }
