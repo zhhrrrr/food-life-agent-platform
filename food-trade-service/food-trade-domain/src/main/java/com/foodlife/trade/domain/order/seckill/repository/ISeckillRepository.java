@@ -25,6 +25,8 @@ public interface ISeckillRepository {
 
     SeckillOrderRequestEntity querySeckillOrderRequest(String requestNo);
 
+    SeckillOrderRequestEntity querySeckillOrderRequestByOrderId(Long orderId);
+
     List<TradeLocalMessageEntity> queryPendingSeckillOrderMessages(LocalDateTime now, int limit);
 
     List<TradeLocalMessageEntity> queryProcessingSeckillOrderMessages(LocalDateTime timeoutBefore, int limit);
