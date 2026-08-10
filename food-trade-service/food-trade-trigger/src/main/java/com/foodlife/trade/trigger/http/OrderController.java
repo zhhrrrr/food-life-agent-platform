@@ -6,6 +6,8 @@ import com.foodlife.trade.api.dto.CreateGroupBuyOrderRequestDTO;
 import com.foodlife.trade.api.dto.CreateGroupBuyOrderResponseDTO;
 import com.foodlife.trade.api.dto.CreateOrderRequestDTO;
 import com.foodlife.trade.api.dto.CreateOrderResponseDTO;
+import com.foodlife.trade.api.dto.CreateSeckillOrderRequestDTO;
+import com.foodlife.trade.api.dto.CreateSeckillOrderResponseDTO;
 import com.foodlife.trade.api.dto.OrderDetailResponseDTO;
 import com.foodlife.trade.api.dto.OrderItemResponseDTO;
 import com.foodlife.trade.api.dto.OrderListResponseDTO;
@@ -13,6 +15,7 @@ import com.foodlife.trade.api.dto.PayOrderRequestDTO;
 import com.foodlife.trade.api.dto.PayOrderResponseDTO;
 import com.foodlife.trade.api.dto.RefundOrderRequestDTO;
 import com.foodlife.trade.api.dto.RefundOrderResponseDTO;
+import com.foodlife.trade.api.dto.SeckillActivityListResponseDTO;
 import com.foodlife.trade.api.dto.UseOrderResponseDTO;
 import com.foodlife.trade.domain.order.model.CancelOrderResult;
 import com.foodlife.trade.domain.order.model.CreateOrderCommand;
@@ -21,6 +24,9 @@ import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockOrderCommand;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillActivityView;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderCommand;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderResult;
 import com.foodlife.trade.domain.order.model.OrderDetailEntity;
 import com.foodlife.trade.domain.order.model.OrderListResult;
 import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
@@ -69,6 +75,27 @@ public class OrderController {
         try {
             GroupBuyLockResult result = orderDomainService.createGroupBuyOrder(toGroupBuyCommand(request));
             return Response.success(toGroupBuyResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
+    }
+
+    @GetMapping("/seckill/activities")
+    public Response<SeckillActivityListResponseDTO> querySeckillActivities(@RequestParam(required = false) Long packageId,
+                                                                           @RequestParam(required = false) Integer limit) {
+        try {
+            List<SeckillActivityView> result = orderDomainService.querySeckillActivities(packageId, limit);
+            return Response.success(toSeckillActivityListResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
+    }
+
+    @PostMapping("/orders/seckill")
+    public Response<CreateSeckillOrderResponseDTO> createSeckillOrder(@RequestBody CreateSeckillOrderRequestDTO request) {
+        try {
+            SeckillOrderResult result = orderDomainService.createSeckillOrder(toSeckillCommand(request));
+            return Response.success(toSeckillOrderResponse(result));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
@@ -154,6 +181,14 @@ public class OrderController {
         return command;
     }
 
+    private SeckillOrderCommand toSeckillCommand(CreateSeckillOrderRequestDTO request) {
+        SeckillOrderCommand command = new SeckillOrderCommand();
+        command.setUserId(UserHolder.getUserId());
+        command.setActivityId(request == null ? null : request.getActivityId());
+        command.setQuantity(request == null ? null : request.getQuantity());
+        return command;
+    }
+
     private CreateOrderResponseDTO toResponse(CreateOrderResult result) {
         CreateOrderResponseDTO response = new CreateOrderResponseDTO();
         response.setOrderId(result.getOrderId());
@@ -175,6 +210,39 @@ public class OrderController {
         response.setTargetCount(result.getTargetCount());
         response.setLockCount(result.getLockCount());
         response.setCompleteCount(result.getCompleteCount());
+        return response;
+    }
+
+    private SeckillActivityListResponseDTO toSeckillActivityListResponse(List<SeckillActivityView> activities) {
+        SeckillActivityListResponseDTO response = new SeckillActivityListResponseDTO();
+        response.setActivities(activities.stream().map(this::toSeckillActivityInfo).collect(Collectors.toList()));
+        return response;
+    }
+
+    private SeckillActivityListResponseDTO.ActivityInfo toSeckillActivityInfo(SeckillActivityView source) {
+        SeckillActivityListResponseDTO.ActivityInfo target = new SeckillActivityListResponseDTO.ActivityInfo();
+        target.setActivityId(source.getActivityId());
+        target.setPackageId(source.getPackageId());
+        target.setActivityName(source.getActivityName());
+        target.setSeckillPrice(source.getSeckillPrice());
+        target.setActivityStatus(source.getActivityStatus());
+        target.setValidStartTime(source.getValidStartTime());
+        target.setValidEndTime(source.getValidEndTime());
+        target.setStock(source.getStock());
+        target.setUserTakeLimit(source.getUserTakeLimit());
+        target.setCanBuy(source.getCanBuy());
+        return target;
+    }
+
+    private CreateSeckillOrderResponseDTO toSeckillOrderResponse(SeckillOrderResult result) {
+        CreateSeckillOrderResponseDTO response = new CreateSeckillOrderResponseDTO();
+        response.setActivityId(result.getActivityId());
+        response.setPackageId(result.getPackageId());
+        response.setOrderId(result.getOrderId());
+        response.setOrderNo(result.getOrderNo());
+        response.setPayAmount(result.getPayAmount());
+        response.setOrderStatus(result.getOrderStatus());
+        response.setRemainingStock(result.getRemainingStock());
         return response;
     }
 
