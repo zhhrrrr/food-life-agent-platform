@@ -234,6 +234,12 @@ public class OrderController {
         response.setOrderNo(result.getOrderNo());
         response.setOrderStatus(result.getOrderStatus());
         response.setRefundBehavior(result.getRefundBehavior().getCode());
+        response.setTeamId(result.getTeamId());
+        response.setActivityId(result.getActivityId());
+        response.setTeamStatus(result.getTeamStatus());
+        response.setTargetCount(result.getTargetCount());
+        response.setLockCount(result.getLockCount());
+        response.setCompleteCount(result.getCompleteCount());
         return response;
     }
 

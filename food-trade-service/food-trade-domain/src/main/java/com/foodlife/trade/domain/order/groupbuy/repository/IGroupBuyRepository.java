@@ -3,6 +3,7 @@ package com.foodlife.trade.domain.order.groupbuy.repository;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyActivityEntity;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockAggregate;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockResult;
+import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyOrderListEntity;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyTeamEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 
@@ -23,4 +24,10 @@ public interface IGroupBuyRepository {
     GroupBuyTeamEntity settlementGroupBuyPaySuccess(DiningOrderEntity order, LocalDateTime outTradeTime);
 
     void cancelUnpaidGroupBuyOrder(DiningOrderEntity order);
+
+    GroupBuyOrderListEntity queryOrderListByOrderIdAndUserId(Long orderId, Long userId);
+
+    GroupBuyTeamEntity refundPaidUnformedGroupBuyOrder(DiningOrderEntity order);
+
+    GroupBuyTeamEntity refundPaidFormedGroupBuyOrder(DiningOrderEntity order);
 }

@@ -14,4 +14,10 @@ public class RefundOrderResponseDTO implements Serializable {
     private String orderNo;
     private String orderStatus;
     private String refundBehavior;
+    private String teamId;
+    private Long activityId;
+    private String teamStatus;
+    private Integer targetCount;
+    private Integer lockCount;
+    private Integer completeCount;
 }

@@ -17,6 +17,12 @@ public class OrderRefundBehaviorEntity implements Serializable {
     private String orderNo;
     private String orderStatus;
     private RefundBehaviorEnum refundBehavior;
+    private String teamId;
+    private Long activityId;
+    private String teamStatus;
+    private Integer targetCount;
+    private Integer lockCount;
+    private Integer completeCount;
 
     @Getter
     @AllArgsConstructor
