@@ -19,6 +19,8 @@ public interface ISeckillRepository {
 
     SeckillOrderResult saveSeckillOrder(SeckillOrderAggregate aggregate, LocalDateTime now);
 
+    Long querySeckillActivityId(DiningOrderEntity order);
+
     Long settlementSeckillPaySuccess(DiningOrderEntity order);
 
     void cancelUnpaidSeckillOrder(DiningOrderEntity order);

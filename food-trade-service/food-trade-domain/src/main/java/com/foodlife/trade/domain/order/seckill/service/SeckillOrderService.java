@@ -15,11 +15,15 @@ import com.foodlife.trade.domain.order.seckill.model.SeckillOrderAggregate;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderCommand;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderEntity;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillStockOccupyResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillStockPreheatResult;
 import com.foodlife.trade.domain.order.seckill.repository.ISeckillRepository;
+import com.foodlife.trade.domain.order.seckill.repository.ISeckillStockRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class SeckillOrderService {
@@ -28,34 +32,61 @@ public class SeckillOrderService {
     private static final int MAX_ACTIVITY_LIMIT = 50;
 
     private final ISeckillRepository seckillRepository;
+    private final ISeckillStockRepository seckillStockRepository;
     private final IBusinessPackagePort businessPackagePort;
     private final OrderFactory orderFactory;
 
     public SeckillOrderService(ISeckillRepository seckillRepository,
+                               ISeckillStockRepository seckillStockRepository,
                                IBusinessPackagePort businessPackagePort,
                                OrderFactory orderFactory) {
         this.seckillRepository = seckillRepository;
+        this.seckillStockRepository = seckillStockRepository;
         this.businessPackagePort = businessPackagePort;
         this.orderFactory = orderFactory;
     }
 
     public List<SeckillActivityView> queryAvailableActivities(Long packageId, Integer limit) {
-        return seckillRepository.listAvailableActivities(packageId, LocalDateTime.now(), normalizeLimit(limit));
+        return seckillRepository.listAvailableActivities(packageId, LocalDateTime.now(), normalizeLimit(limit))
+                .stream()
+                .map(this::fillRedisStock)
+                .collect(Collectors.toList());
+    }
+
+    public SeckillStockPreheatResult preheatActivityStock(Long activityId) {
+        if (activityId == null) {
+            throw new IllegalArgumentException("activityId required");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        SeckillActivityEntity activity = seckillRepository.queryActivityById(activityId);
+        if (activity == null) {
+            throw new IllegalArgumentException("seckill activity not found");
+        }
+        return seckillStockRepository.preheatActivityStock(activity, now);
     }
 
     public SeckillOrderResult createSeckillOrder(SeckillOrderCommand command) {
+        boolean stockOccupied = false;
+        SeckillActivityEntity activity = null;
         try {
             checkCommand(command);
             LocalDateTime now = LocalDateTime.now();
-            SeckillActivityEntity activity = queryAndCheckActivity(command, now);
+            activity = queryAndCheckActivity(command, now);
             checkUserTakeLimit(command, activity);
+            SeckillStockOccupyResult stockOccupyResult = occupyActivityStock(activity, command.getUserId(), now);
+            stockOccupied = true;
+
             PackageTradeSnapshot snapshot = queryAndCheckSnapshot(activity);
 
             SeckillOrderAggregate aggregate = buildAggregate(command, activity, snapshot);
-            return seckillRepository.saveSeckillOrder(aggregate, now);
+            SeckillOrderResult result = seckillRepository.saveSeckillOrder(aggregate, now);
+            result.setRemainingStock(stockOccupyResult.getRemainingStock());
+            return result;
         } catch (IllegalArgumentException e) {
+            releaseOccupiedStock(stockOccupied, activity, command);
             throw e;
         } catch (Exception e) {
+            releaseOccupiedStock(stockOccupied, activity, command);
             throw new IllegalStateException("seckill order create failed", e);
         }
     }
@@ -99,6 +130,28 @@ public class SeckillOrderService {
         }
     }
 
+    private SeckillStockOccupyResult occupyActivityStock(SeckillActivityEntity activity, Long userId, LocalDateTime now) {
+        SeckillStockOccupyResult result = seckillStockRepository.occupyActivityStock(activity, userId, now);
+        if (Boolean.TRUE.equals(result.getSuccess())) {
+            return result;
+        }
+        if (SeckillStockOccupyResult.ACTIVITY_NOT_PREHEATED.equals(result.getRejectCode())) {
+            seckillStockRepository.preheatActivityStock(activity, now);
+            result = seckillStockRepository.occupyActivityStock(activity, userId, now);
+        }
+        if (!Boolean.TRUE.equals(result.getSuccess())) {
+            throw new IllegalArgumentException(result.getRejectMessage());
+        }
+        return result;
+    }
+
+    private void releaseOccupiedStock(boolean stockOccupied, SeckillActivityEntity activity, SeckillOrderCommand command) {
+        if (!stockOccupied || activity == null || command == null || command.getUserId() == null) {
+            return;
+        }
+        seckillStockRepository.releaseActivityStock(activity.getId(), command.getUserId());
+    }
+
     private PackageTradeSnapshot queryAndCheckSnapshot(SeckillActivityEntity activity) {
         PackageTradeSnapshot snapshot = businessPackagePort.queryTradeSnapshot(activity.getPackageId());
         if (snapshot == null) {
@@ -139,6 +192,16 @@ public class SeckillOrderService {
         aggregate.setOrderItem(orderItem);
         aggregate.setSeckillOrder(seckillOrder);
         return aggregate;
+    }
+
+    private SeckillActivityView fillRedisStock(SeckillActivityView view) {
+        Integer redisStock = seckillStockRepository.queryActivityStock(view.getActivityId());
+        if (redisStock == null) {
+            return view;
+        }
+        view.setStock(redisStock);
+        view.setCanBuy(Boolean.TRUE.equals(view.getCanBuy()) && redisStock > 0);
+        return view;
     }
 
     private int normalizeLimit(Integer limit) {

@@ -16,6 +16,7 @@ import com.foodlife.trade.api.dto.PayOrderResponseDTO;
 import com.foodlife.trade.api.dto.RefundOrderRequestDTO;
 import com.foodlife.trade.api.dto.RefundOrderResponseDTO;
 import com.foodlife.trade.api.dto.SeckillActivityListResponseDTO;
+import com.foodlife.trade.api.dto.SeckillStockPreheatResponseDTO;
 import com.foodlife.trade.api.dto.UseOrderResponseDTO;
 import com.foodlife.trade.domain.order.model.CancelOrderResult;
 import com.foodlife.trade.domain.order.model.CreateOrderCommand;
@@ -27,6 +28,7 @@ import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityView;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderCommand;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillStockPreheatResult;
 import com.foodlife.trade.domain.order.model.OrderDetailEntity;
 import com.foodlife.trade.domain.order.model.OrderListResult;
 import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
@@ -96,6 +98,16 @@ public class OrderController {
         try {
             SeckillOrderResult result = orderDomainService.createSeckillOrder(toSeckillCommand(request));
             return Response.success(toSeckillOrderResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
+    }
+
+    @PostMapping("/seckill/activities/{activityId}/stock/preheat")
+    public Response<SeckillStockPreheatResponseDTO> preheatSeckillStock(@PathVariable Long activityId) {
+        try {
+            SeckillStockPreheatResult result = orderDomainService.preheatSeckillActivityStock(activityId);
+            return Response.success(toSeckillStockPreheatResponse(result));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
@@ -243,6 +255,16 @@ public class OrderController {
         response.setPayAmount(result.getPayAmount());
         response.setOrderStatus(result.getOrderStatus());
         response.setRemainingStock(result.getRemainingStock());
+        return response;
+    }
+
+    private SeckillStockPreheatResponseDTO toSeckillStockPreheatResponse(SeckillStockPreheatResult result) {
+        SeckillStockPreheatResponseDTO response = new SeckillStockPreheatResponseDTO();
+        response.setActivityId(result.getActivityId());
+        response.setDbStock(result.getDbStock());
+        response.setRedisStock(result.getRedisStock());
+        response.setStockKey(result.getStockKey());
+        response.setUserKey(result.getUserKey());
         return response;
     }
 
