@@ -20,6 +20,7 @@ import com.foodlife.trade.api.dto.SeckillActivityListResponseDTO;
 import com.foodlife.trade.api.dto.SeckillOrderRequestProcessResponseDTO;
 import com.foodlife.trade.api.dto.SeckillOrderRequestQueryResponseDTO;
 import com.foodlife.trade.api.dto.SeckillOrderRequestRecoveryResponseDTO;
+import com.foodlife.trade.api.dto.SeckillOrderTraceResponseDTO;
 import com.foodlife.trade.api.dto.SeckillStockReconcileResponseDTO;
 import com.foodlife.trade.api.dto.SeckillStockPreheatResponseDTO;
 import com.foodlife.trade.api.dto.UseOrderResponseDTO;
@@ -36,6 +37,7 @@ import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestProcessR
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestRecoveryResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderTraceEntity;
 import com.foodlife.trade.domain.order.seckill.model.SeckillStockReconcileResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillStockPreheatResult;
 import com.foodlife.trade.domain.order.model.OrderDetailEntity;
@@ -47,6 +49,8 @@ import com.foodlife.trade.domain.order.model.OrderRefundCommandEntity;
 import com.foodlife.trade.domain.order.model.OrderSummaryEntity;
 import com.foodlife.trade.domain.order.model.OrderUseCommandEntity;
 import com.foodlife.trade.domain.order.model.OrderUseResult;
+import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
+import com.foodlife.trade.domain.order.seckill.model.SeckillActivityEntity;
 import com.foodlife.trade.domain.order.service.OrderDomainService;
 import com.foodlife.trade.types.response.Response;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -127,6 +131,26 @@ public class OrderController {
         try {
             SeckillOrderRequestResult result = orderDomainService.querySeckillOrderRequest(requestNo, UserHolder.getUserId());
             return Response.success(toSeckillOrderRequestQueryResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("404", e.getMessage());
+        }
+    }
+
+    @GetMapping("/seckill/order-requests/{requestNo}/trace")
+    public Response<SeckillOrderTraceResponseDTO> querySeckillOrderTraceByRequestNo(@PathVariable String requestNo) {
+        try {
+            SeckillOrderTraceEntity result = orderDomainService.querySeckillOrderTraceByRequestNo(requestNo, UserHolder.getUserId());
+            return Response.success(toSeckillOrderTraceResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("404", e.getMessage());
+        }
+    }
+
+    @GetMapping("/orders/{orderId}/seckill-trace")
+    public Response<SeckillOrderTraceResponseDTO> querySeckillOrderTraceByOrderId(@PathVariable Long orderId) {
+        try {
+            SeckillOrderTraceEntity result = orderDomainService.querySeckillOrderTraceByOrderId(orderId, UserHolder.getUserId());
+            return Response.success(toSeckillOrderTraceResponse(result));
         } catch (IllegalArgumentException e) {
             return Response.fail("404", e.getMessage());
         }
@@ -332,6 +356,119 @@ public class OrderController {
         response.setRequestStatus(result.getRequestStatus());
         response.setFailReason(result.getFailReason());
         return response;
+    }
+
+    private SeckillOrderTraceResponseDTO toSeckillOrderTraceResponse(SeckillOrderTraceEntity result) {
+        SeckillOrderTraceResponseDTO response = new SeckillOrderTraceResponseDTO();
+        response.setRequest(toTraceRequestInfo(result));
+        response.setOrder(toTraceOrderInfo(result));
+        response.setActivity(toTraceActivityInfo(result.getActivity()));
+        response.setPackageInfo(toTracePackageInfo(result.getPackageSnapshot()));
+        response.setStock(toTraceStockInfo(result));
+        response.setCurrentStage(result.getCurrentStage());
+        return response;
+    }
+
+    private SeckillOrderTraceResponseDTO.RequestInfo toTraceRequestInfo(SeckillOrderTraceEntity result) {
+        SeckillOrderRequestResult request = toRequestResult(result);
+        SeckillOrderTraceResponseDTO.RequestInfo info = new SeckillOrderTraceResponseDTO.RequestInfo();
+        info.setRequestNo(request.getRequestNo());
+        info.setUserId(request.getUserId());
+        info.setActivityId(request.getActivityId());
+        info.setPackageId(request.getPackageId());
+        info.setQuantity(request.getQuantity());
+        info.setOrderId(request.getOrderId());
+        info.setOrderNo(request.getOrderNo());
+        info.setRequestStatus(request.getRequestStatus());
+        info.setFailReason(request.getFailReason());
+        if (result.getRequest() != null) {
+            info.setCreateTime(result.getRequest().getCreateTime());
+            info.setUpdateTime(result.getRequest().getUpdateTime());
+        }
+        return info;
+    }
+
+    private SeckillOrderRequestResult toRequestResult(SeckillOrderTraceEntity result) {
+        SeckillOrderRequestResult request = new SeckillOrderRequestResult();
+        if (result.getRequest() == null) {
+            return request;
+        }
+        request.setRequestNo(result.getRequest().getRequestNo());
+        request.setUserId(result.getRequest().getUserId());
+        request.setActivityId(result.getRequest().getActivityId());
+        request.setPackageId(result.getRequest().getPackageId());
+        request.setQuantity(result.getRequest().getQuantity());
+        request.setOrderId(result.getRequest().getOrderId());
+        request.setOrderNo(result.getRequest().getOrderNo());
+        request.setRequestStatus(result.getRequest().getRequestStatus());
+        request.setFailReason(result.getRequest().getFailReason());
+        return request;
+    }
+
+    private SeckillOrderTraceResponseDTO.OrderInfo toTraceOrderInfo(SeckillOrderTraceEntity result) {
+        DiningOrderEntity order = result.getOrder();
+        if (order == null) {
+            return null;
+        }
+        SeckillOrderTraceResponseDTO.OrderInfo info = new SeckillOrderTraceResponseDTO.OrderInfo();
+        info.setOrderId(order.getId());
+        info.setOrderNo(order.getOrderNo());
+        info.setUserId(order.getUserId());
+        info.setShopId(order.getShopId());
+        info.setPackageId(order.getPackageId());
+        info.setQuantity(order.getQuantity());
+        info.setTotalAmount(order.getTotalAmount());
+        info.setPayAmount(order.getPayAmount());
+        info.setTradeType(order.getTradeType());
+        info.setOrderStatus(order.getOrderStatus());
+        info.setUseTime(order.getUseTime());
+        info.setCreateTime(order.getCreateTime());
+        info.setItems(result.getOrderItems().stream().map(this::toItemResponse).collect(Collectors.toList()));
+        return info;
+    }
+
+    private SeckillOrderTraceResponseDTO.ActivityInfo toTraceActivityInfo(SeckillActivityEntity activity) {
+        if (activity == null) {
+            return null;
+        }
+        SeckillOrderTraceResponseDTO.ActivityInfo info = new SeckillOrderTraceResponseDTO.ActivityInfo();
+        info.setActivityId(activity.getId());
+        info.setPackageId(activity.getPackageId());
+        info.setActivityName(activity.getActivityName());
+        info.setSeckillPrice(activity.getSeckillPrice());
+        info.setActivityStatus(activity.getActivityStatus());
+        info.setValidStartTime(activity.getValidStartTime());
+        info.setValidEndTime(activity.getValidEndTime());
+        info.setUserTakeLimit(activity.getUserTakeLimit());
+        return info;
+    }
+
+    private SeckillOrderTraceResponseDTO.PackageInfo toTracePackageInfo(PackageTradeSnapshot snapshot) {
+        if (snapshot == null) {
+            return null;
+        }
+        SeckillOrderTraceResponseDTO.PackageInfo info = new SeckillOrderTraceResponseDTO.PackageInfo();
+        info.setShopId(snapshot.getShopId());
+        info.setShopName(snapshot.getShopName());
+        info.setPackageId(snapshot.getPackageId());
+        info.setPackageName(snapshot.getPackageName());
+        info.setPackageDescription(snapshot.getPackageDescription());
+        info.setCoverImage(snapshot.getCoverImage());
+        info.setPrice(snapshot.getPrice());
+        info.setOriginalPrice(snapshot.getOriginalPrice());
+        info.setStock(snapshot.getStock());
+        info.setPackageStatus(snapshot.getPackageStatus());
+        info.setUseRule(snapshot.getUseRule());
+        return info;
+    }
+
+    private SeckillOrderTraceResponseDTO.StockInfo toTraceStockInfo(SeckillOrderTraceEntity result) {
+        SeckillOrderTraceResponseDTO.StockInfo info = new SeckillOrderTraceResponseDTO.StockInfo();
+        info.setDbStock(result.getDbStock());
+        info.setRedisStock(result.getRedisStock());
+        info.setWaitPayCount(result.getWaitPayCount());
+        info.setPaidCount(result.getPaidCount());
+        return info;
     }
 
     private SeckillOrderRequestProcessResponseDTO toSeckillOrderRequestProcessResponse(SeckillOrderRequestProcessResult result) {

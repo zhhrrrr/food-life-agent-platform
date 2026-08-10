@@ -11,6 +11,7 @@ import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
 import com.foodlife.trade.domain.order.model.OrderPricingResult;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
+import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import com.foodlife.trade.domain.order.seckill.constant.SeckillRequestStatusConstants;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityEntity;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityView;
@@ -22,6 +23,7 @@ import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestProcessR
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestRecoveryResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderTraceEntity;
 import com.foodlife.trade.domain.order.seckill.model.SeckillStockReconcileResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillStockOccupyResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillStockPreheatResult;
@@ -51,15 +53,18 @@ public class SeckillOrderService {
 
     private final ISeckillRepository seckillRepository;
     private final ISeckillStockRepository seckillStockRepository;
+    private final IOrderRepository orderRepository;
     private final IBusinessPackagePort businessPackagePort;
     private final OrderFactory orderFactory;
 
     public SeckillOrderService(ISeckillRepository seckillRepository,
                                ISeckillStockRepository seckillStockRepository,
+                               IOrderRepository orderRepository,
                                IBusinessPackagePort businessPackagePort,
                                OrderFactory orderFactory) {
         this.seckillRepository = seckillRepository;
         this.seckillStockRepository = seckillStockRepository;
+        this.orderRepository = orderRepository;
         this.businessPackagePort = businessPackagePort;
         this.orderFactory = orderFactory;
     }
@@ -149,6 +154,34 @@ public class SeckillOrderService {
             throw new IllegalArgumentException("seckill order request not found");
         }
         return toRequestResult(request);
+    }
+
+    public SeckillOrderTraceEntity queryOrderTraceByRequestNo(String requestNo, Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("user not login");
+        }
+        if (requestNo == null || requestNo.trim().isEmpty()) {
+            throw new IllegalArgumentException("requestNo required");
+        }
+        SeckillOrderRequestEntity request = seckillRepository.querySeckillOrderRequest(requestNo.trim());
+        if (request == null || !userId.equals(request.getUserId())) {
+            throw new IllegalArgumentException("seckill order request not found");
+        }
+        return buildTrace(request);
+    }
+
+    public SeckillOrderTraceEntity queryOrderTraceByOrderId(Long orderId, Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("user not login");
+        }
+        if (orderId == null) {
+            throw new IllegalArgumentException("orderId required");
+        }
+        SeckillOrderRequestEntity request = seckillRepository.querySeckillOrderRequestByOrderId(orderId);
+        if (request == null || !userId.equals(request.getUserId())) {
+            throw new IllegalArgumentException("seckill order request not found");
+        }
+        return buildTrace(request);
     }
 
     public SeckillOrderRequestProcessResult processPendingOrderRequests(Integer limit) {
@@ -328,6 +361,60 @@ public class SeckillOrderService {
 
         SeckillOrderAggregate aggregate = buildAggregate(command, activity, snapshot);
         return seckillRepository.saveSeckillOrder(aggregate, now);
+    }
+
+    private SeckillOrderTraceEntity buildTrace(SeckillOrderRequestEntity request) {
+        SeckillActivityEntity activity = seckillRepository.queryActivityById(request.getActivityId());
+        PackageTradeSnapshot snapshot = activity == null ? null : businessPackagePort.queryTradeSnapshot(activity.getPackageId());
+        DiningOrderEntity order = request.getOrderId() == null
+                ? null
+                : orderRepository.findOrderByIdAndUserId(request.getOrderId(), request.getUserId());
+        List<DiningOrderItemEntity> orderItems = order == null
+                ? java.util.Collections.emptyList()
+                : orderRepository.listOrderItems(order.getId());
+
+        SeckillOrderTraceEntity trace = new SeckillOrderTraceEntity();
+        trace.setRequest(request);
+        trace.setOrder(order);
+        trace.setOrderItems(orderItems);
+        trace.setActivity(activity);
+        trace.setPackageSnapshot(snapshot);
+        trace.setDbStock(activity == null ? null : activity.getStock());
+        trace.setRedisStock(seckillStockRepository.queryActivityStock(request.getActivityId()));
+        trace.setWaitPayCount(seckillRepository.querySeckillOrderCount(request.getActivityId(), OrderStatusConstants.WAIT_PAY));
+        trace.setPaidCount(seckillRepository.querySeckillOrderCount(request.getActivityId(), OrderStatusConstants.PAID));
+        trace.setOrderCreated(order != null);
+        trace.setCurrentStage(resolveCurrentStage(request, order));
+        return trace;
+    }
+
+    private String resolveCurrentStage(SeckillOrderRequestEntity request, DiningOrderEntity order) {
+        if (SeckillRequestStatusConstants.INIT.equals(request.getRequestStatus())
+                || SeckillRequestStatusConstants.PROCESSING.equals(request.getRequestStatus())) {
+            return "ORDER_CREATING";
+        }
+        if (SeckillRequestStatusConstants.FAILED.equals(request.getRequestStatus())) {
+            return "REQUEST_FAILED";
+        }
+        if (order == null) {
+            return "ORDER_UNKNOWN";
+        }
+        if (OrderStatusConstants.WAIT_PAY.equals(order.getOrderStatus())) {
+            return "WAIT_PAY";
+        }
+        if (OrderStatusConstants.PAID.equals(order.getOrderStatus())) {
+            return "PAID";
+        }
+        if (OrderStatusConstants.USED.equals(order.getOrderStatus())) {
+            return "USED";
+        }
+        if (OrderStatusConstants.CANCELED.equals(order.getOrderStatus())) {
+            return "CANCELED";
+        }
+        if (OrderStatusConstants.REFUNDED.equals(order.getOrderStatus())) {
+            return "REFUNDED";
+        }
+        return order.getOrderStatus();
     }
 
     private void releaseOccupiedStock(boolean stockOccupied, SeckillActivityEntity activity, SeckillOrderCommand command) {

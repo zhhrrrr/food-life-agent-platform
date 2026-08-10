@@ -143,6 +143,14 @@ public class SeckillRepository implements ISeckillRepository {
     }
 
     @Override
+    public SeckillOrderRequestEntity querySeckillOrderRequestByOrderId(Long orderId) {
+        SeckillOrderRequestPO po = seckillOrderRequestMapper.selectOne(new LambdaQueryWrapper<SeckillOrderRequestPO>()
+                .eq(SeckillOrderRequestPO::getOrderId, orderId)
+                .last("limit 1"));
+        return toSeckillOrderRequestEntity(po);
+    }
+
+    @Override
     public List<TradeLocalMessageEntity> queryPendingSeckillOrderMessages(LocalDateTime now, int limit) {
         return tradeLocalMessageMapper.selectList(new LambdaQueryWrapper<TradeLocalMessagePO>()
                         .eq(TradeLocalMessagePO::getMessageType, "SECKILL_ORDER_CREATE")
