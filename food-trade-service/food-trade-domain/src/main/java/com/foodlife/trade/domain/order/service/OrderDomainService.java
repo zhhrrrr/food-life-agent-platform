@@ -30,7 +30,9 @@ import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityView;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderCommand;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillStockPreheatResult;
 import com.foodlife.trade.domain.order.seckill.repository.ISeckillRepository;
+import com.foodlife.trade.domain.order.seckill.repository.ISeckillStockRepository;
 import com.foodlife.trade.domain.order.seckill.service.SeckillOrderService;
 import com.foodlife.trade.domain.order.service.refund.OrderRefundService;
 import com.foodlife.trade.domain.order.service.settlement.OrderPaySettlementService;
@@ -54,6 +56,7 @@ public class OrderDomainService {
     private final IGroupBuyRepository groupBuyRepository;
     private final SeckillOrderService seckillOrderService;
     private final ISeckillRepository seckillRepository;
+    private final ISeckillStockRepository seckillStockRepository;
 
     public OrderDomainService(IOrderRepository orderRepository,
                               OrderCreateCheckChain orderCreateCheckChain,
@@ -65,7 +68,8 @@ public class OrderDomainService {
                               GroupBuyLockOrderService groupBuyLockOrderService,
                               IGroupBuyRepository groupBuyRepository,
                               SeckillOrderService seckillOrderService,
-                              ISeckillRepository seckillRepository) {
+                              ISeckillRepository seckillRepository,
+                              ISeckillStockRepository seckillStockRepository) {
         this.orderRepository = orderRepository;
         this.orderCreateCheckChain = orderCreateCheckChain;
         this.orderPricingService = orderPricingService;
@@ -77,6 +81,7 @@ public class OrderDomainService {
         this.groupBuyRepository = groupBuyRepository;
         this.seckillOrderService = seckillOrderService;
         this.seckillRepository = seckillRepository;
+        this.seckillStockRepository = seckillStockRepository;
     }
 
     public CreateOrderResult createNormalOrder(CreateOrderCommand command) {
@@ -162,6 +167,7 @@ public class OrderDomainService {
 
         if (TradeTypeConstants.SECKILL.equals(order.getTradeType())) {
             seckillRepository.cancelUnpaidSeckillOrder(order);
+            seckillStockRepository.releaseActivityStock(seckillRepository.querySeckillActivityId(order), userId);
             return buildCancelOrderResult(order);
         }
 
@@ -190,6 +196,10 @@ public class OrderDomainService {
 
     public java.util.List<SeckillActivityView> querySeckillActivities(Long packageId, Integer limit) {
         return seckillOrderService.queryAvailableActivities(packageId, limit);
+    }
+
+    public SeckillStockPreheatResult preheatSeckillActivityStock(Long activityId) {
+        return seckillOrderService.preheatActivityStock(activityId);
     }
 
     public SeckillOrderResult createSeckillOrder(SeckillOrderCommand command) {

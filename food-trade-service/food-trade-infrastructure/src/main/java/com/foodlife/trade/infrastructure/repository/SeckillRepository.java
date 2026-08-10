@@ -114,6 +114,11 @@ public class SeckillRepository implements ISeckillRepository {
     }
 
     @Override
+    public Long querySeckillActivityId(DiningOrderEntity order) {
+        return querySeckillOrderPO(order).getActivityId();
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public Long settlementSeckillPaySuccess(DiningOrderEntity order) {
         SeckillOrderPO seckillOrderPO = querySeckillOrderPO(order);
