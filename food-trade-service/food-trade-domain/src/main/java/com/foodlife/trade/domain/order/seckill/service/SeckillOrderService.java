@@ -19,8 +19,10 @@ import com.foodlife.trade.domain.order.seckill.model.SeckillOrderCommand;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderEntity;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestEntity;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestProcessResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestRecoveryResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillStockReconcileResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillStockOccupyResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillStockPreheatResult;
 import com.foodlife.trade.domain.order.seckill.repository.ISeckillRepository;
@@ -39,7 +41,11 @@ public class SeckillOrderService {
     private static final int MAX_ACTIVITY_LIMIT = 50;
     private static final int DEFAULT_PROCESS_LIMIT = 20;
     private static final int MAX_PROCESS_LIMIT = 100;
+    private static final int DEFAULT_RECOVERY_LIMIT = 20;
+    private static final int MAX_RECOVERY_LIMIT = 100;
     private static final int MAX_MESSAGE_RETRY_COUNT = 3;
+    private static final int DEFAULT_PROCESSING_STUCK_SECONDS = 120;
+    private static final int DEFAULT_REQUEST_TIMEOUT_SECONDS = 300;
     private static final String MESSAGE_TYPE_SECKILL_ORDER_CREATE = "SECKILL_ORDER_CREATE";
     private static final String BIZ_TYPE_SECKILL_ORDER_REQUEST = "SECKILL_ORDER_REQUEST";
 
@@ -158,6 +164,56 @@ public class SeckillOrderService {
             }
             processSingleOrderRequestMessage(message, result);
         }
+        return result;
+    }
+
+    public SeckillOrderRequestRecoveryResult recoverOrderRequests(Integer limit) {
+        int normalizedLimit = normalizeRecoveryLimit(limit);
+        LocalDateTime now = LocalDateTime.now();
+        SeckillOrderRequestRecoveryResult result = new SeckillOrderRequestRecoveryResult();
+
+        List<TradeLocalMessageEntity> stuckMessages = seckillRepository.queryProcessingSeckillOrderMessages(
+                now.minusSeconds(DEFAULT_PROCESSING_STUCK_SECONDS), normalizedLimit);
+        result.setScannedMessageCount(stuckMessages.size());
+        for (TradeLocalMessageEntity message : stuckMessages) {
+            if (seckillRepository.recoverProcessingLocalMessage(message.getId(), now)) {
+                result.setRecoveredMessageCount(result.getRecoveredMessageCount() + 1);
+            }
+        }
+
+        List<SeckillOrderRequestEntity> timeoutRequests = seckillRepository.queryTimeoutInitOrProcessingRequests(
+                now.minusSeconds(DEFAULT_REQUEST_TIMEOUT_SECONDS), normalizedLimit);
+        for (SeckillOrderRequestEntity request : timeoutRequests) {
+            if (seckillRepository.cancelTimeoutSeckillOrderRequest(request.getRequestNo(), "seckill order request timeout")) {
+                seckillStockRepository.releaseActivityStock(request.getActivityId(), request.getUserId());
+                result.setCanceledRequestCount(result.getCanceledRequestCount() + 1);
+                result.setReleasedStockCount(result.getReleasedStockCount() + 1);
+            }
+        }
+        return result;
+    }
+
+    public SeckillStockReconcileResult reconcileActivityStock(Long activityId) {
+        if (activityId == null) {
+            throw new IllegalArgumentException("activityId required");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        SeckillActivityEntity activity = seckillRepository.queryActivityById(activityId);
+        if (activity == null) {
+            throw new IllegalArgumentException("seckill activity not found");
+        }
+        Integer redisStockBefore = seckillStockRepository.queryActivityStock(activityId);
+        seckillStockRepository.refreshActivityStock(activity, now, activity.getStock());
+        Integer redisStockAfter = seckillStockRepository.queryActivityStock(activityId);
+
+        SeckillStockReconcileResult result = new SeckillStockReconcileResult();
+        result.setActivityId(activityId);
+        result.setDbStock(activity.getStock());
+        result.setRedisStockBefore(redisStockBefore);
+        result.setRedisStockAfter(redisStockAfter);
+        result.setWaitPayCount(seckillRepository.querySeckillOrderCount(activityId, OrderStatusConstants.WAIT_PAY));
+        result.setPaidCount(seckillRepository.querySeckillOrderCount(activityId, OrderStatusConstants.PAID));
+        result.setRefreshed(redisStockBefore == null || !redisStockBefore.equals(redisStockAfter));
         return result;
     }
 
@@ -387,6 +443,13 @@ public class SeckillOrderService {
             return DEFAULT_PROCESS_LIMIT;
         }
         return Math.min(limit, MAX_PROCESS_LIMIT);
+    }
+
+    private int normalizeRecoveryLimit(Integer limit) {
+        if (limit == null || limit <= 0) {
+            return DEFAULT_RECOVERY_LIMIT;
+        }
+        return Math.min(limit, MAX_RECOVERY_LIMIT);
     }
 
     private String rootMessage(Exception e) {

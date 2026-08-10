@@ -19,6 +19,8 @@ import com.foodlife.trade.api.dto.RefundOrderResponseDTO;
 import com.foodlife.trade.api.dto.SeckillActivityListResponseDTO;
 import com.foodlife.trade.api.dto.SeckillOrderRequestProcessResponseDTO;
 import com.foodlife.trade.api.dto.SeckillOrderRequestQueryResponseDTO;
+import com.foodlife.trade.api.dto.SeckillOrderRequestRecoveryResponseDTO;
+import com.foodlife.trade.api.dto.SeckillStockReconcileResponseDTO;
 import com.foodlife.trade.api.dto.SeckillStockPreheatResponseDTO;
 import com.foodlife.trade.api.dto.UseOrderResponseDTO;
 import com.foodlife.trade.domain.order.model.CancelOrderResult;
@@ -31,8 +33,10 @@ import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityView;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderCommand;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestProcessResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestRecoveryResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillStockReconcileResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillStockPreheatResult;
 import com.foodlife.trade.domain.order.model.OrderDetailEntity;
 import com.foodlife.trade.domain.order.model.OrderListResult;
@@ -132,6 +136,22 @@ public class OrderController {
     public Response<SeckillOrderRequestProcessResponseDTO> processSeckillOrderRequests(@RequestParam(required = false) Integer limit) {
         SeckillOrderRequestProcessResult result = orderDomainService.processPendingSeckillOrderRequests(limit);
         return Response.success(toSeckillOrderRequestProcessResponse(result));
+    }
+
+    @PostMapping("/seckill/order-requests/recover")
+    public Response<SeckillOrderRequestRecoveryResponseDTO> recoverSeckillOrderRequests(@RequestParam(required = false) Integer limit) {
+        SeckillOrderRequestRecoveryResult result = orderDomainService.recoverSeckillOrderRequests(limit);
+        return Response.success(toSeckillOrderRequestRecoveryResponse(result));
+    }
+
+    @PostMapping("/seckill/activities/{activityId}/stock/reconcile")
+    public Response<SeckillStockReconcileResponseDTO> reconcileSeckillStock(@PathVariable Long activityId) {
+        try {
+            SeckillStockReconcileResult result = orderDomainService.reconcileSeckillActivityStock(activityId);
+            return Response.success(toSeckillStockReconcileResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
     }
 
     @PostMapping("/seckill/activities/{activityId}/stock/preheat")
@@ -320,6 +340,27 @@ public class OrderController {
         response.setSuccessCount(result.getSuccessCount());
         response.setFailedCount(result.getFailedCount());
         response.setRetryCount(result.getRetryCount());
+        return response;
+    }
+
+    private SeckillOrderRequestRecoveryResponseDTO toSeckillOrderRequestRecoveryResponse(SeckillOrderRequestRecoveryResult result) {
+        SeckillOrderRequestRecoveryResponseDTO response = new SeckillOrderRequestRecoveryResponseDTO();
+        response.setScannedMessageCount(result.getScannedMessageCount());
+        response.setRecoveredMessageCount(result.getRecoveredMessageCount());
+        response.setCanceledRequestCount(result.getCanceledRequestCount());
+        response.setReleasedStockCount(result.getReleasedStockCount());
+        return response;
+    }
+
+    private SeckillStockReconcileResponseDTO toSeckillStockReconcileResponse(SeckillStockReconcileResult result) {
+        SeckillStockReconcileResponseDTO response = new SeckillStockReconcileResponseDTO();
+        response.setActivityId(result.getActivityId());
+        response.setDbStock(result.getDbStock());
+        response.setRedisStockBefore(result.getRedisStockBefore());
+        response.setRedisStockAfter(result.getRedisStockAfter());
+        response.setWaitPayCount(result.getWaitPayCount());
+        response.setPaidCount(result.getPaidCount());
+        response.setRefreshed(result.getRefreshed());
         return response;
     }
 

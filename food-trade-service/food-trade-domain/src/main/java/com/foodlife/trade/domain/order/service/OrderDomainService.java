@@ -30,8 +30,10 @@ import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityView;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderCommand;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestProcessResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestRecoveryResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderResult;
+import com.foodlife.trade.domain.order.seckill.model.SeckillStockReconcileResult;
 import com.foodlife.trade.domain.order.seckill.model.SeckillStockPreheatResult;
 import com.foodlife.trade.domain.order.seckill.repository.ISeckillRepository;
 import com.foodlife.trade.domain.order.seckill.repository.ISeckillStockRepository;
@@ -218,6 +220,14 @@ public class OrderDomainService {
 
     public SeckillOrderRequestProcessResult processPendingSeckillOrderRequests(Integer limit) {
         return seckillOrderService.processPendingOrderRequests(limit);
+    }
+
+    public SeckillOrderRequestRecoveryResult recoverSeckillOrderRequests(Integer limit) {
+        return seckillOrderService.recoverOrderRequests(limit);
+    }
+
+    public SeckillStockReconcileResult reconcileSeckillActivityStock(Long activityId) {
+        return seckillOrderService.reconcileActivityStock(activityId);
     }
 
     private int normalizePageSize(Integer pageSize) {

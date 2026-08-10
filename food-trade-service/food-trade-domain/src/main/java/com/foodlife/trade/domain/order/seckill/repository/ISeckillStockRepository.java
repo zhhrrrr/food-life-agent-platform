@@ -14,5 +14,7 @@ public interface ISeckillStockRepository {
 
     void releaseActivityStock(Long activityId, Long userId);
 
+    void refreshActivityStock(SeckillActivityEntity activity, LocalDateTime now, Integer stock);
+
     Integer queryActivityStock(Long activityId);
 }
