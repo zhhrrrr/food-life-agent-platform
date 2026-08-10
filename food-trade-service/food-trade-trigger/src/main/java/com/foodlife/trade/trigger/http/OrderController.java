@@ -2,6 +2,8 @@ package com.foodlife.trade.trigger.http;
 
 import com.foodlife.auth.context.UserHolder;
 import com.foodlife.trade.api.dto.CancelOrderResponseDTO;
+import com.foodlife.trade.api.dto.CreateGroupBuyOrderRequestDTO;
+import com.foodlife.trade.api.dto.CreateGroupBuyOrderResponseDTO;
 import com.foodlife.trade.api.dto.CreateOrderRequestDTO;
 import com.foodlife.trade.api.dto.CreateOrderResponseDTO;
 import com.foodlife.trade.api.dto.OrderDetailResponseDTO;
@@ -17,6 +19,8 @@ import com.foodlife.trade.domain.order.model.CreateOrderCommand;
 import com.foodlife.trade.domain.order.model.CreateOrderResult;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
+import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockOrderCommand;
+import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockResult;
 import com.foodlife.trade.domain.order.model.OrderDetailEntity;
 import com.foodlife.trade.domain.order.model.OrderListResult;
 import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
@@ -55,6 +59,16 @@ public class OrderController {
         try {
             CreateOrderResult result = orderDomainService.createNormalOrder(toCommand(request));
             return Response.success(toResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
+    }
+
+    @PostMapping("/orders/group-buy")
+    public Response<CreateGroupBuyOrderResponseDTO> createGroupBuyOrder(@RequestBody CreateGroupBuyOrderRequestDTO request) {
+        try {
+            GroupBuyLockResult result = orderDomainService.createGroupBuyOrder(toGroupBuyCommand(request));
+            return Response.success(toGroupBuyResponse(result));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
@@ -131,12 +145,36 @@ public class OrderController {
         return command;
     }
 
+    private GroupBuyLockOrderCommand toGroupBuyCommand(CreateGroupBuyOrderRequestDTO request) {
+        GroupBuyLockOrderCommand command = new GroupBuyLockOrderCommand();
+        command.setUserId(UserHolder.getUserId());
+        command.setPackageId(request == null ? null : request.getPackageId());
+        command.setQuantity(request == null ? null : request.getQuantity());
+        command.setTeamId(request == null ? null : request.getTeamId());
+        return command;
+    }
+
     private CreateOrderResponseDTO toResponse(CreateOrderResult result) {
         CreateOrderResponseDTO response = new CreateOrderResponseDTO();
         response.setOrderId(result.getOrderId());
         response.setOrderNo(result.getOrderNo());
         response.setPayAmount(result.getPayAmount());
         response.setOrderStatus(result.getOrderStatus());
+        return response;
+    }
+
+    private CreateGroupBuyOrderResponseDTO toGroupBuyResponse(GroupBuyLockResult result) {
+        CreateGroupBuyOrderResponseDTO response = new CreateGroupBuyOrderResponseDTO();
+        response.setOrderId(result.getOrderId());
+        response.setOrderNo(result.getOrderNo());
+        response.setTeamId(result.getTeamId());
+        response.setActivityId(result.getActivityId());
+        response.setPayAmount(result.getPayAmount());
+        response.setOrderStatus(result.getOrderStatus());
+        response.setTeamStatus(result.getTeamStatus());
+        response.setTargetCount(result.getTargetCount());
+        response.setLockCount(result.getLockCount());
+        response.setCompleteCount(result.getCompleteCount());
         return response;
     }
 
