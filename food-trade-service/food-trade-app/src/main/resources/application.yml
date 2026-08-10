@@ -31,6 +31,9 @@ food:
       order-request-process:
         enabled: true
         fixed-delay-ms: 30000
+      order-request-recovery:
+        enabled: true
+        fixed-delay-ms: 60000
   business-service:
     base-url: http://localhost:8201
   auth:

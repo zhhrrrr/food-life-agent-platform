@@ -92,6 +92,30 @@ public class SeckillStockRedisRepository implements ISeckillStockRepository {
     }
 
     @Override
+    public void refreshActivityStock(SeckillActivityEntity activity, LocalDateTime now, Integer stock) {
+        if (stock == null) {
+            return;
+        }
+        String activityKey = activityKey(activity.getId());
+        String stockKey = stockKey(activity.getId());
+
+        Map<String, String> activityCache = new HashMap<>();
+        activityCache.put("activityId", String.valueOf(activity.getId()));
+        activityCache.put("packageId", String.valueOf(activity.getPackageId()));
+        activityCache.put("status", String.valueOf(activity.getActivityStatus()));
+        activityCache.put("startTime", String.valueOf(toEpochSecond(activity.getValidStartTime())));
+        activityCache.put("endTime", String.valueOf(toEpochSecond(activity.getValidEndTime())));
+        activityCache.put("takeLimit", String.valueOf(activity.getUserTakeLimit()));
+
+        stringRedisTemplate.opsForHash().putAll(activityKey, activityCache);
+        stringRedisTemplate.opsForValue().set(stockKey, String.valueOf(stock));
+
+        long ttlSeconds = calculateTtlSeconds(activity, now);
+        stringRedisTemplate.expire(activityKey, ttlSeconds, TimeUnit.SECONDS);
+        stringRedisTemplate.expire(stockKey, ttlSeconds, TimeUnit.SECONDS);
+    }
+
+    @Override
     public Integer queryActivityStock(Long activityId) {
         String value = stringRedisTemplate.opsForValue().get(stockKey(activityId));
         return value == null ? null : Integer.valueOf(value);

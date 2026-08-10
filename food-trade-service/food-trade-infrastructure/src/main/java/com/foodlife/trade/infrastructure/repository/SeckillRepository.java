@@ -156,12 +156,53 @@ public class SeckillRepository implements ISeckillRepository {
     }
 
     @Override
+    public List<TradeLocalMessageEntity> queryProcessingSeckillOrderMessages(LocalDateTime timeoutBefore, int limit) {
+        return tradeLocalMessageMapper.selectList(new LambdaQueryWrapper<TradeLocalMessagePO>()
+                        .eq(TradeLocalMessagePO::getMessageType, "SECKILL_ORDER_CREATE")
+                        .eq(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.PROCESSING)
+                        .le(TradeLocalMessagePO::getUpdateTime, timeoutBefore)
+                        .orderByAsc(TradeLocalMessagePO::getId)
+                        .last("limit " + limit))
+                .stream()
+                .map(this::toTradeLocalMessageEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<SeckillOrderRequestEntity> queryTimeoutInitOrProcessingRequests(LocalDateTime timeoutBefore, int limit) {
+        return seckillOrderRequestMapper.selectList(new LambdaQueryWrapper<SeckillOrderRequestPO>()
+                        .in(SeckillOrderRequestPO::getRequestStatus,
+                                SeckillRequestStatusConstants.INIT,
+                                SeckillRequestStatusConstants.PROCESSING)
+                        .le(SeckillOrderRequestPO::getCreateTime, timeoutBefore)
+                        .isNull(SeckillOrderRequestPO::getOrderId)
+                        .orderByAsc(SeckillOrderRequestPO::getId)
+                        .last("limit " + limit))
+                .stream()
+                .map(this::toSeckillOrderRequestEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public boolean markLocalMessageProcessing(Long messageId) {
         int updated = tradeLocalMessageMapper.update(null, new LambdaUpdateWrapper<TradeLocalMessagePO>()
                 .set(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.PROCESSING)
                 .set(TradeLocalMessagePO::getUpdateTime, LocalDateTime.now())
                 .eq(TradeLocalMessagePO::getId, messageId)
                 .eq(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.INIT));
+        return updated > 0;
+    }
+
+    @Override
+    public boolean recoverProcessingLocalMessage(Long messageId, LocalDateTime nextRetryTime) {
+        int updated = tradeLocalMessageMapper.update(null, new LambdaUpdateWrapper<TradeLocalMessagePO>()
+                .setSql("retry_count = retry_count + 1")
+                .set(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.INIT)
+                .set(TradeLocalMessagePO::getFailReason, "recover stuck processing message")
+                .set(TradeLocalMessagePO::getNextRetryTime, nextRetryTime)
+                .set(TradeLocalMessagePO::getUpdateTime, LocalDateTime.now())
+                .eq(TradeLocalMessagePO::getId, messageId)
+                .eq(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.PROCESSING));
         return updated > 0;
     }
 
@@ -223,6 +264,28 @@ public class SeckillRepository implements ISeckillRepository {
                 .set(SeckillOrderRequestPO::getFailReason, limitText(failReason, 512))
                 .set(SeckillOrderRequestPO::getUpdateTime, LocalDateTime.now())
                 .eq(SeckillOrderRequestPO::getRequestNo, requestNo));
+    }
+
+    @Override
+    public boolean cancelTimeoutSeckillOrderRequest(String requestNo, String failReason) {
+        int updated = seckillOrderRequestMapper.update(null, new LambdaUpdateWrapper<SeckillOrderRequestPO>()
+                .set(SeckillOrderRequestPO::getRequestStatus, SeckillRequestStatusConstants.FAILED)
+                .set(SeckillOrderRequestPO::getFailReason, limitText(failReason, 512))
+                .set(SeckillOrderRequestPO::getUpdateTime, LocalDateTime.now())
+                .eq(SeckillOrderRequestPO::getRequestNo, requestNo)
+                .isNull(SeckillOrderRequestPO::getOrderId)
+                .in(SeckillOrderRequestPO::getRequestStatus,
+                        SeckillRequestStatusConstants.INIT,
+                        SeckillRequestStatusConstants.PROCESSING));
+        return updated > 0;
+    }
+
+    @Override
+    public int querySeckillOrderCount(Long activityId, String orderStatus) {
+        Long count = seckillOrderMapper.selectCount(new LambdaQueryWrapper<SeckillOrderPO>()
+                .eq(SeckillOrderPO::getActivityId, activityId)
+                .eq(SeckillOrderPO::getOrderStatus, orderStatus));
+        return count == null ? 0 : count.intValue();
     }
 
     @Override

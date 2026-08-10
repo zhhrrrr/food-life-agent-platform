@@ -27,7 +27,13 @@ public interface ISeckillRepository {
 
     List<TradeLocalMessageEntity> queryPendingSeckillOrderMessages(LocalDateTime now, int limit);
 
+    List<TradeLocalMessageEntity> queryProcessingSeckillOrderMessages(LocalDateTime timeoutBefore, int limit);
+
+    List<SeckillOrderRequestEntity> queryTimeoutInitOrProcessingRequests(LocalDateTime timeoutBefore, int limit);
+
     boolean markLocalMessageProcessing(Long messageId);
+
+    boolean recoverProcessingLocalMessage(Long messageId, LocalDateTime nextRetryTime);
 
     void markLocalMessageSuccess(Long messageId);
 
@@ -40,6 +46,10 @@ public interface ISeckillRepository {
     void markSeckillOrderRequestSuccess(String requestNo, SeckillOrderResult result);
 
     void markSeckillOrderRequestFailed(String requestNo, String failReason);
+
+    boolean cancelTimeoutSeckillOrderRequest(String requestNo, String failReason);
+
+    int querySeckillOrderCount(Long activityId, String orderStatus);
 
     Long querySeckillActivityId(DiningOrderEntity order);
 
