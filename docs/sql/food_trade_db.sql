@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS group_buy_order_list (
   order_no VARCHAR(64) NOT NULL COMMENT 'dining order no',
   activity_id BIGINT NOT NULL COMMENT 'activity id',
   package_id BIGINT NOT NULL COMMENT 'meal package id',
-  order_status VARCHAR(32) NOT NULL COMMENT 'group buy order status: LOCKED/PAID/REFUNDED',
+  order_status VARCHAR(32) NOT NULL COMMENT 'group buy order status: LOCKED/PAID/CANCELED/REFUNDED',
   out_trade_time DATETIME DEFAULT NULL COMMENT 'external pay success time',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',

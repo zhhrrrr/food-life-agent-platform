@@ -21,4 +21,6 @@ public interface IGroupBuyRepository {
     GroupBuyLockResult saveGroupBuyLockOrder(GroupBuyLockAggregate aggregate);
 
     GroupBuyTeamEntity settlementGroupBuyPaySuccess(DiningOrderEntity order, LocalDateTime outTradeTime);
+
+    void cancelUnpaidGroupBuyOrder(DiningOrderEntity order);
 }

@@ -6,6 +6,7 @@ public final class GroupBuyStatusConstants {
     public static final String SUCCESS = "SUCCESS";
     public static final String LOCKED = "LOCKED";
     public static final String PAID = "PAID";
+    public static final String CANCELED = "CANCELED";
 
     private GroupBuyStatusConstants() {
     }
