@@ -9,6 +9,7 @@ import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockResult;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyOrderListEntity;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyStatusConstants;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyTeamEntity;
+import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyTimeoutCompensateDetail;
 import com.foodlife.trade.domain.order.groupbuy.repository.IGroupBuyRepository;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
@@ -26,6 +27,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Repository
 public class GroupBuyRepository implements IGroupBuyRepository {
@@ -127,6 +129,7 @@ public class GroupBuyRepository implements IGroupBuyRepository {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public GroupBuyTeamEntity settlementGroupBuyPaySuccess(DiningOrderEntity order, LocalDateTime outTradeTime) {
+        LocalDateTime payTime = outTradeTime == null ? LocalDateTime.now() : outTradeTime;
         int orderUpdated = diningOrderMapper.update(null, new LambdaUpdateWrapper<DiningOrderPO>()
                 .set(DiningOrderPO::getOrderStatus, OrderStatusConstants.PAID)
                 .set(DiningOrderPO::getUpdateTime, LocalDateTime.now())
@@ -147,7 +150,7 @@ public class GroupBuyRepository implements IGroupBuyRepository {
 
         int orderListUpdated = groupBuyOrderListMapper.update(null, new LambdaUpdateWrapper<GroupBuyOrderListPO>()
                 .set(GroupBuyOrderListPO::getOrderStatus, GroupBuyStatusConstants.PAID)
-                .set(GroupBuyOrderListPO::getOutTradeTime, outTradeTime)
+                .set(GroupBuyOrderListPO::getOutTradeTime, payTime)
                 .set(GroupBuyOrderListPO::getUpdateTime, LocalDateTime.now())
                 .eq(GroupBuyOrderListPO::getId, orderListPO.getId())
                 .eq(GroupBuyOrderListPO::getOrderStatus, GroupBuyStatusConstants.LOCKED));
@@ -160,6 +163,7 @@ public class GroupBuyRepository implements IGroupBuyRepository {
                 .set(GroupBuyTeamPO::getUpdateTime, LocalDateTime.now())
                 .eq(GroupBuyTeamPO::getTeamId, orderListPO.getTeamId())
                 .eq(GroupBuyTeamPO::getTeamStatus, GroupBuyStatusConstants.IN_PROGRESS)
+                .gt(GroupBuyTeamPO::getValidEndTime, payTime)
                 .apply("complete_count < target_count"));
         if (teamUpdated <= 0) {
             throw new IllegalArgumentException("group buy team can not settlement");
@@ -287,6 +291,120 @@ public class GroupBuyRepository implements IGroupBuyRepository {
             throw new IllegalArgumentException("formed group buy team can not refund");
         }
         return queryTeamByTeamId(orderListPO.getTeamId());
+    }
+
+    @Override
+    public List<GroupBuyTeamEntity> queryTimeoutInProgressTeams(LocalDateTime now, int limit) {
+        List<GroupBuyTeamPO> teams = groupBuyTeamMapper.selectList(new LambdaQueryWrapper<GroupBuyTeamPO>()
+                .eq(GroupBuyTeamPO::getTeamStatus, GroupBuyStatusConstants.IN_PROGRESS)
+                .le(GroupBuyTeamPO::getValidEndTime, now)
+                .orderByAsc(GroupBuyTeamPO::getValidEndTime)
+                .last("limit " + limit));
+        return teams.stream().map(this::toTeamEntity).collect(java.util.stream.Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public GroupBuyTimeoutCompensateDetail compensateTimeoutTeam(String teamId, LocalDateTime now) {
+        GroupBuyTeamPO teamPO = groupBuyTeamMapper.selectOne(new LambdaQueryWrapper<GroupBuyTeamPO>()
+                .eq(GroupBuyTeamPO::getTeamId, teamId)
+                .last("limit 1"));
+        if (teamPO == null
+                || !GroupBuyStatusConstants.IN_PROGRESS.equals(teamPO.getTeamStatus())
+                || teamPO.getValidEndTime().isAfter(now)) {
+            return null;
+        }
+
+        int teamUpdated = groupBuyTeamMapper.update(null, new LambdaUpdateWrapper<GroupBuyTeamPO>()
+                .set(GroupBuyTeamPO::getTeamStatus, GroupBuyStatusConstants.FAILED)
+                .set(GroupBuyTeamPO::getLockCount, 0)
+                .set(GroupBuyTeamPO::getCompleteCount, 0)
+                .set(GroupBuyTeamPO::getUpdateTime, LocalDateTime.now())
+                .eq(GroupBuyTeamPO::getId, teamPO.getId())
+                .eq(GroupBuyTeamPO::getTeamStatus, GroupBuyStatusConstants.IN_PROGRESS)
+                .le(GroupBuyTeamPO::getValidEndTime, now));
+        if (teamUpdated <= 0) {
+            return null;
+        }
+
+        List<GroupBuyOrderListPO> orderListPOS = groupBuyOrderListMapper.selectList(new LambdaQueryWrapper<GroupBuyOrderListPO>()
+                .eq(GroupBuyOrderListPO::getTeamId, teamId)
+                .in(GroupBuyOrderListPO::getOrderStatus, GroupBuyStatusConstants.LOCKED, GroupBuyStatusConstants.PAID));
+
+        int canceledCount = 0;
+        int refundedCount = 0;
+        int restoredStockCount = 0;
+        for (GroupBuyOrderListPO orderListPO : orderListPOS) {
+            if (GroupBuyStatusConstants.LOCKED.equals(orderListPO.getOrderStatus())) {
+                cancelTimeoutLockedOrder(orderListPO);
+                canceledCount++;
+                restoredStockCount++;
+            } else if (GroupBuyStatusConstants.PAID.equals(orderListPO.getOrderStatus())) {
+                refundTimeoutPaidOrder(orderListPO);
+                refundedCount++;
+                restoredStockCount++;
+            }
+        }
+
+        if (restoredStockCount > 0) {
+            groupBuyActivityMapper.update(null, new LambdaUpdateWrapper<GroupBuyActivityPO>()
+                    .setSql("stock = stock + " + restoredStockCount)
+                    .set(GroupBuyActivityPO::getUpdateTime, LocalDateTime.now())
+                    .eq(GroupBuyActivityPO::getId, teamPO.getActivityId()));
+        }
+
+        GroupBuyTimeoutCompensateDetail detail = new GroupBuyTimeoutCompensateDetail();
+        detail.setTeamId(teamPO.getTeamId());
+        detail.setActivityId(teamPO.getActivityId());
+        detail.setTeamStatus(GroupBuyStatusConstants.FAILED);
+        detail.setBeforeLockCount(teamPO.getLockCount());
+        detail.setBeforeCompleteCount(teamPO.getCompleteCount());
+        detail.setCanceledOrderCount(canceledCount);
+        detail.setRefundedOrderCount(refundedCount);
+        detail.setRestoredStockCount(restoredStockCount);
+        return detail;
+    }
+
+    private void cancelTimeoutLockedOrder(GroupBuyOrderListPO orderListPO) {
+        int orderUpdated = diningOrderMapper.update(null, new LambdaUpdateWrapper<DiningOrderPO>()
+                .set(DiningOrderPO::getOrderStatus, OrderStatusConstants.CANCELED)
+                .set(DiningOrderPO::getUpdateTime, LocalDateTime.now())
+                .eq(DiningOrderPO::getId, orderListPO.getOrderId())
+                .eq(DiningOrderPO::getUserId, orderListPO.getUserId())
+                .eq(DiningOrderPO::getOrderStatus, OrderStatusConstants.WAIT_PAY));
+        if (orderUpdated <= 0) {
+            throw new IllegalArgumentException("timeout locked order can not cancel");
+        }
+
+        int orderListUpdated = groupBuyOrderListMapper.update(null, new LambdaUpdateWrapper<GroupBuyOrderListPO>()
+                .set(GroupBuyOrderListPO::getOrderStatus, GroupBuyStatusConstants.CANCELED)
+                .set(GroupBuyOrderListPO::getUpdateTime, LocalDateTime.now())
+                .eq(GroupBuyOrderListPO::getId, orderListPO.getId())
+                .eq(GroupBuyOrderListPO::getOrderStatus, GroupBuyStatusConstants.LOCKED));
+        if (orderListUpdated <= 0) {
+            throw new IllegalArgumentException("timeout group buy order list can not cancel");
+        }
+    }
+
+    private void refundTimeoutPaidOrder(GroupBuyOrderListPO orderListPO) {
+        int orderUpdated = diningOrderMapper.update(null, new LambdaUpdateWrapper<DiningOrderPO>()
+                .set(DiningOrderPO::getOrderStatus, OrderStatusConstants.REFUNDED)
+                .set(DiningOrderPO::getUpdateTime, LocalDateTime.now())
+                .eq(DiningOrderPO::getId, orderListPO.getOrderId())
+                .eq(DiningOrderPO::getUserId, orderListPO.getUserId())
+                .eq(DiningOrderPO::getOrderStatus, OrderStatusConstants.PAID));
+        if (orderUpdated <= 0) {
+            throw new IllegalArgumentException("timeout paid order can not refund");
+        }
+
+        int orderListUpdated = groupBuyOrderListMapper.update(null, new LambdaUpdateWrapper<GroupBuyOrderListPO>()
+                .set(GroupBuyOrderListPO::getOrderStatus, GroupBuyStatusConstants.REFUNDED)
+                .set(GroupBuyOrderListPO::getUpdateTime, LocalDateTime.now())
+                .eq(GroupBuyOrderListPO::getId, orderListPO.getId())
+                .eq(GroupBuyOrderListPO::getOrderStatus, GroupBuyStatusConstants.PAID));
+        if (orderListUpdated <= 0) {
+            throw new IllegalArgumentException("timeout group buy order list can not refund");
+        }
     }
 
     private GroupBuyOrderListPO queryPaidOrderListPO(DiningOrderEntity order) {
