@@ -4,6 +4,9 @@ import com.foodlife.trade.domain.order.check.OrderCreateCheckChain;
 import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
 import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
 import com.foodlife.trade.domain.order.factory.OrderFactory;
+import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockOrderCommand;
+import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockResult;
+import com.foodlife.trade.domain.order.groupbuy.service.GroupBuyLockOrderService;
 import com.foodlife.trade.domain.order.model.CancelOrderResult;
 import com.foodlife.trade.domain.order.model.CreateOrderCommand;
 import com.foodlife.trade.domain.order.model.CreateOrderResult;
@@ -41,6 +44,7 @@ public class OrderDomainService {
     private final OrderPaySettlementService orderPaySettlementService;
     private final OrderRefundService orderRefundService;
     private final OrderUseService orderUseService;
+    private final GroupBuyLockOrderService groupBuyLockOrderService;
 
     public OrderDomainService(IOrderRepository orderRepository,
                               OrderCreateCheckChain orderCreateCheckChain,
@@ -48,7 +52,8 @@ public class OrderDomainService {
                               OrderFactory orderFactory,
                               OrderPaySettlementService orderPaySettlementService,
                               OrderRefundService orderRefundService,
-                              OrderUseService orderUseService) {
+                              OrderUseService orderUseService,
+                              GroupBuyLockOrderService groupBuyLockOrderService) {
         this.orderRepository = orderRepository;
         this.orderCreateCheckChain = orderCreateCheckChain;
         this.orderPricingService = orderPricingService;
@@ -56,6 +61,7 @@ public class OrderDomainService {
         this.orderPaySettlementService = orderPaySettlementService;
         this.orderRefundService = orderRefundService;
         this.orderUseService = orderUseService;
+        this.groupBuyLockOrderService = groupBuyLockOrderService;
     }
 
     public CreateOrderResult createNormalOrder(CreateOrderCommand command) {
@@ -154,6 +160,10 @@ public class OrderDomainService {
 
     public OrderUseResult useOrderMock(OrderUseCommandEntity command) {
         return orderUseService.useOrder(command);
+    }
+
+    public GroupBuyLockResult createGroupBuyOrder(GroupBuyLockOrderCommand command) {
+        return groupBuyLockOrderService.lockOrder(command);
     }
 
     private int normalizePageSize(Integer pageSize) {
