@@ -2,6 +2,8 @@ package com.foodlife.trade.infrastructure.repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
+import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
@@ -60,6 +62,19 @@ public class OrderRepository implements IOrderRepository {
             queryWrapper.gt(DiningOrderPO::getId, lastId);
         }
         return diningOrderMapper.selectList(queryWrapper)
+                .stream()
+                .map(this::toOrderEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<DiningOrderEntity> listTimeoutNormalWaitPayOrders(LocalDateTime timeoutBefore, Integer limit) {
+        return diningOrderMapper.selectList(new LambdaQueryWrapper<DiningOrderPO>()
+                        .eq(DiningOrderPO::getTradeType, TradeTypeConstants.NORMAL)
+                        .eq(DiningOrderPO::getOrderStatus, OrderStatusConstants.WAIT_PAY)
+                        .le(DiningOrderPO::getCreateTime, timeoutBefore)
+                        .orderByAsc(DiningOrderPO::getId)
+                        .last("limit " + limit))
                 .stream()
                 .map(this::toOrderEntity)
                 .collect(Collectors.toList());

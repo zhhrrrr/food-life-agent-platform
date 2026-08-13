@@ -13,6 +13,8 @@ public interface IOrderRepository {
 
     java.util.List<DiningOrderEntity> listUserOrders(Long userId, Long lastId, Integer pageSize);
 
+    java.util.List<DiningOrderEntity> listTimeoutNormalWaitPayOrders(java.time.LocalDateTime timeoutBefore, Integer limit);
+
     boolean updateOrderStatus(Long orderId, String fromStatus, String toStatus);
 
     boolean updateOrderStatusAndUseTime(Long orderId, String fromStatus, String toStatus, java.time.LocalDateTime useTime);
