@@ -54,6 +54,20 @@ CREATE TABLE IF NOT EXISTS meal_package (
   KEY idx_shop_id (shop_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='meal package';
 
+CREATE TABLE IF NOT EXISTS package_stock_change_record (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'stock change record id',
+  operation_id VARCHAR(128) NOT NULL COMMENT 'idempotent operation id',
+  package_id BIGINT NOT NULL COMMENT 'meal package id',
+  quantity INT NOT NULL COMMENT 'quantity',
+  change_type VARCHAR(32) NOT NULL COMMENT 'OCCUPY/RELEASE/CONFIRM_SOLD/ROLLBACK_SOLD',
+  change_status VARCHAR(32) NOT NULL COMMENT 'SUCCESS',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_operation_id (operation_id),
+  KEY idx_package_id (package_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='package stock change idempotent record';
+
 INSERT INTO shop_category (id, name, icon, sort)
 VALUES
   (1, 'Hot Pot', 'hotpot', 1),
@@ -75,4 +89,3 @@ VALUES
   (3, 2, 'BBQ Combo for Two', 'Skewers, grilled fish tofu and drinks.', '', 12800, 18800, 120, 44, 1, 'Valid after 17:00.'),
   (4, 3, 'Afternoon Dessert Set', 'Cake, coffee and seasonal dessert.', '', 5800, 8800, 60, 27, 1, 'Valid from 14:00 to 17:30.')
 ON DUPLICATE KEY UPDATE name = VALUES(name), price = VALUES(price), original_price = VALUES(original_price), stock = VALUES(stock), sold = VALUES(sold), status = VALUES(status);
-

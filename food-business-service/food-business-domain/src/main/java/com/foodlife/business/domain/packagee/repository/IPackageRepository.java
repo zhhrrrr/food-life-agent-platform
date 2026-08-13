@@ -16,9 +16,17 @@ public interface IPackageRepository {
 
     PackageStockChangeResult occupyPackageStock(Long packageId, Integer quantity);
 
+    PackageStockChangeResult occupyPackageStock(Long packageId, Integer quantity, String operationId);
+
     PackageStockChangeResult releasePackageStock(Long packageId, Integer quantity);
+
+    PackageStockChangeResult releasePackageStock(Long packageId, Integer quantity, String operationId);
 
     PackageStockChangeResult confirmPackageSold(Long packageId, Integer quantity);
 
+    PackageStockChangeResult confirmPackageSold(Long packageId, Integer quantity, String operationId);
+
     PackageStockChangeResult rollbackPackageSold(Long packageId, Integer quantity);
+
+    PackageStockChangeResult rollbackPackageSold(Long packageId, Integer quantity, String operationId);
 }

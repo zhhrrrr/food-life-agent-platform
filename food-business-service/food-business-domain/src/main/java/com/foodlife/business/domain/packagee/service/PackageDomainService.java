@@ -30,23 +30,39 @@ public class PackageDomainService {
     }
 
     public PackageStockChangeResult occupyPackageStock(Long packageId, Integer quantity) {
+        return occupyPackageStock(packageId, quantity, null);
+    }
+
+    public PackageStockChangeResult occupyPackageStock(Long packageId, Integer quantity, String operationId) {
         checkPackageStockCommand(packageId, quantity);
-        return packageRepository.occupyPackageStock(packageId, quantity);
+        return packageRepository.occupyPackageStock(packageId, quantity, operationId);
     }
 
     public PackageStockChangeResult releasePackageStock(Long packageId, Integer quantity) {
+        return releasePackageStock(packageId, quantity, null);
+    }
+
+    public PackageStockChangeResult releasePackageStock(Long packageId, Integer quantity, String operationId) {
         checkPackageStockCommand(packageId, quantity);
-        return packageRepository.releasePackageStock(packageId, quantity);
+        return packageRepository.releasePackageStock(packageId, quantity, operationId);
     }
 
     public PackageStockChangeResult confirmPackageSold(Long packageId, Integer quantity) {
+        return confirmPackageSold(packageId, quantity, null);
+    }
+
+    public PackageStockChangeResult confirmPackageSold(Long packageId, Integer quantity, String operationId) {
         checkPackageStockCommand(packageId, quantity);
-        return packageRepository.confirmPackageSold(packageId, quantity);
+        return packageRepository.confirmPackageSold(packageId, quantity, operationId);
     }
 
     public PackageStockChangeResult rollbackPackageSold(Long packageId, Integer quantity) {
+        return rollbackPackageSold(packageId, quantity, null);
+    }
+
+    public PackageStockChangeResult rollbackPackageSold(Long packageId, Integer quantity, String operationId) {
         checkPackageStockCommand(packageId, quantity);
-        return packageRepository.rollbackPackageSold(packageId, quantity);
+        return packageRepository.rollbackPackageSold(packageId, quantity, operationId);
     }
 
     private void checkPackageStockCommand(Long packageId, Integer quantity) {

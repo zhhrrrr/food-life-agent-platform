@@ -7,7 +7,7 @@ import com.foodlife.trade.domain.order.groupbuy.refund.GroupBuyRefundStrategyRou
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.OrderRefundBehaviorEntity;
 import com.foodlife.trade.domain.order.model.OrderRefundCommandEntity;
-import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
+import com.foodlife.trade.domain.order.normal.service.NormalPackageStockMessageService;
 import com.foodlife.trade.domain.order.refund.factory.OrderRefundRuleFilterFactory;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import org.springframework.stereotype.Component;
@@ -17,14 +17,14 @@ public class RefundOrderRuleFilter implements ILogicHandler<OrderRefundCommandEn
 
     private final IOrderRepository orderRepository;
     private final GroupBuyRefundStrategyRouter groupBuyRefundStrategyRouter;
-    private final IBusinessPackagePort businessPackagePort;
+    private final NormalPackageStockMessageService normalPackageStockMessageService;
 
     public RefundOrderRuleFilter(IOrderRepository orderRepository,
                                  GroupBuyRefundStrategyRouter groupBuyRefundStrategyRouter,
-                                 IBusinessPackagePort businessPackagePort) {
+                                 NormalPackageStockMessageService normalPackageStockMessageService) {
         this.orderRepository = orderRepository;
         this.groupBuyRefundStrategyRouter = groupBuyRefundStrategyRouter;
-        this.businessPackagePort = businessPackagePort;
+        this.normalPackageStockMessageService = normalPackageStockMessageService;
     }
 
     @Override
@@ -43,8 +43,7 @@ public class RefundOrderRuleFilter implements ILogicHandler<OrderRefundCommandEn
             throw new IllegalArgumentException("order status can not refund");
         }
         if (TradeTypeConstants.NORMAL.equals(order.getTradeType())) {
-            businessPackagePort.rollbackPackageSold(order.getPackageId(), order.getQuantity());
-            businessPackagePort.releasePackageStock(order.getPackageId(), order.getQuantity());
+            normalPackageStockMessageService.rollbackSoldAndReleaseStock(order);
         }
 
         OrderRefundBehaviorEntity behavior = new OrderRefundBehaviorEntity();
