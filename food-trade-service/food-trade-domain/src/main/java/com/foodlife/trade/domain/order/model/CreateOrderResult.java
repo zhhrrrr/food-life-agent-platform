@@ -9,6 +9,9 @@ public class CreateOrderResult implements Serializable {
 
     private Long orderId;
     private String orderNo;
+    private Long totalAmount;
+    private Long discountAmount;
     private Long payAmount;
+    private Long userCouponId;
     private String orderStatus;
 }

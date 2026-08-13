@@ -3,6 +3,8 @@ package com.foodlife.trade.domain.order.service;
 import com.foodlife.trade.domain.order.check.OrderCreateCheckChain;
 import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
 import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
+import com.foodlife.trade.domain.order.coupon.model.UserCouponEntity;
+import com.foodlife.trade.domain.order.coupon.service.CouponService;
 import com.foodlife.trade.domain.order.factory.OrderFactory;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockOrderCommand;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockResult;
@@ -66,6 +68,7 @@ public class OrderDomainService {
     private final ISeckillStockRepository seckillStockRepository;
     private final IBusinessPackagePort businessPackagePort;
     private final NormalPackageStockMessageService normalPackageStockMessageService;
+    private final CouponService couponService;
 
     public OrderDomainService(IOrderRepository orderRepository,
                               OrderCreateCheckChain orderCreateCheckChain,
@@ -80,7 +83,8 @@ public class OrderDomainService {
                               ISeckillRepository seckillRepository,
                               ISeckillStockRepository seckillStockRepository,
                               IBusinessPackagePort businessPackagePort,
-                              NormalPackageStockMessageService normalPackageStockMessageService) {
+                              NormalPackageStockMessageService normalPackageStockMessageService,
+                              CouponService couponService) {
         this.orderRepository = orderRepository;
         this.orderCreateCheckChain = orderCreateCheckChain;
         this.orderPricingService = orderPricingService;
@@ -95,13 +99,19 @@ public class OrderDomainService {
         this.seckillStockRepository = seckillStockRepository;
         this.businessPackagePort = businessPackagePort;
         this.normalPackageStockMessageService = normalPackageStockMessageService;
+        this.couponService = couponService;
     }
 
     public CreateOrderResult createNormalOrder(CreateOrderCommand command) {
         boolean packageStockOccupied = false;
+        Long usedCouponId = null;
+        Long savedOrderId = null;
         try {
             OrderCreateContext context = buildCreateContext(TradeTypeConstants.NORMAL, command);
             orderCreateCheckChain.checkNormalOrder(context);
+            Long totalAmount = context.getPackageSnapshot().getPrice() * command.getQuantity();
+            UserCouponEntity userCoupon = couponService.validateCouponForOrder(command.getUserCouponId(), command.getUserId(), totalAmount);
+            context.setUserCoupon(userCoupon);
 
             PackageTradeSnapshot snapshot = context.getPackageSnapshot();
             OrderPricingResult pricingResult = orderPricingService.calculate(context);
@@ -110,6 +120,9 @@ public class OrderDomainService {
 
             DiningOrderEntity order = orderFactory.createOrder(context.getTradeType(), command, snapshot, pricingResult);
             DiningOrderEntity savedOrder = orderRepository.saveOrder(order);
+            savedOrderId = savedOrder.getId();
+            usedCouponId = savedOrder.getUserCouponId();
+            couponService.markCouponUsed(usedCouponId, command.getUserId(), savedOrder.getId());
 
             DiningOrderItemEntity orderItem = orderFactory.createOrderItem(savedOrder, snapshot, command.getQuantity());
             orderRepository.saveOrderItem(orderItem);
@@ -117,9 +130,11 @@ public class OrderDomainService {
             return buildCreateOrderResult(savedOrder);
         } catch (IllegalArgumentException e) {
             releaseOccupiedPackageStock(packageStockOccupied, command);
+            couponService.releaseCoupon(usedCouponId, command == null ? null : command.getUserId(), savedOrderId);
             throw e;
         } catch (Exception e) {
             releaseOccupiedPackageStock(packageStockOccupied, command);
+            couponService.releaseCoupon(usedCouponId, command == null ? null : command.getUserId(), savedOrderId);
             throw new IllegalStateException("normal order create failed", e);
         }
     }
@@ -274,7 +289,9 @@ public class OrderDomainService {
         summary.setPackageId(order.getPackageId());
         summary.setQuantity(order.getQuantity());
         summary.setTotalAmount(order.getTotalAmount());
+        summary.setDiscountAmount(order.getDiscountAmount());
         summary.setPayAmount(order.getPayAmount());
+        summary.setUserCouponId(order.getUserCouponId());
         summary.setTradeType(order.getTradeType());
         summary.setOrderStatus(order.getOrderStatus());
         summary.setUseTime(order.getUseTime());
@@ -298,7 +315,10 @@ public class OrderDomainService {
         CreateOrderResult result = new CreateOrderResult();
         result.setOrderId(savedOrder.getId());
         result.setOrderNo(savedOrder.getOrderNo());
+        result.setTotalAmount(savedOrder.getTotalAmount());
+        result.setDiscountAmount(savedOrder.getDiscountAmount());
         result.setPayAmount(savedOrder.getPayAmount());
+        result.setUserCouponId(savedOrder.getUserCouponId());
         result.setOrderStatus(savedOrder.getOrderStatus());
         return result;
     }

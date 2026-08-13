@@ -12,7 +12,9 @@ CREATE TABLE IF NOT EXISTS dining_order (
   package_id BIGINT NOT NULL COMMENT 'package id',
   quantity INT NOT NULL DEFAULT 1 COMMENT 'quantity',
   total_amount BIGINT NOT NULL COMMENT 'total amount in cents',
+  discount_amount BIGINT NOT NULL DEFAULT 0 COMMENT 'discount amount in cents',
   pay_amount BIGINT NOT NULL COMMENT 'pay amount in cents',
+  user_coupon_id BIGINT DEFAULT NULL COMMENT 'used user coupon id',
   trade_type VARCHAR(32) NOT NULL COMMENT 'NORMAL/GROUP_BUY/SECKILL',
   order_status VARCHAR(32) NOT NULL COMMENT 'order status: WAIT_PAY/PAID/USED/CANCELED/REFUNDED',
   use_time DATETIME DEFAULT NULL COMMENT 'package use time',
@@ -187,6 +189,61 @@ CREATE TABLE IF NOT EXISTS payment_order (
   KEY idx_order_id (order_id),
   KEY idx_status_update_time (pay_status, update_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='payment order';
+
+CREATE TABLE IF NOT EXISTS coupon_template (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'coupon template id',
+  coupon_name VARCHAR(128) NOT NULL COMMENT 'coupon name',
+  coupon_type VARCHAR(32) NOT NULL COMMENT 'FULL_REDUCTION',
+  threshold_amount BIGINT NOT NULL DEFAULT 0 COMMENT 'minimum order amount in cents',
+  discount_amount BIGINT NOT NULL COMMENT 'discount amount in cents',
+  valid_start_time DATETIME NOT NULL COMMENT 'valid start time',
+  valid_end_time DATETIME NOT NULL COMMENT 'valid end time',
+  total_stock INT NOT NULL DEFAULT 0 COMMENT 'total coupon stock',
+  received_count INT NOT NULL DEFAULT 0 COMMENT 'received count',
+  template_status TINYINT NOT NULL DEFAULT 1 COMMENT '1 enabled, 0 disabled',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (id),
+  KEY idx_status_time (template_status, valid_start_time, valid_end_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='coupon template';
+
+CREATE TABLE IF NOT EXISTS user_coupon (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'user coupon id',
+  template_id BIGINT NOT NULL COMMENT 'coupon template id',
+  user_id BIGINT NOT NULL COMMENT 'user id',
+  coupon_name VARCHAR(128) NOT NULL COMMENT 'coupon name snapshot',
+  coupon_type VARCHAR(32) NOT NULL COMMENT 'coupon type snapshot',
+  threshold_amount BIGINT NOT NULL DEFAULT 0 COMMENT 'minimum order amount in cents',
+  discount_amount BIGINT NOT NULL COMMENT 'discount amount in cents',
+  coupon_status VARCHAR(32) NOT NULL COMMENT 'UNUSED/USED/EXPIRED',
+  used_order_id BIGINT DEFAULT NULL COMMENT 'used order id',
+  valid_start_time DATETIME NOT NULL COMMENT 'valid start time',
+  valid_end_time DATETIME NOT NULL COMMENT 'valid end time',
+  receive_time DATETIME NOT NULL COMMENT 'receive time',
+  use_time DATETIME DEFAULT NULL COMMENT 'use time',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (id),
+  KEY idx_user_status (user_id, coupon_status),
+  KEY idx_template_user (template_id, user_id),
+  KEY idx_used_order (used_order_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='user coupon';
+
+INSERT INTO coupon_template (
+  id, coupon_name, coupon_type, threshold_amount, discount_amount,
+  valid_start_time, valid_end_time, total_stock, received_count, template_status
+) VALUES (
+  1, 'local normal order 20 off 100', 'FULL_REDUCTION', 10000, 2000,
+  '2026-01-01 00:00:00', '2026-12-31 23:59:59', 1000, 0, 1
+) ON DUPLICATE KEY UPDATE
+  coupon_name = VALUES(coupon_name),
+  coupon_type = VALUES(coupon_type),
+  threshold_amount = VALUES(threshold_amount),
+  discount_amount = VALUES(discount_amount),
+  valid_start_time = VALUES(valid_start_time),
+  valid_end_time = VALUES(valid_end_time),
+  total_stock = VALUES(total_stock),
+  template_status = VALUES(template_status);
 
 INSERT INTO group_buy_activity (
   package_id, activity_name, target_count, user_take_limit, group_price,

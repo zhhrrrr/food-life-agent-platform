@@ -256,6 +256,7 @@ public class OrderController {
         command.setUserId(UserHolder.getUserId());
         command.setPackageId(request == null ? null : request.getPackageId());
         command.setQuantity(request == null ? null : request.getQuantity());
+        command.setUserCouponId(request == null ? null : request.getUserCouponId());
         return command;
     }
 
@@ -280,7 +281,10 @@ public class OrderController {
         CreateOrderResponseDTO response = new CreateOrderResponseDTO();
         response.setOrderId(result.getOrderId());
         response.setOrderNo(result.getOrderNo());
+        response.setTotalAmount(result.getTotalAmount());
+        response.setDiscountAmount(result.getDiscountAmount());
         response.setPayAmount(result.getPayAmount());
+        response.setUserCouponId(result.getUserCouponId());
         response.setOrderStatus(result.getOrderStatus());
         return response;
     }
@@ -621,7 +625,9 @@ public class OrderController {
         response.setCoverImageSnapshot(order.getCoverImageSnapshot());
         response.setQuantity(order.getQuantity());
         response.setTotalAmount(order.getTotalAmount());
+        response.setDiscountAmount(order.getDiscountAmount());
         response.setPayAmount(order.getPayAmount());
+        response.setUserCouponId(order.getUserCouponId());
         response.setTradeType(order.getTradeType());
         response.setOrderStatus(order.getOrderStatus());
         response.setUseTime(order.getUseTime());
@@ -639,7 +645,9 @@ public class OrderController {
         response.setPackageId(order.getPackageId());
         response.setQuantity(order.getQuantity());
         response.setTotalAmount(order.getTotalAmount());
+        response.setDiscountAmount(order.getDiscountAmount());
         response.setPayAmount(order.getPayAmount());
+        response.setUserCouponId(order.getUserCouponId());
         response.setTradeType(order.getTradeType());
         response.setOrderStatus(order.getOrderStatus());
         response.setUseTime(order.getUseTime());

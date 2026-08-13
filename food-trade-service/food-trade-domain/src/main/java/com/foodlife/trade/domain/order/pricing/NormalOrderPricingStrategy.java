@@ -16,9 +16,13 @@ public class NormalOrderPricingStrategy implements OrderPricingStrategy {
     @Override
     public OrderPricingResult apply(OrderCreateContext context, OrderCreateContext dynamicContext) {
         Long totalAmount = context.getPackageSnapshot().getPrice() * context.getCommand().getQuantity();
+        Long discountAmount = context.getUserCoupon() == null ? 0L : context.getUserCoupon().getDiscountAmount();
+        Long payAmount = Math.max(0L, totalAmount - discountAmount);
         OrderPricingResult result = new OrderPricingResult();
         result.setTotalAmount(totalAmount);
-        result.setPayAmount(totalAmount);
+        result.setDiscountAmount(discountAmount);
+        result.setPayAmount(payAmount);
+        result.setUserCouponId(context.getUserCoupon() == null ? null : context.getUserCoupon().getId());
         return result;
     }
 }

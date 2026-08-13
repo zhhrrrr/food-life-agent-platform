@@ -29,7 +29,9 @@ public class OrderFactory {
         order.setPackageId(snapshot.getPackageId());
         order.setQuantity(command.getQuantity());
         order.setTotalAmount(pricingResult.getTotalAmount());
+        order.setDiscountAmount(pricingResult.getDiscountAmount());
         order.setPayAmount(pricingResult.getPayAmount());
+        order.setUserCouponId(pricingResult.getUserCouponId());
         order.setTradeType(tradeType);
         order.setOrderStatus(OrderStatusConstants.WAIT_PAY);
         order.setCreateTime(now);

@@ -121,7 +121,9 @@ public class OrderRepository implements IOrderRepository {
         po.setPackageId(entity.getPackageId());
         po.setQuantity(entity.getQuantity());
         po.setTotalAmount(entity.getTotalAmount());
+        po.setDiscountAmount(entity.getDiscountAmount());
         po.setPayAmount(entity.getPayAmount());
+        po.setUserCouponId(entity.getUserCouponId());
         po.setTradeType(entity.getTradeType());
         po.setOrderStatus(entity.getOrderStatus());
         po.setUseTime(entity.getUseTime());
@@ -142,7 +144,9 @@ public class OrderRepository implements IOrderRepository {
         entity.setPackageId(po.getPackageId());
         entity.setQuantity(po.getQuantity());
         entity.setTotalAmount(po.getTotalAmount());
+        entity.setDiscountAmount(po.getDiscountAmount());
         entity.setPayAmount(po.getPayAmount());
+        entity.setUserCouponId(po.getUserCouponId());
         entity.setTradeType(po.getTradeType());
         entity.setOrderStatus(po.getOrderStatus());
         entity.setUseTime(po.getUseTime());
