@@ -70,6 +70,11 @@ public class NormalPackageStockMessageService {
         return result;
     }
 
+    public List<TradeLocalMessageEntity> queryMessages(Long orderId, String messageStatus, Integer limit) {
+        String bizId = orderId == null ? null : String.valueOf(orderId);
+        return messageRepository.queryMessages(bizId, trimToNull(messageStatus), normalizeLimit(limit));
+    }
+
     private void createAndExecute(String messageType, DiningOrderEntity order) {
         LocalDateTime now = LocalDateTime.now();
         String bizId = String.valueOf(order.getId());
@@ -191,5 +196,12 @@ public class NormalPackageStockMessageService {
             return DEFAULT_LIMIT;
         }
         return Math.min(limit, MAX_LIMIT);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
     }
 }

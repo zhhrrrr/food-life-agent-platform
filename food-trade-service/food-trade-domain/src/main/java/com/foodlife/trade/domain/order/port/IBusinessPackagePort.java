@@ -1,10 +1,15 @@
 package com.foodlife.trade.domain.order.port;
 
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
+import com.foodlife.trade.domain.order.normal.model.PackageStockChangeRecord;
+
+import java.util.List;
 
 public interface IBusinessPackagePort {
 
     PackageTradeSnapshot queryTradeSnapshot(Long packageId);
+
+    List<PackageStockChangeRecord> listStockChangeRecords(String operationIdPrefix, Long packageId, Integer limit);
 
     void occupyPackageStock(Long packageId, Integer quantity);
 

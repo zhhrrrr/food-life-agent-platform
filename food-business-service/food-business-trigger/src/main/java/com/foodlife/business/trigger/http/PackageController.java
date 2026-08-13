@@ -1,6 +1,7 @@
 package com.foodlife.business.trigger.http;
 
 import com.foodlife.business.domain.packagee.model.MealPackageEntity;
+import com.foodlife.business.domain.packagee.model.PackageStockChangeRecordEntity;
 import com.foodlife.business.domain.packagee.model.PackageStockChangeResult;
 import com.foodlife.business.domain.packagee.model.PackageTradeSnapshotEntity;
 import com.foodlife.business.domain.packagee.service.PackageDomainService;
@@ -41,6 +42,13 @@ public class PackageController {
             return Response.fail("404", "package not found");
         }
         return Response.success(snapshot);
+    }
+
+    @GetMapping("/stock-change-records")
+    public Response<List<PackageStockChangeRecordEntity>> listStockChangeRecords(@RequestParam(required = false) String operationIdPrefix,
+                                                                                 @RequestParam(required = false) Long packageId,
+                                                                                 @RequestParam(required = false) Integer limit) {
+        return Response.success(packageDomainService.listStockChangeRecords(operationIdPrefix, packageId, limit));
     }
 
     @PostMapping("/{packageId}/stock/occupy")

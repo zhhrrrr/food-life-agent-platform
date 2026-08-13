@@ -3,6 +3,7 @@ package com.foodlife.business.infrastructure.repository;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.foodlife.business.domain.packagee.model.MealPackageEntity;
+import com.foodlife.business.domain.packagee.model.PackageStockChangeRecordEntity;
 import com.foodlife.business.domain.packagee.model.PackageStockChangeResult;
 import com.foodlife.business.domain.packagee.model.PackageTradeSnapshotEntity;
 import com.foodlife.business.domain.packagee.repository.IPackageRepository;
@@ -172,6 +173,23 @@ public class PackageRepository implements IPackageRepository {
         return buildStockChangeResult(packageId, quantity, "ROLLBACK_SOLD");
     }
 
+    @Override
+    public List<PackageStockChangeRecordEntity> listStockChangeRecords(String operationIdPrefix, Long packageId, Integer limit) {
+        LambdaQueryWrapper<PackageStockChangeRecordPO> wrapper = new LambdaQueryWrapper<PackageStockChangeRecordPO>()
+                .orderByDesc(PackageStockChangeRecordPO::getId)
+                .last("limit " + limit);
+        if (!isBlank(operationIdPrefix)) {
+            wrapper.likeRight(PackageStockChangeRecordPO::getOperationId, operationIdPrefix);
+        }
+        if (packageId != null) {
+            wrapper.eq(PackageStockChangeRecordPO::getPackageId, packageId);
+        }
+        return packageStockChangeRecordMapper.selectList(wrapper)
+                .stream()
+                .map(this::toStockChangeRecordEntity)
+                .collect(Collectors.toList());
+    }
+
     private PackageStockChangeResult queryHandledOperationResult(String operationId, Long packageId, Integer quantity, String changeType) {
         if (isBlank(operationId)) {
             return null;
@@ -241,6 +259,19 @@ public class PackageRepository implements IPackageRepository {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private PackageStockChangeRecordEntity toStockChangeRecordEntity(PackageStockChangeRecordPO po) {
+        PackageStockChangeRecordEntity entity = new PackageStockChangeRecordEntity();
+        entity.setId(po.getId());
+        entity.setOperationId(po.getOperationId());
+        entity.setPackageId(po.getPackageId());
+        entity.setQuantity(po.getQuantity());
+        entity.setChangeType(po.getChangeType());
+        entity.setChangeStatus(po.getChangeStatus());
+        entity.setCreateTime(po.getCreateTime());
+        entity.setUpdateTime(po.getUpdateTime());
+        return entity;
     }
 
     private MealPackageEntity toEntity(MealPackagePO po) {
