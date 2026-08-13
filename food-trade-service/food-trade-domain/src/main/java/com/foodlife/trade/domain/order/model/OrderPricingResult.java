@@ -8,5 +8,7 @@ import java.io.Serializable;
 public class OrderPricingResult implements Serializable {
 
     private Long totalAmount;
+    private Long discountAmount;
     private Long payAmount;
+    private Long userCouponId;
 }

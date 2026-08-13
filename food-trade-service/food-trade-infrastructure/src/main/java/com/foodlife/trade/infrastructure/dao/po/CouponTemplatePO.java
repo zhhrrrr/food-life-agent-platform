@@ -9,23 +9,20 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("dining_order")
-public class DiningOrderPO implements Serializable {
+@TableName("coupon_template")
+public class CouponTemplatePO implements Serializable {
 
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
-    private String orderNo;
-    private Long userId;
-    private Long shopId;
-    private Long packageId;
-    private Integer quantity;
-    private Long totalAmount;
+    private String couponName;
+    private String couponType;
+    private Long thresholdAmount;
     private Long discountAmount;
-    private Long payAmount;
-    private Long userCouponId;
-    private String tradeType;
-    private String orderStatus;
-    private LocalDateTime useTime;
+    private LocalDateTime validStartTime;
+    private LocalDateTime validEndTime;
+    private Integer totalStock;
+    private Integer receivedCount;
+    private Integer templateStatus;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

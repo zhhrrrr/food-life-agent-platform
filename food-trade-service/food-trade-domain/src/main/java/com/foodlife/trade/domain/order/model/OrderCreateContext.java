@@ -10,4 +10,5 @@ public class OrderCreateContext implements Serializable {
     private String tradeType;
     private CreateOrderCommand command;
     private PackageTradeSnapshot packageSnapshot;
+    private com.foodlife.trade.domain.order.coupon.model.UserCouponEntity userCoupon;
 }

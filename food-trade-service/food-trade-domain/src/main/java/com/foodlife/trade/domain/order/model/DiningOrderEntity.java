@@ -15,7 +15,9 @@ public class DiningOrderEntity implements Serializable {
     private Long packageId;
     private Integer quantity;
     private Long totalAmount;
+    private Long discountAmount;
     private Long payAmount;
+    private Long userCouponId;
     private String tradeType;
     private String orderStatus;
     private LocalDateTime useTime;

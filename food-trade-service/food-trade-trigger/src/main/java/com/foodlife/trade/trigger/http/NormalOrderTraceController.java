@@ -58,7 +58,9 @@ public class NormalOrderTraceController {
         info.setPackageId(order.getPackageId());
         info.setQuantity(order.getQuantity());
         info.setTotalAmount(order.getTotalAmount());
+        info.setDiscountAmount(order.getDiscountAmount());
         info.setPayAmount(order.getPayAmount());
+        info.setUserCouponId(order.getUserCouponId());
         info.setTradeType(order.getTradeType());
         info.setOrderStatus(order.getOrderStatus());
         info.setUseTime(order.getUseTime());

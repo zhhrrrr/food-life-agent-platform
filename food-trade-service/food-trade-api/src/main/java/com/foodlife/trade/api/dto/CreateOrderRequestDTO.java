@@ -9,4 +9,5 @@ public class CreateOrderRequestDTO implements Serializable {
 
     private Long packageId;
     private Integer quantity;
+    private Long userCouponId;
 }
