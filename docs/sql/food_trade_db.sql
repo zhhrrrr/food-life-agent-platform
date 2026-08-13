@@ -166,6 +166,28 @@ CREATE TABLE IF NOT EXISTS trade_local_message (
   KEY idx_biz_id (biz_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='trade local reliable message';
 
+CREATE TABLE IF NOT EXISTS payment_order (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'payment order id',
+  pay_order_no VARCHAR(64) NOT NULL COMMENT 'platform payment order no',
+  order_id BIGINT NOT NULL COMMENT 'dining order id',
+  order_no VARCHAR(64) NOT NULL COMMENT 'dining order no',
+  user_id BIGINT NOT NULL COMMENT 'user id',
+  source VARCHAR(32) NOT NULL COMMENT 'payment source',
+  channel VARCHAR(32) NOT NULL COMMENT 'payment channel',
+  pay_amount BIGINT NOT NULL COMMENT 'pay amount in cents',
+  pay_status VARCHAR(32) NOT NULL COMMENT 'payment status: PREPARED/SUCCESS/CLOSED',
+  out_trade_no VARCHAR(128) DEFAULT NULL COMMENT 'external payment trade no',
+  pay_time DATETIME DEFAULT NULL COMMENT 'external payment success time',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_pay_order_no (pay_order_no),
+  UNIQUE KEY uk_order_user (order_id, user_id),
+  UNIQUE KEY uk_out_trade_no (out_trade_no),
+  KEY idx_order_id (order_id),
+  KEY idx_status_update_time (pay_status, update_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='payment order';
+
 INSERT INTO group_buy_activity (
   package_id, activity_name, target_count, user_take_limit, group_price,
   activity_status, valid_start_time, valid_end_time, stock
