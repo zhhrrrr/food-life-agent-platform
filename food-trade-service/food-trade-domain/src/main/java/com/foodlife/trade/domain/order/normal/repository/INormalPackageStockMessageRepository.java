@@ -15,6 +15,8 @@ public interface INormalPackageStockMessageRepository {
 
     List<TradeLocalMessageEntity> queryProcessingMessages(LocalDateTime timeoutBefore, int limit);
 
+    List<TradeLocalMessageEntity> queryMessages(String bizId, String messageStatus, int limit);
+
     boolean markMessageProcessing(Long messageId);
 
     boolean recoverProcessingMessage(Long messageId, LocalDateTime nextRetryTime);

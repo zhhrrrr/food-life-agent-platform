@@ -76,6 +76,24 @@ public class NormalPackageStockMessageRepository implements INormalPackageStockM
     }
 
     @Override
+    public List<TradeLocalMessageEntity> queryMessages(String bizId, String messageStatus, int limit) {
+        LambdaQueryWrapper<TradeLocalMessagePO> wrapper = new LambdaQueryWrapper<TradeLocalMessagePO>()
+                .in(TradeLocalMessagePO::getMessageType, normalMessageTypes())
+                .orderByDesc(TradeLocalMessagePO::getId)
+                .last("limit " + limit);
+        if (bizId != null && !bizId.trim().isEmpty()) {
+            wrapper.eq(TradeLocalMessagePO::getBizId, bizId.trim());
+        }
+        if (messageStatus != null && !messageStatus.trim().isEmpty()) {
+            wrapper.eq(TradeLocalMessagePO::getMessageStatus, messageStatus.trim());
+        }
+        return tradeLocalMessageMapper.selectList(wrapper)
+                .stream()
+                .map(this::toEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public boolean markMessageProcessing(Long messageId) {
         int updated = tradeLocalMessageMapper.update(null, new LambdaUpdateWrapper<TradeLocalMessagePO>()
                 .set(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.PROCESSING)

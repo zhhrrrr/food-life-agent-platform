@@ -1,12 +1,15 @@
 package com.foodlife.trade.infrastructure.port;
 
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
+import com.foodlife.trade.domain.order.normal.model.PackageStockChangeRecord;
 import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
 import com.foodlife.trade.types.response.Response;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -31,6 +34,22 @@ public class BusinessPackagePort implements IBusinessPackagePort {
             return null;
         }
         return toSnapshot(response.getData());
+    }
+
+    @Override
+    public List<PackageStockChangeRecord> listStockChangeRecords(String operationIdPrefix, Long packageId, Integer limit) {
+        StringBuilder url = new StringBuilder(businessServiceBaseUrl + "/api/package/stock-change-records?limit=" + (limit == null ? 20 : limit));
+        if (operationIdPrefix != null && !operationIdPrefix.trim().isEmpty()) {
+            url.append("&operationIdPrefix=").append(operationIdPrefix.trim());
+        }
+        if (packageId != null) {
+            url.append("&packageId=").append(packageId);
+        }
+        Response response = restTemplate.getForObject(url.toString(), Response.class);
+        if (response == null || !"0000".equals(response.getCode()) || response.getData() == null) {
+            return new ArrayList<>();
+        }
+        return toStockChangeRecords(response.getData());
     }
 
     @Override
@@ -118,5 +137,35 @@ public class BusinessPackagePort implements IBusinessPackagePort {
             return null;
         }
         return Integer.valueOf(String.valueOf(value));
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<PackageStockChangeRecord> toStockChangeRecords(Object data) {
+        List<Object> records = (List<Object>) data;
+        List<PackageStockChangeRecord> result = new ArrayList<>();
+        for (Object record : records) {
+            result.add(toStockChangeRecord((Map<String, Object>) record));
+        }
+        return result;
+    }
+
+    private PackageStockChangeRecord toStockChangeRecord(Map<String, Object> map) {
+        PackageStockChangeRecord record = new PackageStockChangeRecord();
+        record.setId(toLong(map.get("id")));
+        record.setOperationId((String) map.get("operationId"));
+        record.setPackageId(toLong(map.get("packageId")));
+        record.setQuantity(toInteger(map.get("quantity")));
+        record.setChangeType((String) map.get("changeType"));
+        record.setChangeStatus((String) map.get("changeStatus"));
+        record.setCreateTime(toLocalDateTime(map.get("createTime")));
+        record.setUpdateTime(toLocalDateTime(map.get("updateTime")));
+        return record;
+    }
+
+    private java.time.LocalDateTime toLocalDateTime(Object value) {
+        if (value == null) {
+            return null;
+        }
+        return java.time.LocalDateTime.parse(String.valueOf(value));
     }
 }
