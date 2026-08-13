@@ -7,6 +7,7 @@ import com.foodlife.trade.domain.order.groupbuy.refund.GroupBuyRefundStrategyRou
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.OrderRefundBehaviorEntity;
 import com.foodlife.trade.domain.order.model.OrderRefundCommandEntity;
+import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
 import com.foodlife.trade.domain.order.refund.factory.OrderRefundRuleFilterFactory;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import org.springframework.stereotype.Component;
@@ -16,11 +17,14 @@ public class RefundOrderRuleFilter implements ILogicHandler<OrderRefundCommandEn
 
     private final IOrderRepository orderRepository;
     private final GroupBuyRefundStrategyRouter groupBuyRefundStrategyRouter;
+    private final IBusinessPackagePort businessPackagePort;
 
     public RefundOrderRuleFilter(IOrderRepository orderRepository,
-                                 GroupBuyRefundStrategyRouter groupBuyRefundStrategyRouter) {
+                                 GroupBuyRefundStrategyRouter groupBuyRefundStrategyRouter,
+                                 IBusinessPackagePort businessPackagePort) {
         this.orderRepository = orderRepository;
         this.groupBuyRefundStrategyRouter = groupBuyRefundStrategyRouter;
+        this.businessPackagePort = businessPackagePort;
     }
 
     @Override
@@ -37,6 +41,10 @@ public class RefundOrderRuleFilter implements ILogicHandler<OrderRefundCommandEn
         boolean success = orderRepository.updateOrderStatus(order.getId(), OrderStatusConstants.PAID, OrderStatusConstants.REFUNDED);
         if (!success) {
             throw new IllegalArgumentException("order status can not refund");
+        }
+        if (TradeTypeConstants.NORMAL.equals(order.getTradeType())) {
+            businessPackagePort.rollbackPackageSold(order.getPackageId(), order.getQuantity());
+            businessPackagePort.releasePackageStock(order.getPackageId(), order.getQuantity());
         }
 
         OrderRefundBehaviorEntity behavior = new OrderRefundBehaviorEntity();

@@ -25,6 +25,7 @@ import com.foodlife.trade.domain.order.model.OrderSummaryEntity;
 import com.foodlife.trade.domain.order.model.OrderUseCommandEntity;
 import com.foodlife.trade.domain.order.model.OrderUseResult;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
+import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
 import com.foodlife.trade.domain.order.pricing.OrderPricingService;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityView;
@@ -62,6 +63,7 @@ public class OrderDomainService {
     private final SeckillOrderService seckillOrderService;
     private final ISeckillRepository seckillRepository;
     private final ISeckillStockRepository seckillStockRepository;
+    private final IBusinessPackagePort businessPackagePort;
 
     public OrderDomainService(IOrderRepository orderRepository,
                               OrderCreateCheckChain orderCreateCheckChain,
@@ -74,7 +76,8 @@ public class OrderDomainService {
                               IGroupBuyRepository groupBuyRepository,
                               SeckillOrderService seckillOrderService,
                               ISeckillRepository seckillRepository,
-                              ISeckillStockRepository seckillStockRepository) {
+                              ISeckillStockRepository seckillStockRepository,
+                              IBusinessPackagePort businessPackagePort) {
         this.orderRepository = orderRepository;
         this.orderCreateCheckChain = orderCreateCheckChain;
         this.orderPricingService = orderPricingService;
@@ -87,15 +90,19 @@ public class OrderDomainService {
         this.seckillOrderService = seckillOrderService;
         this.seckillRepository = seckillRepository;
         this.seckillStockRepository = seckillStockRepository;
+        this.businessPackagePort = businessPackagePort;
     }
 
     public CreateOrderResult createNormalOrder(CreateOrderCommand command) {
+        boolean packageStockOccupied = false;
         try {
             OrderCreateContext context = buildCreateContext(TradeTypeConstants.NORMAL, command);
             orderCreateCheckChain.checkNormalOrder(context);
 
             PackageTradeSnapshot snapshot = context.getPackageSnapshot();
             OrderPricingResult pricingResult = orderPricingService.calculate(context);
+            businessPackagePort.occupyPackageStock(command.getPackageId(), command.getQuantity());
+            packageStockOccupied = true;
 
             DiningOrderEntity order = orderFactory.createOrder(context.getTradeType(), command, snapshot, pricingResult);
             DiningOrderEntity savedOrder = orderRepository.saveOrder(order);
@@ -105,8 +112,10 @@ public class OrderDomainService {
 
             return buildCreateOrderResult(savedOrder);
         } catch (IllegalArgumentException e) {
+            releaseOccupiedPackageStock(packageStockOccupied, command);
             throw e;
         } catch (Exception e) {
+            releaseOccupiedPackageStock(packageStockOccupied, command);
             throw new IllegalStateException("normal order create failed", e);
         }
     }
@@ -180,6 +189,7 @@ public class OrderDomainService {
         if (!success) {
             throw new IllegalArgumentException("order status can not cancel");
         }
+        businessPackagePort.releasePackageStock(order.getPackageId(), order.getQuantity());
         return buildCancelOrderResult(order);
     }
 
@@ -287,6 +297,13 @@ public class OrderDomainService {
         result.setPayAmount(savedOrder.getPayAmount());
         result.setOrderStatus(savedOrder.getOrderStatus());
         return result;
+    }
+
+    private void releaseOccupiedPackageStock(boolean stockOccupied, CreateOrderCommand command) {
+        if (!stockOccupied || command == null || command.getPackageId() == null || command.getQuantity() == null) {
+            return;
+        }
+        businessPackagePort.releasePackageStock(command.getPackageId(), command.getQuantity());
     }
 
     private CancelOrderResult buildCancelOrderResult(DiningOrderEntity order) {

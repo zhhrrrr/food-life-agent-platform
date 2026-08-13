@@ -1,11 +1,13 @@
 package com.foodlife.business.trigger.http;
 
 import com.foodlife.business.domain.packagee.model.MealPackageEntity;
+import com.foodlife.business.domain.packagee.model.PackageStockChangeResult;
 import com.foodlife.business.domain.packagee.model.PackageTradeSnapshotEntity;
 import com.foodlife.business.domain.packagee.service.PackageDomainService;
 import com.foodlife.business.types.response.Response;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,5 +41,45 @@ public class PackageController {
             return Response.fail("404", "package not found");
         }
         return Response.success(snapshot);
+    }
+
+    @PostMapping("/{packageId}/stock/occupy")
+    public Response<PackageStockChangeResult> occupyPackageStock(@PathVariable Long packageId,
+                                                                 @RequestParam Integer quantity) {
+        try {
+            return Response.success(packageDomainService.occupyPackageStock(packageId, quantity));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
+    }
+
+    @PostMapping("/{packageId}/stock/release")
+    public Response<PackageStockChangeResult> releasePackageStock(@PathVariable Long packageId,
+                                                                 @RequestParam Integer quantity) {
+        try {
+            return Response.success(packageDomainService.releasePackageStock(packageId, quantity));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
+    }
+
+    @PostMapping("/{packageId}/sold/confirm")
+    public Response<PackageStockChangeResult> confirmPackageSold(@PathVariable Long packageId,
+                                                                @RequestParam Integer quantity) {
+        try {
+            return Response.success(packageDomainService.confirmPackageSold(packageId, quantity));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
+    }
+
+    @PostMapping("/{packageId}/sold/rollback")
+    public Response<PackageStockChangeResult> rollbackPackageSold(@PathVariable Long packageId,
+                                                                 @RequestParam Integer quantity) {
+        try {
+            return Response.success(packageDomainService.rollbackPackageSold(packageId, quantity));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
     }
 }

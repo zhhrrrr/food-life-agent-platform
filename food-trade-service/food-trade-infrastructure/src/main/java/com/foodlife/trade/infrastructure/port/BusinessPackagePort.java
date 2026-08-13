@@ -33,6 +33,37 @@ public class BusinessPackagePort implements IBusinessPackagePort {
         return toSnapshot(response.getData());
     }
 
+    @Override
+    public void occupyPackageStock(Long packageId, Integer quantity) {
+        postPackageStockAction(packageId, quantity, "/stock/occupy");
+    }
+
+    @Override
+    public void releasePackageStock(Long packageId, Integer quantity) {
+        postPackageStockAction(packageId, quantity, "/stock/release");
+    }
+
+    @Override
+    public void confirmPackageSold(Long packageId, Integer quantity) {
+        postPackageStockAction(packageId, quantity, "/sold/confirm");
+    }
+
+    @Override
+    public void rollbackPackageSold(Long packageId, Integer quantity) {
+        postPackageStockAction(packageId, quantity, "/sold/rollback");
+    }
+
+    private void postPackageStockAction(Long packageId, Integer quantity, String actionPath) {
+        Response response = restTemplate.postForObject(
+                businessServiceBaseUrl + "/api/package/" + packageId + actionPath + "?quantity=" + quantity,
+                null,
+                Response.class
+        );
+        if (response == null || !"0000".equals(response.getCode())) {
+            throw new IllegalStateException(response == null ? "package stock action failed" : response.getMessage());
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private PackageTradeSnapshot toSnapshot(Object data) {
         Map<String, Object> map = (Map<String, Object>) data;
