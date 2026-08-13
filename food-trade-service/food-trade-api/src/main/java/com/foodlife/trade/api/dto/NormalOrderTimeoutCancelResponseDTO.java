@@ -29,6 +29,7 @@ public class NormalOrderTimeoutCancelResponseDTO implements Serializable {
         private String beforeOrderStatus;
         private String afterOrderStatus;
         private Boolean canceled;
+        private Boolean couponReleased;
         private Boolean releaseStockMessageSent;
         private String failReason;
     }

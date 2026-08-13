@@ -103,12 +103,11 @@ public class CouponRepository implements ICouponRepository {
 
     @Override
     public boolean releaseUsedCoupon(Long userCouponId, Long userId, Long orderId) {
-        UserCouponPO updatePO = new UserCouponPO();
-        updatePO.setCouponStatus(CouponStatusConstants.UNUSED);
-        updatePO.setUsedOrderId(null);
-        updatePO.setUseTime(null);
-        updatePO.setUpdateTime(LocalDateTime.now());
-        int updated = userCouponMapper.update(updatePO, new LambdaUpdateWrapper<UserCouponPO>()
+        int updated = userCouponMapper.update(null, new LambdaUpdateWrapper<UserCouponPO>()
+                .set(UserCouponPO::getCouponStatus, CouponStatusConstants.UNUSED)
+                .set(UserCouponPO::getUsedOrderId, null)
+                .set(UserCouponPO::getUseTime, null)
+                .set(UserCouponPO::getUpdateTime, LocalDateTime.now())
                 .eq(UserCouponPO::getId, userCouponId)
                 .eq(UserCouponPO::getUserId, userId)
                 .eq(UserCouponPO::getUsedOrderId, orderId)

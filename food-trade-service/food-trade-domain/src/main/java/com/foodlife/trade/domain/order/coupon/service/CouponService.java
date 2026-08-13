@@ -86,11 +86,14 @@ public class CouponService {
         }
     }
 
-    public void releaseCoupon(Long userCouponId, Long userId, Long orderId) {
+    public boolean releaseCoupon(Long userCouponId, Long userId, Long orderId) {
         if (userCouponId == null) {
-            return;
+            return true;
         }
-        couponRepository.releaseUsedCoupon(userCouponId, userId, orderId);
+        if (userId == null || orderId == null) {
+            return false;
+        }
+        return couponRepository.releaseUsedCoupon(userCouponId, userId, orderId);
     }
 
     private void validateTemplateCanReceive(CouponTemplateEntity template, LocalDateTime now) {

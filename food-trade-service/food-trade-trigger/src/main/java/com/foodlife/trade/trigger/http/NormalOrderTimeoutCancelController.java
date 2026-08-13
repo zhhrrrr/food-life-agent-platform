@@ -52,6 +52,7 @@ public class NormalOrderTimeoutCancelController {
         detail.setBeforeOrderStatus(source.getBeforeOrderStatus());
         detail.setAfterOrderStatus(source.getAfterOrderStatus());
         detail.setCanceled(source.getCanceled());
+        detail.setCouponReleased(source.getCouponReleased());
         detail.setReleaseStockMessageSent(source.getReleaseStockMessageSent());
         detail.setFailReason(source.getFailReason());
         return detail;

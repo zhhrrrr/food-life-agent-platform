@@ -1,6 +1,7 @@
 package com.foodlife.trade.domain.order.normal.service;
 
 import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
+import com.foodlife.trade.domain.order.coupon.service.CouponService;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.normal.model.NormalOrderTimeoutCancelDetail;
 import com.foodlife.trade.domain.order.normal.model.NormalOrderTimeoutCancelResult;
@@ -21,11 +22,14 @@ public class NormalOrderTimeoutCancelService {
 
     private final IOrderRepository orderRepository;
     private final NormalPackageStockMessageService normalPackageStockMessageService;
+    private final CouponService couponService;
 
     public NormalOrderTimeoutCancelService(IOrderRepository orderRepository,
-                                           NormalPackageStockMessageService normalPackageStockMessageService) {
+                                           NormalPackageStockMessageService normalPackageStockMessageService,
+                                           CouponService couponService) {
         this.orderRepository = orderRepository;
         this.normalPackageStockMessageService = normalPackageStockMessageService;
+        this.couponService = couponService;
     }
 
     public NormalOrderTimeoutCancelResult cancelTimeoutOrders(Integer timeoutMinutes, Integer limit) {
@@ -73,6 +77,7 @@ public class NormalOrderTimeoutCancelService {
             }
 
             detail.setAfterOrderStatus(OrderStatusConstants.CANCELED);
+            detail.setCouponReleased(couponService.releaseCoupon(order.getUserCouponId(), order.getUserId(), order.getId()));
             normalPackageStockMessageService.releaseStock(order);
             detail.setReleaseStockMessageSent(true);
             return detail;
@@ -92,6 +97,7 @@ public class NormalOrderTimeoutCancelService {
         detail.setBeforeOrderStatus(order.getOrderStatus());
         detail.setAfterOrderStatus(order.getOrderStatus());
         detail.setCanceled(false);
+        detail.setCouponReleased(order.getUserCouponId() == null);
         detail.setReleaseStockMessageSent(false);
         return detail;
     }

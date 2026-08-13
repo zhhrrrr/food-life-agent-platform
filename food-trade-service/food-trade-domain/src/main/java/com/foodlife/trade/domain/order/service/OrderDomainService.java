@@ -208,6 +208,7 @@ public class OrderDomainService {
         if (!success) {
             throw new IllegalArgumentException("order status can not cancel");
         }
+        couponService.releaseCoupon(order.getUserCouponId(), order.getUserId(), order.getId());
         normalPackageStockMessageService.releaseStock(order);
         return buildCancelOrderResult(order);
     }
