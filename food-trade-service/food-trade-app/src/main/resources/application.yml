@@ -53,3 +53,4 @@ food:
       - /**
     exclude-paths:
       - /health
+      - /api/trade/pay/callback/**
