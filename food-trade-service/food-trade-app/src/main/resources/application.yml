@@ -35,6 +35,11 @@ food:
       timeout-compensation:
         enabled: true
         fixed-delay-ms: 60000
+    coupon:
+      expire-scan:
+        enabled: true
+        fixed-delay-ms: 60000
+        limit: 500
     seckill:
       order-request-process:
         enabled: true

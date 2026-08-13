@@ -1,9 +1,11 @@
 package com.foodlife.trade.trigger.http;
 
 import com.foodlife.auth.context.UserHolder;
+import com.foodlife.trade.api.dto.CouponExpireScanResponseDTO;
 import com.foodlife.trade.api.dto.CouponTemplateListResponseDTO;
 import com.foodlife.trade.api.dto.ReceiveCouponResponseDTO;
 import com.foodlife.trade.api.dto.UserCouponListResponseDTO;
+import com.foodlife.trade.domain.order.coupon.model.CouponExpireScanResult;
 import com.foodlife.trade.domain.order.coupon.model.CouponTemplateEntity;
 import com.foodlife.trade.domain.order.coupon.model.UserCouponEntity;
 import com.foodlife.trade.domain.order.coupon.service.CouponService;
@@ -59,6 +61,11 @@ public class CouponController {
         }
     }
 
+    @PostMapping("/expired/scan")
+    public Response<CouponExpireScanResponseDTO> scanExpiredCoupons(@RequestParam(required = false) Integer limit) {
+        return Response.success(toExpireScanResponse(couponService.expireUnusedCoupons(limit)));
+    }
+
     private CouponTemplateListResponseDTO.CouponTemplateInfo toTemplateInfo(CouponTemplateEntity source) {
         CouponTemplateListResponseDTO.CouponTemplateInfo info = new CouponTemplateListResponseDTO.CouponTemplateInfo();
         info.setTemplateId(source.getId());
@@ -104,5 +111,14 @@ public class CouponController {
         info.setReceiveTime(source.getReceiveTime());
         info.setUseTime(source.getUseTime());
         return info;
+    }
+
+    private CouponExpireScanResponseDTO toExpireScanResponse(CouponExpireScanResult source) {
+        CouponExpireScanResponseDTO response = new CouponExpireScanResponseDTO();
+        response.setScanTime(source.getScanTime());
+        response.setExpireBefore(source.getExpireBefore());
+        response.setExpiredCount(source.getExpiredCount());
+        response.setLimit(source.getLimit());
+        return response;
     }
 }

@@ -115,6 +115,27 @@ public class CouponRepository implements ICouponRepository {
         return updated > 0;
     }
 
+    @Override
+    public int expireUnusedCoupons(LocalDateTime now, Integer limit) {
+        return userCouponMapper.update(null, new LambdaUpdateWrapper<UserCouponPO>()
+                .set(UserCouponPO::getCouponStatus, CouponStatusConstants.EXPIRED)
+                .set(UserCouponPO::getUpdateTime, now)
+                .eq(UserCouponPO::getCouponStatus, CouponStatusConstants.UNUSED)
+                .lt(UserCouponPO::getValidEndTime, now)
+                .last("limit " + limit));
+    }
+
+    @Override
+    public int expireUserUnusedCoupons(Long userId, LocalDateTime now, Integer limit) {
+        return userCouponMapper.update(null, new LambdaUpdateWrapper<UserCouponPO>()
+                .set(UserCouponPO::getCouponStatus, CouponStatusConstants.EXPIRED)
+                .set(UserCouponPO::getUpdateTime, now)
+                .eq(UserCouponPO::getUserId, userId)
+                .eq(UserCouponPO::getCouponStatus, CouponStatusConstants.UNUSED)
+                .lt(UserCouponPO::getValidEndTime, now)
+                .last("limit " + limit));
+    }
+
     private CouponTemplateEntity toTemplateEntity(CouponTemplatePO po) {
         if (po == null) {
             return null;
