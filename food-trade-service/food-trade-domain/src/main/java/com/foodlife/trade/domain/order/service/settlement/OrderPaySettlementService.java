@@ -10,6 +10,7 @@ import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
 import com.foodlife.trade.domain.order.model.OrderPaySuccessEntity;
 import com.foodlife.trade.domain.order.model.OrderSettlementRuleCommandEntity;
 import com.foodlife.trade.domain.order.model.OrderSettlementRuleFilterBackEntity;
+import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import com.foodlife.trade.domain.order.seckill.repository.ISeckillRepository;
 import com.foodlife.trade.domain.order.settlement.factory.OrderSettlementRuleFilterFactory;
@@ -22,16 +23,19 @@ public class OrderPaySettlementService {
     private final IOrderRepository orderRepository;
     private final IGroupBuyRepository groupBuyRepository;
     private final ISeckillRepository seckillRepository;
+    private final IBusinessPackagePort businessPackagePort;
     private final BusinessLinkedList<OrderSettlementRuleCommandEntity, OrderSettlementRuleFilterFactory.DynamicContext, OrderSettlementRuleFilterBackEntity> orderPaySettlementRuleFilter;
 
     public OrderPaySettlementService(IOrderRepository orderRepository,
                                      IGroupBuyRepository groupBuyRepository,
                                      ISeckillRepository seckillRepository,
+                                     IBusinessPackagePort businessPackagePort,
                                      @Qualifier("orderPaySettlementRuleFilter")
                                      BusinessLinkedList<OrderSettlementRuleCommandEntity, OrderSettlementRuleFilterFactory.DynamicContext, OrderSettlementRuleFilterBackEntity> orderPaySettlementRuleFilter) {
         this.orderRepository = orderRepository;
         this.groupBuyRepository = groupBuyRepository;
         this.seckillRepository = seckillRepository;
+        this.businessPackagePort = businessPackagePort;
         this.orderPaySettlementRuleFilter = orderPaySettlementRuleFilter;
     }
 
@@ -59,6 +63,7 @@ public class OrderPaySettlementService {
             if (!success) {
                 throw new IllegalArgumentException("order status can not pay");
             }
+            businessPackagePort.confirmPackageSold(order.getPackageId(), order.getQuantity());
             return buildSettlementEntity(orderPaySuccessEntity, order, null);
         } catch (IllegalArgumentException e) {
             throw e;

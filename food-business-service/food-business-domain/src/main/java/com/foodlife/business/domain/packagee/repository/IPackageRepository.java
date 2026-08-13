@@ -1,6 +1,7 @@
 package com.foodlife.business.domain.packagee.repository;
 
 import com.foodlife.business.domain.packagee.model.MealPackageEntity;
+import com.foodlife.business.domain.packagee.model.PackageStockChangeResult;
 import com.foodlife.business.domain.packagee.model.PackageTradeSnapshotEntity;
 
 import java.util.List;
@@ -12,4 +13,12 @@ public interface IPackageRepository {
     List<MealPackageEntity> listByShopId(Long shopId);
 
     PackageTradeSnapshotEntity queryTradeSnapshot(Long packageId);
+
+    PackageStockChangeResult occupyPackageStock(Long packageId, Integer quantity);
+
+    PackageStockChangeResult releasePackageStock(Long packageId, Integer quantity);
+
+    PackageStockChangeResult confirmPackageSold(Long packageId, Integer quantity);
+
+    PackageStockChangeResult rollbackPackageSold(Long packageId, Integer quantity);
 }
