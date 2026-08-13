@@ -7,12 +7,15 @@ import com.foodlife.business.domain.packagee.model.PackageStockChangeResult;
 import com.foodlife.business.domain.packagee.model.PackageTradeSnapshotEntity;
 import com.foodlife.business.domain.packagee.repository.IPackageRepository;
 import com.foodlife.business.infrastructure.dao.IMealPackageMapper;
+import com.foodlife.business.infrastructure.dao.IPackageStockChangeRecordMapper;
 import com.foodlife.business.infrastructure.dao.IShopMapper;
 import com.foodlife.business.infrastructure.dao.po.MealPackagePO;
+import com.foodlife.business.infrastructure.dao.po.PackageStockChangeRecordPO;
 import com.foodlife.business.infrastructure.dao.po.ShopPO;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -21,10 +24,14 @@ public class PackageRepository implements IPackageRepository {
 
     private final IMealPackageMapper mealPackageMapper;
     private final IShopMapper shopMapper;
+    private final IPackageStockChangeRecordMapper packageStockChangeRecordMapper;
 
-    public PackageRepository(IMealPackageMapper mealPackageMapper, IShopMapper shopMapper) {
+    public PackageRepository(IMealPackageMapper mealPackageMapper,
+                             IShopMapper shopMapper,
+                             IPackageStockChangeRecordMapper packageStockChangeRecordMapper) {
         this.mealPackageMapper = mealPackageMapper;
         this.shopMapper = shopMapper;
+        this.packageStockChangeRecordMapper = packageStockChangeRecordMapper;
     }
 
     @Override
@@ -71,6 +78,16 @@ public class PackageRepository implements IPackageRepository {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public PackageStockChangeResult occupyPackageStock(Long packageId, Integer quantity) {
+        return occupyPackageStock(packageId, quantity, null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public PackageStockChangeResult occupyPackageStock(Long packageId, Integer quantity, String operationId) {
+        PackageStockChangeResult handledResult = queryHandledOperationResult(operationId, packageId, quantity, "OCCUPY");
+        if (handledResult != null) {
+            return handledResult;
+        }
         int updated = mealPackageMapper.update(null, new LambdaUpdateWrapper<MealPackagePO>()
                 .setSql("stock = stock - " + quantity)
                 .eq(MealPackagePO::getId, packageId)
@@ -79,24 +96,46 @@ public class PackageRepository implements IPackageRepository {
         if (updated <= 0) {
             throw new IllegalArgumentException("package stock not enough");
         }
+        saveHandledOperation(operationId, packageId, quantity, "OCCUPY");
         return buildStockChangeResult(packageId, quantity, "OCCUPY");
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public PackageStockChangeResult releasePackageStock(Long packageId, Integer quantity) {
+        return releasePackageStock(packageId, quantity, null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public PackageStockChangeResult releasePackageStock(Long packageId, Integer quantity, String operationId) {
+        PackageStockChangeResult handledResult = queryHandledOperationResult(operationId, packageId, quantity, "RELEASE");
+        if (handledResult != null) {
+            return handledResult;
+        }
         int updated = mealPackageMapper.update(null, new LambdaUpdateWrapper<MealPackagePO>()
                 .setSql("stock = stock + " + quantity)
                 .eq(MealPackagePO::getId, packageId));
         if (updated <= 0) {
             throw new IllegalArgumentException("package not found");
         }
+        saveHandledOperation(operationId, packageId, quantity, "RELEASE");
         return buildStockChangeResult(packageId, quantity, "RELEASE");
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public PackageStockChangeResult confirmPackageSold(Long packageId, Integer quantity) {
+        return confirmPackageSold(packageId, quantity, null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public PackageStockChangeResult confirmPackageSold(Long packageId, Integer quantity, String operationId) {
+        PackageStockChangeResult handledResult = queryHandledOperationResult(operationId, packageId, quantity, "CONFIRM_SOLD");
+        if (handledResult != null) {
+            return handledResult;
+        }
         int updated = mealPackageMapper.update(null, new LambdaUpdateWrapper<MealPackagePO>()
                 .setSql("sold = sold + " + quantity)
                 .eq(MealPackagePO::getId, packageId));
@@ -104,12 +143,23 @@ public class PackageRepository implements IPackageRepository {
             throw new IllegalArgumentException("package not found");
         }
         updateShopSold(packageId, quantity);
+        saveHandledOperation(operationId, packageId, quantity, "CONFIRM_SOLD");
         return buildStockChangeResult(packageId, quantity, "CONFIRM_SOLD");
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public PackageStockChangeResult rollbackPackageSold(Long packageId, Integer quantity) {
+        return rollbackPackageSold(packageId, quantity, null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public PackageStockChangeResult rollbackPackageSold(Long packageId, Integer quantity, String operationId) {
+        PackageStockChangeResult handledResult = queryHandledOperationResult(operationId, packageId, quantity, "ROLLBACK_SOLD");
+        if (handledResult != null) {
+            return handledResult;
+        }
         int updated = mealPackageMapper.update(null, new LambdaUpdateWrapper<MealPackagePO>()
                 .setSql("sold = sold - " + quantity)
                 .eq(MealPackagePO::getId, packageId)
@@ -118,7 +168,42 @@ public class PackageRepository implements IPackageRepository {
             throw new IllegalArgumentException("package sold can not rollback");
         }
         updateShopSold(packageId, -quantity);
+        saveHandledOperation(operationId, packageId, quantity, "ROLLBACK_SOLD");
         return buildStockChangeResult(packageId, quantity, "ROLLBACK_SOLD");
+    }
+
+    private PackageStockChangeResult queryHandledOperationResult(String operationId, Long packageId, Integer quantity, String changeType) {
+        if (isBlank(operationId)) {
+            return null;
+        }
+        PackageStockChangeRecordPO record = packageStockChangeRecordMapper.selectOne(new LambdaQueryWrapper<PackageStockChangeRecordPO>()
+                .eq(PackageStockChangeRecordPO::getOperationId, operationId)
+                .last("limit 1"));
+        if (record == null) {
+            return null;
+        }
+        if (!packageId.equals(record.getPackageId())
+                || !quantity.equals(record.getQuantity())
+                || !changeType.equals(record.getChangeType())) {
+            throw new IllegalArgumentException("operationId already used by another stock change");
+        }
+        return buildStockChangeResult(packageId, quantity, changeType);
+    }
+
+    private void saveHandledOperation(String operationId, Long packageId, Integer quantity, String changeType) {
+        if (isBlank(operationId)) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        PackageStockChangeRecordPO record = new PackageStockChangeRecordPO();
+        record.setOperationId(operationId);
+        record.setPackageId(packageId);
+        record.setQuantity(quantity);
+        record.setChangeType(changeType);
+        record.setChangeStatus("SUCCESS");
+        record.setCreateTime(now);
+        record.setUpdateTime(now);
+        packageStockChangeRecordMapper.insert(record);
     }
 
     private void updateShopSold(Long packageId, Integer quantityDelta) {
@@ -152,6 +237,10 @@ public class PackageRepository implements IPackageRepository {
             result.setSold(packagePO.getSold());
         }
         return result;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     private MealPackageEntity toEntity(MealPackagePO po) {

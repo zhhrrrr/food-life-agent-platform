@@ -23,6 +23,10 @@ mybatis-plus:
 
 food:
   trade:
+    normal:
+      package-stock-sync:
+        enabled: true
+        fixed-delay-ms: 60000
     group-buy:
       timeout-compensation:
         enabled: true

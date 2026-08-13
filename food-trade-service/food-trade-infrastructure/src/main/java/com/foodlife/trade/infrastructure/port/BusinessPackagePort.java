@@ -35,27 +35,51 @@ public class BusinessPackagePort implements IBusinessPackagePort {
 
     @Override
     public void occupyPackageStock(Long packageId, Integer quantity) {
-        postPackageStockAction(packageId, quantity, "/stock/occupy");
+        occupyPackageStock(packageId, quantity, null);
+    }
+
+    @Override
+    public void occupyPackageStock(Long packageId, Integer quantity, String operationId) {
+        postPackageStockAction(packageId, quantity, operationId, "/stock/occupy");
     }
 
     @Override
     public void releasePackageStock(Long packageId, Integer quantity) {
-        postPackageStockAction(packageId, quantity, "/stock/release");
+        releasePackageStock(packageId, quantity, null);
+    }
+
+    @Override
+    public void releasePackageStock(Long packageId, Integer quantity, String operationId) {
+        postPackageStockAction(packageId, quantity, operationId, "/stock/release");
     }
 
     @Override
     public void confirmPackageSold(Long packageId, Integer quantity) {
-        postPackageStockAction(packageId, quantity, "/sold/confirm");
+        confirmPackageSold(packageId, quantity, null);
+    }
+
+    @Override
+    public void confirmPackageSold(Long packageId, Integer quantity, String operationId) {
+        postPackageStockAction(packageId, quantity, operationId, "/sold/confirm");
     }
 
     @Override
     public void rollbackPackageSold(Long packageId, Integer quantity) {
-        postPackageStockAction(packageId, quantity, "/sold/rollback");
+        rollbackPackageSold(packageId, quantity, null);
     }
 
-    private void postPackageStockAction(Long packageId, Integer quantity, String actionPath) {
+    @Override
+    public void rollbackPackageSold(Long packageId, Integer quantity, String operationId) {
+        postPackageStockAction(packageId, quantity, operationId, "/sold/rollback");
+    }
+
+    private void postPackageStockAction(Long packageId, Integer quantity, String operationId, String actionPath) {
+        String url = businessServiceBaseUrl + "/api/package/" + packageId + actionPath + "?quantity=" + quantity;
+        if (operationId != null && !operationId.trim().isEmpty()) {
+            url = url + "&operationId=" + operationId.trim();
+        }
         Response response = restTemplate.postForObject(
-                businessServiceBaseUrl + "/api/package/" + packageId + actionPath + "?quantity=" + quantity,
+                url,
                 null,
                 Response.class
         );

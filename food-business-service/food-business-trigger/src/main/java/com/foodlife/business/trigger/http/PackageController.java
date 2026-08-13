@@ -45,9 +45,10 @@ public class PackageController {
 
     @PostMapping("/{packageId}/stock/occupy")
     public Response<PackageStockChangeResult> occupyPackageStock(@PathVariable Long packageId,
-                                                                 @RequestParam Integer quantity) {
+                                                                 @RequestParam Integer quantity,
+                                                                 @RequestParam(required = false) String operationId) {
         try {
-            return Response.success(packageDomainService.occupyPackageStock(packageId, quantity));
+            return Response.success(packageDomainService.occupyPackageStock(packageId, quantity, operationId));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
@@ -55,9 +56,10 @@ public class PackageController {
 
     @PostMapping("/{packageId}/stock/release")
     public Response<PackageStockChangeResult> releasePackageStock(@PathVariable Long packageId,
-                                                                 @RequestParam Integer quantity) {
+                                                                 @RequestParam Integer quantity,
+                                                                 @RequestParam(required = false) String operationId) {
         try {
-            return Response.success(packageDomainService.releasePackageStock(packageId, quantity));
+            return Response.success(packageDomainService.releasePackageStock(packageId, quantity, operationId));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
@@ -65,9 +67,10 @@ public class PackageController {
 
     @PostMapping("/{packageId}/sold/confirm")
     public Response<PackageStockChangeResult> confirmPackageSold(@PathVariable Long packageId,
-                                                                @RequestParam Integer quantity) {
+                                                                @RequestParam Integer quantity,
+                                                                @RequestParam(required = false) String operationId) {
         try {
-            return Response.success(packageDomainService.confirmPackageSold(packageId, quantity));
+            return Response.success(packageDomainService.confirmPackageSold(packageId, quantity, operationId));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
@@ -75,9 +78,10 @@ public class PackageController {
 
     @PostMapping("/{packageId}/sold/rollback")
     public Response<PackageStockChangeResult> rollbackPackageSold(@PathVariable Long packageId,
-                                                                 @RequestParam Integer quantity) {
+                                                                 @RequestParam Integer quantity,
+                                                                 @RequestParam(required = false) String operationId) {
         try {
-            return Response.success(packageDomainService.rollbackPackageSold(packageId, quantity));
+            return Response.success(packageDomainService.rollbackPackageSold(packageId, quantity, operationId));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }

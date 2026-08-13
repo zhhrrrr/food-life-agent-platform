@@ -25,6 +25,7 @@ import com.foodlife.trade.domain.order.model.OrderSummaryEntity;
 import com.foodlife.trade.domain.order.model.OrderUseCommandEntity;
 import com.foodlife.trade.domain.order.model.OrderUseResult;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
+import com.foodlife.trade.domain.order.normal.service.NormalPackageStockMessageService;
 import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
 import com.foodlife.trade.domain.order.pricing.OrderPricingService;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
@@ -64,6 +65,7 @@ public class OrderDomainService {
     private final ISeckillRepository seckillRepository;
     private final ISeckillStockRepository seckillStockRepository;
     private final IBusinessPackagePort businessPackagePort;
+    private final NormalPackageStockMessageService normalPackageStockMessageService;
 
     public OrderDomainService(IOrderRepository orderRepository,
                               OrderCreateCheckChain orderCreateCheckChain,
@@ -77,7 +79,8 @@ public class OrderDomainService {
                               SeckillOrderService seckillOrderService,
                               ISeckillRepository seckillRepository,
                               ISeckillStockRepository seckillStockRepository,
-                              IBusinessPackagePort businessPackagePort) {
+                              IBusinessPackagePort businessPackagePort,
+                              NormalPackageStockMessageService normalPackageStockMessageService) {
         this.orderRepository = orderRepository;
         this.orderCreateCheckChain = orderCreateCheckChain;
         this.orderPricingService = orderPricingService;
@@ -91,6 +94,7 @@ public class OrderDomainService {
         this.seckillRepository = seckillRepository;
         this.seckillStockRepository = seckillStockRepository;
         this.businessPackagePort = businessPackagePort;
+        this.normalPackageStockMessageService = normalPackageStockMessageService;
     }
 
     public CreateOrderResult createNormalOrder(CreateOrderCommand command) {
@@ -189,7 +193,7 @@ public class OrderDomainService {
         if (!success) {
             throw new IllegalArgumentException("order status can not cancel");
         }
-        businessPackagePort.releasePackageStock(order.getPackageId(), order.getQuantity());
+        normalPackageStockMessageService.releaseStock(order);
         return buildCancelOrderResult(order);
     }
 
