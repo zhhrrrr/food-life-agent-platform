@@ -2,6 +2,7 @@ package com.foodlife.trade.domain.order.coupon.service;
 
 import com.foodlife.trade.domain.order.coupon.constant.CouponStatusConstants;
 import com.foodlife.trade.domain.order.coupon.constant.CouponTemplateStatusConstants;
+import com.foodlife.trade.domain.order.coupon.model.CouponExpireScanResult;
 import com.foodlife.trade.domain.order.coupon.model.CouponTemplateEntity;
 import com.foodlife.trade.domain.order.coupon.model.UserCouponEntity;
 import com.foodlife.trade.domain.order.coupon.repository.ICouponRepository;
@@ -15,6 +16,8 @@ public class CouponService {
 
     private static final int DEFAULT_LIMIT = 20;
     private static final int MAX_LIMIT = 100;
+    private static final int DEFAULT_EXPIRE_LIMIT = 500;
+    private static final int MAX_EXPIRE_LIMIT = 2000;
 
     private final ICouponRepository couponRepository;
 
@@ -61,6 +64,7 @@ public class CouponService {
         if (userId == null) {
             throw new IllegalArgumentException("user not login");
         }
+        couponRepository.expireUserUnusedCoupons(userId, LocalDateTime.now(), normalizeLimit(limit));
         return couponRepository.listUserCoupons(userId, trimToNull(couponStatus), normalizeLimit(limit));
     }
 
@@ -94,6 +98,19 @@ public class CouponService {
             return false;
         }
         return couponRepository.releaseUsedCoupon(userCouponId, userId, orderId);
+    }
+
+    public CouponExpireScanResult expireUnusedCoupons(Integer limit) {
+        LocalDateTime now = LocalDateTime.now();
+        int normalizedLimit = normalizeExpireLimit(limit);
+        int expiredCount = couponRepository.expireUnusedCoupons(now, normalizedLimit);
+
+        CouponExpireScanResult result = new CouponExpireScanResult();
+        result.setScanTime(now);
+        result.setExpireBefore(now);
+        result.setExpiredCount(expiredCount);
+        result.setLimit(normalizedLimit);
+        return result;
     }
 
     private void validateTemplateCanReceive(CouponTemplateEntity template, LocalDateTime now) {
@@ -135,6 +152,13 @@ public class CouponService {
             return DEFAULT_LIMIT;
         }
         return Math.min(limit, MAX_LIMIT);
+    }
+
+    private int normalizeExpireLimit(Integer limit) {
+        if (limit == null || limit <= 0) {
+            return DEFAULT_EXPIRE_LIMIT;
+        }
+        return Math.min(limit, MAX_EXPIRE_LIMIT);
     }
 
     private String trimToNull(String value) {
