@@ -18,6 +18,10 @@ public class CouponTemplateListResponseDTO implements Serializable {
         private String couponType;
         private Long thresholdAmount;
         private Long discountAmount;
+        private String scopeType;
+        private Long scopeShopId;
+        private Long scopePackageId;
+        private Integer userReceiveLimit;
         private LocalDateTime validStartTime;
         private LocalDateTime validEndTime;
         private Integer totalStock;

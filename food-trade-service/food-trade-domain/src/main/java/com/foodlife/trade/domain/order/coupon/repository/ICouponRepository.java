@@ -14,6 +14,8 @@ public interface ICouponRepository {
 
     boolean increaseReceivedCount(Long templateId);
 
+    int countUserReceivedCoupons(Long templateId, Long userId);
+
     UserCouponEntity saveUserCoupon(UserCouponEntity userCoupon);
 
     UserCouponEntity findUserCouponByIdAndUserId(Long userCouponId, Long userId);

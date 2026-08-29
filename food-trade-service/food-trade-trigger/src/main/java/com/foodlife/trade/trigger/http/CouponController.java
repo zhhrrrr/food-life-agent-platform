@@ -73,6 +73,10 @@ public class CouponController {
         info.setCouponType(source.getCouponType());
         info.setThresholdAmount(source.getThresholdAmount());
         info.setDiscountAmount(source.getDiscountAmount());
+        info.setScopeType(source.getScopeType());
+        info.setScopeShopId(source.getScopeShopId());
+        info.setScopePackageId(source.getScopePackageId());
+        info.setUserReceiveLimit(source.getUserReceiveLimit());
         info.setValidStartTime(source.getValidStartTime());
         info.setValidEndTime(source.getValidEndTime());
         info.setTotalStock(source.getTotalStock());
@@ -89,6 +93,9 @@ public class CouponController {
         response.setCouponName(source.getCouponName());
         response.setThresholdAmount(source.getThresholdAmount());
         response.setDiscountAmount(source.getDiscountAmount());
+        response.setScopeType(source.getScopeType());
+        response.setScopeShopId(source.getScopeShopId());
+        response.setScopePackageId(source.getScopePackageId());
         response.setCouponStatus(source.getCouponStatus());
         response.setValidStartTime(source.getValidStartTime());
         response.setValidEndTime(source.getValidEndTime());
@@ -104,6 +111,9 @@ public class CouponController {
         info.setCouponType(source.getCouponType());
         info.setThresholdAmount(source.getThresholdAmount());
         info.setDiscountAmount(source.getDiscountAmount());
+        info.setScopeType(source.getScopeType());
+        info.setScopeShopId(source.getScopeShopId());
+        info.setScopePackageId(source.getScopePackageId());
         info.setCouponStatus(source.getCouponStatus());
         info.setUsedOrderId(source.getUsedOrderId());
         info.setValidStartTime(source.getValidStartTime());

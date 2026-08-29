@@ -14,6 +14,9 @@ public class ReceiveCouponResponseDTO implements Serializable {
     private String couponName;
     private Long thresholdAmount;
     private Long discountAmount;
+    private String scopeType;
+    private Long scopeShopId;
+    private Long scopePackageId;
     private String couponStatus;
     private LocalDateTime validStartTime;
     private LocalDateTime validEndTime;
