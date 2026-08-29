@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS seckill_order (
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
   PRIMARY KEY (id),
   UNIQUE KEY uk_order_id (order_id),
-  UNIQUE KEY uk_user_activity (user_id, activity_id),
+  KEY idx_user_activity_status (user_id, activity_id, order_status),
   KEY idx_activity_id (activity_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='seckill participant order';
 
