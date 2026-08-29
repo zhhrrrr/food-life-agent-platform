@@ -32,6 +32,8 @@ public class UniqueRefundRuleFilter implements ILogicHandler<OrderRefundCommandE
         behavior.setOrderNo(order.getOrderNo());
         behavior.setOrderStatus(order.getOrderStatus());
         behavior.setRefundBehavior(behaviorEnum);
+        behavior.setUserCouponId(order.getUserCouponId());
+        behavior.setCouponReturned(false);
         return behavior;
     }
 }

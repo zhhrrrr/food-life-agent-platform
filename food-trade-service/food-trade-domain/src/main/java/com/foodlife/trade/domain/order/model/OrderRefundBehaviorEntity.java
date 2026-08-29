@@ -17,6 +17,9 @@ public class OrderRefundBehaviorEntity implements Serializable {
     private String orderNo;
     private String orderStatus;
     private RefundBehaviorEnum refundBehavior;
+    private Long userCouponId;
+    private Boolean couponReturned;
+    private String couponReturnStatus;
     private String teamId;
     private Long activityId;
     private String teamStatus;

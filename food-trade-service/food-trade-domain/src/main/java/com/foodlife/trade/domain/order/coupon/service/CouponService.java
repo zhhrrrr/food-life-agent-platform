@@ -4,6 +4,7 @@ import com.foodlife.trade.domain.order.coupon.constant.CouponStatusConstants;
 import com.foodlife.trade.domain.order.coupon.constant.CouponScopeConstants;
 import com.foodlife.trade.domain.order.coupon.constant.CouponTemplateStatusConstants;
 import com.foodlife.trade.domain.order.coupon.model.CouponExpireScanResult;
+import com.foodlife.trade.domain.order.coupon.model.CouponReleaseResult;
 import com.foodlife.trade.domain.order.coupon.model.CouponTemplateEntity;
 import com.foodlife.trade.domain.order.coupon.model.UserCouponEntity;
 import com.foodlife.trade.domain.order.coupon.repository.ICouponRepository;
@@ -99,13 +100,27 @@ public class CouponService {
     }
 
     public boolean releaseCoupon(Long userCouponId, Long userId, Long orderId) {
+        return releaseCouponWithResult(userCouponId, userId, orderId).getReleased();
+    }
+
+    public CouponReleaseResult releaseCouponWithResult(Long userCouponId, Long userId, Long orderId) {
+        CouponReleaseResult result = new CouponReleaseResult();
+        result.setUserCouponId(userCouponId);
         if (userCouponId == null) {
-            return true;
+            result.setReleased(true);
+            return result;
         }
         if (userId == null || orderId == null) {
-            return false;
+            result.setReleased(false);
+            return result;
         }
-        return couponRepository.releaseUsedCoupon(userCouponId, userId, orderId);
+        LocalDateTime now = LocalDateTime.now();
+        UserCouponEntity coupon = couponRepository.findUserCouponByIdAndUserId(userCouponId, userId);
+        String releaseStatus = resolveReleaseStatus(coupon, now);
+        boolean released = couponRepository.releaseUsedCoupon(userCouponId, userId, orderId, releaseStatus);
+        result.setReleased(released);
+        result.setCouponStatus(released ? releaseStatus : coupon == null ? null : coupon.getCouponStatus());
+        return result;
     }
 
     public CouponExpireScanResult expireUnusedCoupons(Integer limit) {
@@ -169,6 +184,13 @@ public class CouponService {
             throw new IllegalArgumentException("coupon threshold not reached");
         }
         validateCouponScope(coupon, packageSnapshot);
+    }
+
+    private String resolveReleaseStatus(UserCouponEntity coupon, LocalDateTime now) {
+        if (coupon != null && coupon.getValidEndTime() != null && coupon.getValidEndTime().isBefore(now)) {
+            return CouponStatusConstants.EXPIRED;
+        }
+        return CouponStatusConstants.UNUSED;
     }
 
     private void validateCouponScope(UserCouponEntity coupon, PackageTradeSnapshot packageSnapshot) {
