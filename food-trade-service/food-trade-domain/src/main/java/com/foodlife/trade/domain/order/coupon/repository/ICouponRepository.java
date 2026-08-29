@@ -24,7 +24,7 @@ public interface ICouponRepository {
 
     boolean markCouponUsed(Long userCouponId, Long userId, Long orderId, LocalDateTime useTime);
 
-    boolean releaseUsedCoupon(Long userCouponId, Long userId, Long orderId);
+    boolean releaseUsedCoupon(Long userCouponId, Long userId, Long orderId, String couponStatus);
 
     int expireUnusedCoupons(LocalDateTime now, Integer limit);
 

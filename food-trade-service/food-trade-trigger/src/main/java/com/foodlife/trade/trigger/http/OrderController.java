@@ -571,6 +571,9 @@ public class OrderController {
         response.setOrderNo(result.getOrderNo());
         response.setOrderStatus(result.getOrderStatus());
         response.setRefundBehavior(result.getRefundBehavior().getCode());
+        response.setUserCouponId(result.getUserCouponId());
+        response.setCouponReturned(result.getCouponReturned());
+        response.setCouponReturnStatus(result.getCouponReturnStatus());
         response.setTeamId(result.getTeamId());
         response.setActivityId(result.getActivityId());
         response.setTeamStatus(result.getTeamStatus());
