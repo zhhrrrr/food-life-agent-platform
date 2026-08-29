@@ -22,6 +22,8 @@ mybatis-plus:
       id-type: auto
 
 food:
+  trade-service:
+    base-url: http://localhost:8301
   auth:
     enabled: true
     token-header: authorization
