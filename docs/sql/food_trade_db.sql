@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS seckill_order (
   package_id BIGINT NOT NULL COMMENT 'meal package id',
   order_id BIGINT NOT NULL COMMENT 'dining order id',
   order_no VARCHAR(64) NOT NULL COMMENT 'dining order no',
-  order_status VARCHAR(32) NOT NULL COMMENT 'seckill order status: WAIT_PAY/PAID/CANCELED',
+  order_status VARCHAR(32) NOT NULL COMMENT 'seckill order status: WAIT_PAY/PAID/CANCELED/REFUNDED',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
   PRIMARY KEY (id),

@@ -12,6 +12,7 @@ import com.foodlife.trade.domain.order.model.OrderRefundCommandEntity;
 import com.foodlife.trade.domain.order.normal.service.NormalPackageStockMessageService;
 import com.foodlife.trade.domain.order.refund.factory.OrderRefundRuleFilterFactory;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
+import com.foodlife.trade.domain.order.seckill.refund.SeckillRefundStrategyRouter;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -19,15 +20,18 @@ public class RefundOrderRuleFilter implements ILogicHandler<OrderRefundCommandEn
 
     private final IOrderRepository orderRepository;
     private final GroupBuyRefundStrategyRouter groupBuyRefundStrategyRouter;
+    private final SeckillRefundStrategyRouter seckillRefundStrategyRouter;
     private final NormalPackageStockMessageService normalPackageStockMessageService;
     private final CouponService couponService;
 
     public RefundOrderRuleFilter(IOrderRepository orderRepository,
                                  GroupBuyRefundStrategyRouter groupBuyRefundStrategyRouter,
+                                 SeckillRefundStrategyRouter seckillRefundStrategyRouter,
                                  NormalPackageStockMessageService normalPackageStockMessageService,
                                  CouponService couponService) {
         this.orderRepository = orderRepository;
         this.groupBuyRefundStrategyRouter = groupBuyRefundStrategyRouter;
+        this.seckillRefundStrategyRouter = seckillRefundStrategyRouter;
         this.normalPackageStockMessageService = normalPackageStockMessageService;
         this.couponService = couponService;
     }
@@ -41,6 +45,9 @@ public class RefundOrderRuleFilter implements ILogicHandler<OrderRefundCommandEn
         }
         if (TradeTypeConstants.GROUP_BUY.equals(order.getTradeType())) {
             return groupBuyRefundStrategyRouter.refundOrder(requestParameter, order);
+        }
+        if (TradeTypeConstants.SECKILL.equals(order.getTradeType())) {
+            return seckillRefundStrategyRouter.refundOrder(requestParameter, order);
         }
 
         boolean success = orderRepository.updateOrderStatus(order.getId(), OrderStatusConstants.PAID, OrderStatusConstants.REFUNDED);
