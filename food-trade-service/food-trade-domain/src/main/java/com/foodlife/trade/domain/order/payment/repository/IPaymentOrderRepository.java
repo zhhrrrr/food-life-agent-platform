@@ -13,4 +13,8 @@ public interface IPaymentOrderRepository {
     PaymentOrderEntity findByPayOrderNo(String payOrderNo);
 
     boolean markPaySuccess(String payOrderNo, String fromStatus, String outTradeNo, LocalDateTime payTime);
+
+    java.util.List<PaymentOrderEntity> listTimeoutPreparedPaymentOrders(LocalDateTime timeoutBefore, Integer limit);
+
+    boolean markPayClosed(String payOrderNo, String fromStatus);
 }

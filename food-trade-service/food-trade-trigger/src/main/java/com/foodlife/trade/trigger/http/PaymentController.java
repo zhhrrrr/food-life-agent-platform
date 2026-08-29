@@ -5,29 +5,39 @@ import com.foodlife.trade.api.dto.PayOrderResponseDTO;
 import com.foodlife.trade.api.dto.PaymentCallbackRequestDTO;
 import com.foodlife.trade.api.dto.PaymentCallbackResponseDTO;
 import com.foodlife.trade.api.dto.PaymentOrderResponseDTO;
+import com.foodlife.trade.api.dto.PaymentOrderTimeoutCloseResponseDTO;
 import com.foodlife.trade.api.dto.PaymentPrepareRequestDTO;
 import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
 import com.foodlife.trade.domain.order.payment.model.PaymentCallbackCommand;
 import com.foodlife.trade.domain.order.payment.model.PaymentCallbackResult;
 import com.foodlife.trade.domain.order.payment.model.PaymentOrderEntity;
+import com.foodlife.trade.domain.order.payment.model.PaymentOrderTimeoutCloseDetail;
+import com.foodlife.trade.domain.order.payment.model.PaymentOrderTimeoutCloseResult;
 import com.foodlife.trade.domain.order.payment.model.PaymentPrepareCommand;
 import com.foodlife.trade.domain.order.payment.service.PaymentOrderService;
+import com.foodlife.trade.domain.order.payment.service.PaymentOrderTimeoutCloseService;
 import com.foodlife.trade.types.response.Response;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/trade/pay")
 public class PaymentController {
 
     private final PaymentOrderService paymentOrderService;
+    private final PaymentOrderTimeoutCloseService paymentOrderTimeoutCloseService;
 
-    public PaymentController(PaymentOrderService paymentOrderService) {
+    public PaymentController(PaymentOrderService paymentOrderService,
+                             PaymentOrderTimeoutCloseService paymentOrderTimeoutCloseService) {
         this.paymentOrderService = paymentOrderService;
+        this.paymentOrderTimeoutCloseService = paymentOrderTimeoutCloseService;
     }
 
     @PostMapping("/orders/{orderId}/prepare")
@@ -60,6 +70,13 @@ public class PaymentController {
         }
     }
 
+    @PostMapping("/orders/timeout/close")
+    public Response<PaymentOrderTimeoutCloseResponseDTO> closeTimeoutPreparedPaymentOrders(@RequestParam(required = false) Integer timeoutMinutes,
+                                                                                           @RequestParam(required = false) Integer limit) {
+        PaymentOrderTimeoutCloseResult result = paymentOrderTimeoutCloseService.closeTimeoutPreparedPaymentOrders(timeoutMinutes, limit);
+        return Response.success(toTimeoutCloseResponse(result));
+    }
+
     private PaymentPrepareCommand toPrepareCommand(Long orderId, PaymentPrepareRequestDTO request) {
         PaymentPrepareCommand command = new PaymentPrepareCommand();
         command.setUserId(UserHolder.getUserId());
@@ -84,6 +101,36 @@ public class PaymentController {
         response.setPaymentOrder(toPaymentOrderResponse(result.getPaymentOrder()));
         response.setSettlement(toPayResponse(result.getSettlement()));
         return response;
+    }
+
+    private PaymentOrderTimeoutCloseResponseDTO toTimeoutCloseResponse(PaymentOrderTimeoutCloseResult result) {
+        PaymentOrderTimeoutCloseResponseDTO response = new PaymentOrderTimeoutCloseResponseDTO();
+        response.setCompensateTime(result.getCompensateTime());
+        response.setTimeoutMinutes(result.getTimeoutMinutes());
+        response.setTimeoutBefore(result.getTimeoutBefore());
+        response.setScannedPaymentCount(result.getScannedPaymentCount());
+        response.setClosedPaymentCount(result.getClosedPaymentCount());
+        response.setCanceledOrderCount(result.getCanceledOrderCount());
+        response.setFailedPaymentCount(result.getFailedPaymentCount());
+        response.setDetails(result.getDetails().stream().map(this::toTimeoutCloseDetail).collect(Collectors.toList()));
+        return response;
+    }
+
+    private PaymentOrderTimeoutCloseResponseDTO.Detail toTimeoutCloseDetail(PaymentOrderTimeoutCloseDetail source) {
+        PaymentOrderTimeoutCloseResponseDTO.Detail detail = new PaymentOrderTimeoutCloseResponseDTO.Detail();
+        detail.setPayOrderNo(source.getPayOrderNo());
+        detail.setOrderId(source.getOrderId());
+        detail.setOrderNo(source.getOrderNo());
+        detail.setUserId(source.getUserId());
+        detail.setPayAmount(source.getPayAmount());
+        detail.setBeforePayStatus(source.getBeforePayStatus());
+        detail.setAfterPayStatus(source.getAfterPayStatus());
+        detail.setPaymentClosed(source.getPaymentClosed());
+        detail.setBeforeOrderStatus(source.getBeforeOrderStatus());
+        detail.setAfterOrderStatus(source.getAfterOrderStatus());
+        detail.setOrderCanceled(source.getOrderCanceled());
+        detail.setFailReason(source.getFailReason());
+        return detail;
     }
 
     private PaymentOrderResponseDTO toPaymentOrderResponse(PaymentOrderEntity source) {

@@ -2,6 +2,7 @@ package com.foodlife.trade.infrastructure.repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.foodlife.trade.domain.order.payment.constant.PaymentOrderStatusConstants;
 import com.foodlife.trade.domain.order.payment.model.PaymentOrderEntity;
 import com.foodlife.trade.domain.order.payment.repository.IPaymentOrderRepository;
 import com.foodlife.trade.infrastructure.dao.IPaymentOrderMapper;
@@ -9,6 +10,8 @@ import com.foodlife.trade.infrastructure.dao.po.PaymentOrderPO;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Repository
 public class PaymentOrderRepository implements IPaymentOrderRepository {
@@ -47,9 +50,32 @@ public class PaymentOrderRepository implements IPaymentOrderRepository {
     @Override
     public boolean markPaySuccess(String payOrderNo, String fromStatus, String outTradeNo, LocalDateTime payTime) {
         PaymentOrderPO updatePO = new PaymentOrderPO();
-        updatePO.setPayStatus(com.foodlife.trade.domain.order.payment.constant.PaymentOrderStatusConstants.SUCCESS);
+        updatePO.setPayStatus(PaymentOrderStatusConstants.SUCCESS);
         updatePO.setOutTradeNo(outTradeNo);
         updatePO.setPayTime(payTime);
+        updatePO.setUpdateTime(LocalDateTime.now());
+        int updated = paymentOrderMapper.update(updatePO, new LambdaUpdateWrapper<PaymentOrderPO>()
+                .eq(PaymentOrderPO::getPayOrderNo, payOrderNo)
+                .eq(PaymentOrderPO::getPayStatus, fromStatus));
+        return updated > 0;
+    }
+
+    @Override
+    public List<PaymentOrderEntity> listTimeoutPreparedPaymentOrders(LocalDateTime timeoutBefore, Integer limit) {
+        return paymentOrderMapper.selectList(new LambdaQueryWrapper<PaymentOrderPO>()
+                        .eq(PaymentOrderPO::getPayStatus, PaymentOrderStatusConstants.PREPARED)
+                        .le(PaymentOrderPO::getCreateTime, timeoutBefore)
+                        .orderByAsc(PaymentOrderPO::getId)
+                        .last("limit " + limit))
+                .stream()
+                .map(this::toEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public boolean markPayClosed(String payOrderNo, String fromStatus) {
+        PaymentOrderPO updatePO = new PaymentOrderPO();
+        updatePO.setPayStatus(PaymentOrderStatusConstants.CLOSED);
         updatePO.setUpdateTime(LocalDateTime.now());
         int updated = paymentOrderMapper.update(updatePO, new LambdaUpdateWrapper<PaymentOrderPO>()
                 .eq(PaymentOrderPO::getPayOrderNo, payOrderNo)
