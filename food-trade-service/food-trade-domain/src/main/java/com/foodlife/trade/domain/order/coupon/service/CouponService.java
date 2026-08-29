@@ -1,12 +1,15 @@
 package com.foodlife.trade.domain.order.coupon.service;
 
 import com.foodlife.trade.domain.order.coupon.constant.CouponStatusConstants;
+import com.foodlife.trade.domain.order.coupon.constant.CouponScopeConstants;
 import com.foodlife.trade.domain.order.coupon.constant.CouponTemplateStatusConstants;
 import com.foodlife.trade.domain.order.coupon.model.CouponExpireScanResult;
 import com.foodlife.trade.domain.order.coupon.model.CouponTemplateEntity;
 import com.foodlife.trade.domain.order.coupon.model.UserCouponEntity;
 import com.foodlife.trade.domain.order.coupon.repository.ICouponRepository;
+import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,6 +32,7 @@ public class CouponService {
         return couponRepository.listAvailableTemplates(LocalDateTime.now(), normalizeLimit(limit));
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public UserCouponEntity receiveCoupon(Long templateId, Long userId) {
         if (userId == null) {
             throw new IllegalArgumentException("user not login");
@@ -40,6 +44,7 @@ public class CouponService {
         LocalDateTime now = LocalDateTime.now();
         CouponTemplateEntity template = couponRepository.findTemplateById(templateId);
         validateTemplateCanReceive(template, now);
+        validateUserReceiveLimit(template, userId);
         if (!couponRepository.increaseReceivedCount(templateId)) {
             throw new IllegalArgumentException("coupon stock not enough");
         }
@@ -51,6 +56,9 @@ public class CouponService {
         userCoupon.setCouponType(template.getCouponType());
         userCoupon.setThresholdAmount(template.getThresholdAmount());
         userCoupon.setDiscountAmount(template.getDiscountAmount());
+        userCoupon.setScopeType(normalizeScopeType(template.getScopeType()));
+        userCoupon.setScopeShopId(template.getScopeShopId());
+        userCoupon.setScopePackageId(template.getScopePackageId());
         userCoupon.setCouponStatus(CouponStatusConstants.UNUSED);
         userCoupon.setValidStartTime(template.getValidStartTime());
         userCoupon.setValidEndTime(template.getValidEndTime());
@@ -68,7 +76,7 @@ public class CouponService {
         return couponRepository.listUserCoupons(userId, trimToNull(couponStatus), normalizeLimit(limit));
     }
 
-    public UserCouponEntity validateCouponForOrder(Long userCouponId, Long userId, Long orderAmount) {
+    public UserCouponEntity validateCouponForOrder(Long userCouponId, Long userId, Long orderAmount, PackageTradeSnapshot packageSnapshot) {
         if (userCouponId == null) {
             return null;
         }
@@ -76,7 +84,7 @@ public class CouponService {
             throw new IllegalArgumentException("user not login");
         }
         UserCouponEntity coupon = couponRepository.findUserCouponByIdAndUserId(userCouponId, userId);
-        validateCouponCanUse(coupon, orderAmount, LocalDateTime.now());
+        validateCouponCanUse(coupon, orderAmount, packageSnapshot, LocalDateTime.now());
         return coupon;
     }
 
@@ -120,6 +128,9 @@ public class CouponService {
         if (template.getTemplateStatus() == null || template.getTemplateStatus() != CouponTemplateStatusConstants.ENABLED) {
             throw new IllegalArgumentException("coupon template disabled");
         }
+        if (template.getValidStartTime() != null && template.getValidStartTime().isAfter(now)) {
+            throw new IllegalArgumentException("coupon template not started");
+        }
         if (template.getValidEndTime() != null && template.getValidEndTime().isBefore(now)) {
             throw new IllegalArgumentException("coupon template expired");
         }
@@ -127,9 +138,21 @@ public class CouponService {
                 && template.getReceivedCount() >= template.getTotalStock()) {
             throw new IllegalArgumentException("coupon stock not enough");
         }
+        validateScopeConfig(template.getScopeType(), template.getScopeShopId(), template.getScopePackageId());
     }
 
-    private void validateCouponCanUse(UserCouponEntity coupon, Long orderAmount, LocalDateTime now) {
+    private void validateUserReceiveLimit(CouponTemplateEntity template, Long userId) {
+        Integer userReceiveLimit = template.getUserReceiveLimit();
+        if (userReceiveLimit == null || userReceiveLimit <= 0) {
+            return;
+        }
+        int receivedCount = couponRepository.countUserReceivedCoupons(template.getId(), userId);
+        if (receivedCount >= userReceiveLimit) {
+            throw new IllegalArgumentException("coupon receive limit reached");
+        }
+    }
+
+    private void validateCouponCanUse(UserCouponEntity coupon, Long orderAmount, PackageTradeSnapshot packageSnapshot, LocalDateTime now) {
         if (coupon == null) {
             throw new IllegalArgumentException("coupon not found");
         }
@@ -145,6 +168,57 @@ public class CouponService {
         if (orderAmount == null || orderAmount < coupon.getThresholdAmount()) {
             throw new IllegalArgumentException("coupon threshold not reached");
         }
+        validateCouponScope(coupon, packageSnapshot);
+    }
+
+    private void validateCouponScope(UserCouponEntity coupon, PackageTradeSnapshot packageSnapshot) {
+        if (packageSnapshot == null) {
+            throw new IllegalArgumentException("package snapshot required");
+        }
+        String scopeType = normalizeScopeType(coupon.getScopeType());
+        if (CouponScopeConstants.ALL.equals(scopeType)) {
+            return;
+        }
+        if (CouponScopeConstants.SHOP.equals(scopeType)) {
+            if (coupon.getScopeShopId() == null || !coupon.getScopeShopId().equals(packageSnapshot.getShopId())) {
+                throw new IllegalArgumentException("coupon scope not matched");
+            }
+            return;
+        }
+        if (CouponScopeConstants.PACKAGE.equals(scopeType)) {
+            if (coupon.getScopePackageId() == null || !coupon.getScopePackageId().equals(packageSnapshot.getPackageId())) {
+                throw new IllegalArgumentException("coupon scope not matched");
+            }
+            return;
+        }
+        throw new IllegalArgumentException("coupon scope invalid");
+    }
+
+    private void validateScopeConfig(String rawScopeType, Long scopeShopId, Long scopePackageId) {
+        String scopeType = normalizeScopeType(rawScopeType);
+        if (CouponScopeConstants.ALL.equals(scopeType)) {
+            return;
+        }
+        if (CouponScopeConstants.SHOP.equals(scopeType)) {
+            if (scopeShopId == null) {
+                throw new IllegalArgumentException("coupon scope shop required");
+            }
+            return;
+        }
+        if (CouponScopeConstants.PACKAGE.equals(scopeType)) {
+            if (scopePackageId == null) {
+                throw new IllegalArgumentException("coupon scope package required");
+            }
+            return;
+        }
+        throw new IllegalArgumentException("coupon scope invalid");
+    }
+
+    private String normalizeScopeType(String scopeType) {
+        if (scopeType == null || scopeType.trim().isEmpty()) {
+            return CouponScopeConstants.ALL;
+        }
+        return scopeType.trim().toUpperCase();
     }
 
     private int normalizeLimit(Integer limit) {

@@ -196,6 +196,10 @@ CREATE TABLE IF NOT EXISTS coupon_template (
   coupon_type VARCHAR(32) NOT NULL COMMENT 'FULL_REDUCTION',
   threshold_amount BIGINT NOT NULL DEFAULT 0 COMMENT 'minimum order amount in cents',
   discount_amount BIGINT NOT NULL COMMENT 'discount amount in cents',
+  scope_type VARCHAR(32) NOT NULL DEFAULT 'ALL' COMMENT 'ALL/SHOP/PACKAGE',
+  scope_shop_id BIGINT DEFAULT NULL COMMENT 'available shop id when scope_type=SHOP',
+  scope_package_id BIGINT DEFAULT NULL COMMENT 'available package id when scope_type=PACKAGE',
+  user_receive_limit INT NOT NULL DEFAULT 1 COMMENT 'receive limit per user, 0 means unlimited',
   valid_start_time DATETIME NOT NULL COMMENT 'valid start time',
   valid_end_time DATETIME NOT NULL COMMENT 'valid end time',
   total_stock INT NOT NULL DEFAULT 0 COMMENT 'total coupon stock',
@@ -215,6 +219,9 @@ CREATE TABLE IF NOT EXISTS user_coupon (
   coupon_type VARCHAR(32) NOT NULL COMMENT 'coupon type snapshot',
   threshold_amount BIGINT NOT NULL DEFAULT 0 COMMENT 'minimum order amount in cents',
   discount_amount BIGINT NOT NULL COMMENT 'discount amount in cents',
+  scope_type VARCHAR(32) NOT NULL DEFAULT 'ALL' COMMENT 'ALL/SHOP/PACKAGE snapshot',
+  scope_shop_id BIGINT DEFAULT NULL COMMENT 'available shop id snapshot',
+  scope_package_id BIGINT DEFAULT NULL COMMENT 'available package id snapshot',
   coupon_status VARCHAR(32) NOT NULL COMMENT 'UNUSED/USED/EXPIRED',
   used_order_id BIGINT DEFAULT NULL COMMENT 'used order id',
   valid_start_time DATETIME NOT NULL COMMENT 'valid start time',
@@ -231,15 +238,21 @@ CREATE TABLE IF NOT EXISTS user_coupon (
 
 INSERT INTO coupon_template (
   id, coupon_name, coupon_type, threshold_amount, discount_amount,
+  scope_type, scope_shop_id, scope_package_id, user_receive_limit,
   valid_start_time, valid_end_time, total_stock, received_count, template_status
 ) VALUES (
   1, 'local normal order 20 off 100', 'FULL_REDUCTION', 10000, 2000,
+  'PACKAGE', NULL, 1, 1,
   '2026-01-01 00:00:00', '2026-12-31 23:59:59', 1000, 0, 1
 ) ON DUPLICATE KEY UPDATE
   coupon_name = VALUES(coupon_name),
   coupon_type = VALUES(coupon_type),
   threshold_amount = VALUES(threshold_amount),
   discount_amount = VALUES(discount_amount),
+  scope_type = VALUES(scope_type),
+  scope_shop_id = VALUES(scope_shop_id),
+  scope_package_id = VALUES(scope_package_id),
+  user_receive_limit = VALUES(user_receive_limit),
   valid_start_time = VALUES(valid_start_time),
   valid_end_time = VALUES(valid_end_time),
   total_stock = VALUES(total_stock),

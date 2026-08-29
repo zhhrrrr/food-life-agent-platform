@@ -110,7 +110,7 @@ public class OrderDomainService {
             OrderCreateContext context = buildCreateContext(TradeTypeConstants.NORMAL, command);
             orderCreateCheckChain.checkNormalOrder(context);
             Long totalAmount = context.getPackageSnapshot().getPrice() * command.getQuantity();
-            UserCouponEntity userCoupon = couponService.validateCouponForOrder(command.getUserCouponId(), command.getUserId(), totalAmount);
+            UserCouponEntity userCoupon = couponService.validateCouponForOrder(command.getUserCouponId(), command.getUserId(), totalAmount, context.getPackageSnapshot());
             context.setUserCoupon(userCoupon);
 
             PackageTradeSnapshot snapshot = context.getPackageSnapshot();

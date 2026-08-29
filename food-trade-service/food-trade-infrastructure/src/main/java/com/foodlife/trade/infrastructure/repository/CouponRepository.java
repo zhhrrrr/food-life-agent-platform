@@ -60,6 +60,14 @@ public class CouponRepository implements ICouponRepository {
     }
 
     @Override
+    public int countUserReceivedCoupons(Long templateId, Long userId) {
+        Long count = userCouponMapper.selectCount(new LambdaQueryWrapper<UserCouponPO>()
+                .eq(UserCouponPO::getTemplateId, templateId)
+                .eq(UserCouponPO::getUserId, userId));
+        return count == null ? 0 : count.intValue();
+    }
+
+    @Override
     public UserCouponEntity saveUserCoupon(UserCouponEntity userCoupon) {
         UserCouponPO po = toUserCouponPO(userCoupon);
         userCouponMapper.insert(po);
@@ -146,6 +154,10 @@ public class CouponRepository implements ICouponRepository {
         entity.setCouponType(po.getCouponType());
         entity.setThresholdAmount(po.getThresholdAmount());
         entity.setDiscountAmount(po.getDiscountAmount());
+        entity.setScopeType(po.getScopeType());
+        entity.setScopeShopId(po.getScopeShopId());
+        entity.setScopePackageId(po.getScopePackageId());
+        entity.setUserReceiveLimit(po.getUserReceiveLimit());
         entity.setValidStartTime(po.getValidStartTime());
         entity.setValidEndTime(po.getValidEndTime());
         entity.setTotalStock(po.getTotalStock());
@@ -165,6 +177,9 @@ public class CouponRepository implements ICouponRepository {
         po.setCouponType(entity.getCouponType());
         po.setThresholdAmount(entity.getThresholdAmount());
         po.setDiscountAmount(entity.getDiscountAmount());
+        po.setScopeType(entity.getScopeType());
+        po.setScopeShopId(entity.getScopeShopId());
+        po.setScopePackageId(entity.getScopePackageId());
         po.setCouponStatus(entity.getCouponStatus());
         po.setUsedOrderId(entity.getUsedOrderId());
         po.setValidStartTime(entity.getValidStartTime());
@@ -188,6 +203,9 @@ public class CouponRepository implements ICouponRepository {
         entity.setCouponType(po.getCouponType());
         entity.setThresholdAmount(po.getThresholdAmount());
         entity.setDiscountAmount(po.getDiscountAmount());
+        entity.setScopeType(po.getScopeType());
+        entity.setScopeShopId(po.getScopeShopId());
+        entity.setScopePackageId(po.getScopePackageId());
         entity.setCouponStatus(po.getCouponStatus());
         entity.setUsedOrderId(po.getUsedOrderId());
         entity.setValidStartTime(po.getValidStartTime());
