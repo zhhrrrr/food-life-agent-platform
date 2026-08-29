@@ -19,6 +19,8 @@ public class ShopReviewEntity implements Serializable {
     private String content;
     private String images;
     private Integer reviewStatus;
+    private Integer shopCommentsBefore;
+    private Integer shopScoreBefore;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }
