@@ -357,6 +357,39 @@ public class SeckillRepository implements ISeckillRepository {
                 .eq(SeckillActivityPO::getId, seckillOrderPO.getActivityId()));
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SeckillOrderEntity refundPaidSeckillOrder(DiningOrderEntity order) {
+        SeckillOrderPO seckillOrderPO = querySeckillOrderPO(order);
+
+        int orderUpdated = diningOrderMapper.update(null, new LambdaUpdateWrapper<DiningOrderPO>()
+                .set(DiningOrderPO::getOrderStatus, OrderStatusConstants.REFUNDED)
+                .set(DiningOrderPO::getUpdateTime, LocalDateTime.now())
+                .eq(DiningOrderPO::getId, order.getId())
+                .eq(DiningOrderPO::getUserId, order.getUserId())
+                .eq(DiningOrderPO::getOrderStatus, OrderStatusConstants.PAID));
+        if (orderUpdated <= 0) {
+            throw new IllegalArgumentException("order status can not refund");
+        }
+
+        int seckillOrderUpdated = seckillOrderMapper.update(null, new LambdaUpdateWrapper<SeckillOrderPO>()
+                .set(SeckillOrderPO::getOrderStatus, OrderStatusConstants.REFUNDED)
+                .set(SeckillOrderPO::getUpdateTime, LocalDateTime.now())
+                .eq(SeckillOrderPO::getId, seckillOrderPO.getId())
+                .eq(SeckillOrderPO::getOrderStatus, OrderStatusConstants.PAID));
+        if (seckillOrderUpdated <= 0) {
+            throw new IllegalArgumentException("seckill order status can not refund");
+        }
+
+        seckillActivityMapper.update(null, new LambdaUpdateWrapper<SeckillActivityPO>()
+                .setSql("stock = stock + 1")
+                .set(SeckillActivityPO::getUpdateTime, LocalDateTime.now())
+                .eq(SeckillActivityPO::getId, seckillOrderPO.getActivityId()));
+
+        SeckillOrderPO refreshed = seckillOrderMapper.selectById(seckillOrderPO.getId());
+        return toSeckillOrderEntity(refreshed);
+    }
+
     private SeckillOrderPO querySeckillOrderPO(DiningOrderEntity order) {
         SeckillOrderPO po = seckillOrderMapper.selectOne(new LambdaQueryWrapper<SeckillOrderPO>()
                 .eq(SeckillOrderPO::getOrderId, order.getId())
@@ -366,6 +399,23 @@ public class SeckillRepository implements ISeckillRepository {
             throw new IllegalArgumentException("seckill order not found");
         }
         return po;
+    }
+
+    private SeckillOrderEntity toSeckillOrderEntity(SeckillOrderPO po) {
+        if (po == null) {
+            return null;
+        }
+        SeckillOrderEntity entity = new SeckillOrderEntity();
+        entity.setId(po.getId());
+        entity.setUserId(po.getUserId());
+        entity.setActivityId(po.getActivityId());
+        entity.setPackageId(po.getPackageId());
+        entity.setOrderId(po.getOrderId());
+        entity.setOrderNo(po.getOrderNo());
+        entity.setOrderStatus(po.getOrderStatus());
+        entity.setCreateTime(po.getCreateTime());
+        entity.setUpdateTime(po.getUpdateTime());
+        return entity;
     }
 
     private SeckillActivityEntity toActivityEntity(SeckillActivityPO po) {

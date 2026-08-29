@@ -4,6 +4,7 @@ import com.foodlife.trade.domain.order.message.model.TradeLocalMessageEntity;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityEntity;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityView;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderAggregate;
+import com.foodlife.trade.domain.order.seckill.model.SeckillOrderEntity;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestEntity;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderResult;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
@@ -58,4 +59,6 @@ public interface ISeckillRepository {
     Long settlementSeckillPaySuccess(DiningOrderEntity order);
 
     void cancelUnpaidSeckillOrder(DiningOrderEntity order);
+
+    SeckillOrderEntity refundPaidSeckillOrder(DiningOrderEntity order);
 }
