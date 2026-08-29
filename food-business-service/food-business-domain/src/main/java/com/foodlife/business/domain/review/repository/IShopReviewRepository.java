@@ -10,7 +10,13 @@ public interface IShopReviewRepository {
 
     ShopReviewEntity saveReview(ShopReviewEntity review);
 
+    ShopReviewEntity findActiveReviewByIdAndUserId(Long reviewId, Long userId);
+
+    ShopReviewEntity hideReview(Long reviewId, Long userId);
+
     List<ShopReviewEntity> listByShopId(Long shopId, Long lastId, Integer limit);
+
+    List<ShopReviewEntity> listByPackageId(Long packageId, Long lastId, Integer limit);
 
     List<ShopReviewEntity> listByUserId(Long userId, Long lastId, Integer limit);
 }

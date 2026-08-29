@@ -80,6 +80,8 @@ CREATE TABLE IF NOT EXISTS shop_review (
   content VARCHAR(500) NOT NULL COMMENT 'review content',
   images VARCHAR(1024) DEFAULT '' COMMENT 'review images',
   review_status TINYINT NOT NULL DEFAULT 1 COMMENT '1 normal, 0 hidden',
+  shop_comments_before INT DEFAULT NULL COMMENT 'shop comments before review',
+  shop_score_before INT DEFAULT NULL COMMENT 'shop score before review',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
   PRIMARY KEY (id),

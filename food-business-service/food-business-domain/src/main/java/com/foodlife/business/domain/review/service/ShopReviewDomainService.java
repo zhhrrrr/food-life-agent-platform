@@ -53,16 +53,41 @@ public class ShopReviewDomainService {
         if (shopId == null) {
             throw new IllegalArgumentException("shopId required");
         }
-        return buildListResult(shopReviewRepository.listByShopId(shopId, lastId, normalizePageSize(pageSize) + 1),
-                normalizePageSize(pageSize));
+        int normalizedPageSize = normalizePageSize(pageSize);
+        return buildListResult(shopReviewRepository.listByShopId(shopId, lastId, normalizedPageSize + 1),
+                normalizedPageSize);
+    }
+
+    public ShopReviewListResult listPackageReviews(Long packageId, Long lastId, Integer pageSize) {
+        if (packageId == null) {
+            throw new IllegalArgumentException("packageId required");
+        }
+        int normalizedPageSize = normalizePageSize(pageSize);
+        return buildListResult(shopReviewRepository.listByPackageId(packageId, lastId, normalizedPageSize + 1),
+                normalizedPageSize);
     }
 
     public ShopReviewListResult listMyReviews(Long userId, Long lastId, Integer pageSize) {
         if (userId == null) {
             throw new IllegalArgumentException("user not login");
         }
-        return buildListResult(shopReviewRepository.listByUserId(userId, lastId, normalizePageSize(pageSize) + 1),
-                normalizePageSize(pageSize));
+        int normalizedPageSize = normalizePageSize(pageSize);
+        return buildListResult(shopReviewRepository.listByUserId(userId, lastId, normalizedPageSize + 1),
+                normalizedPageSize);
+    }
+
+    public ShopReviewEntity hideMyReview(Long reviewId, Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("user not login");
+        }
+        if (reviewId == null) {
+            throw new IllegalArgumentException("reviewId required");
+        }
+        ShopReviewEntity review = shopReviewRepository.findActiveReviewByIdAndUserId(reviewId, userId);
+        if (review == null) {
+            throw new IllegalArgumentException("review not found");
+        }
+        return shopReviewRepository.hideReview(reviewId, userId);
     }
 
     private void checkCreateCommand(CreateShopReviewCommand command) {
