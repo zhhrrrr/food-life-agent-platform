@@ -2,6 +2,7 @@ package com.foodlife.trade.domain.order.repository;
 
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
+import com.foodlife.trade.domain.order.model.OrderUseRecordEntity;
 
 public interface IOrderRepository {
 
@@ -18,6 +19,10 @@ public interface IOrderRepository {
     boolean updateOrderStatus(Long orderId, String fromStatus, String toStatus);
 
     boolean updateOrderStatusAndUseTime(Long orderId, String fromStatus, String toStatus, java.time.LocalDateTime useTime);
+
+    OrderUseRecordEntity usePaidOrder(DiningOrderEntity order, java.time.LocalDateTime useTime, String useRecordNo);
+
+    OrderUseRecordEntity findUseRecordByOrderId(Long orderId);
 
     java.util.List<DiningOrderItemEntity> listOrderItems(Long orderId);
 }

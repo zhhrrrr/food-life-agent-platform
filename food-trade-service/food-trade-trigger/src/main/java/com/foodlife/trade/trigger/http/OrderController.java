@@ -587,6 +587,7 @@ public class OrderController {
         OrderUseCommandEntity command = new OrderUseCommandEntity();
         command.setUserId(UserHolder.getUserId());
         command.setOrderId(orderId);
+        command.setUseSource("MOCK_MERCHANT");
         return command;
     }
 
@@ -595,8 +596,13 @@ public class OrderController {
         response.setUserId(result.getUserId());
         response.setOrderId(result.getOrderId());
         response.setOrderNo(result.getOrderNo());
+        response.setShopId(result.getShopId());
+        response.setPackageId(result.getPackageId());
+        response.setTradeType(result.getTradeType());
         response.setOrderStatus(result.getOrderStatus());
         response.setUseBehavior(result.getUseBehavior());
+        response.setUseRecordId(result.getUseRecordId());
+        response.setUseRecordNo(result.getUseRecordNo());
         response.setUseTime(result.getUseTime());
         return response;
     }

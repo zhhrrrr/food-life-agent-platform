@@ -8,6 +8,7 @@ public final class GroupBuyStatusConstants {
     public static final String COMPLETE_FAIL = "COMPLETE_FAIL";
     public static final String LOCKED = "LOCKED";
     public static final String PAID = "PAID";
+    public static final String USED = "USED";
     public static final String CANCELED = "CANCELED";
     public static final String REFUNDED = "REFUNDED";
 
