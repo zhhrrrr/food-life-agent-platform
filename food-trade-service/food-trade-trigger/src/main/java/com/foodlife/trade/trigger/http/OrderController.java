@@ -200,9 +200,11 @@ public class OrderController {
 
     @GetMapping("/orders")
     public Response<OrderListResponseDTO> queryUserOrderList(@RequestParam(required = false) Long lastId,
-                                                             @RequestParam(required = false) Integer pageSize) {
+                                                             @RequestParam(required = false) Integer pageSize,
+                                                             @RequestParam(required = false) String tradeType,
+                                                             @RequestParam(required = false) String orderStatus) {
         try {
-            OrderListResult result = orderDomainService.queryUserOrderList(UserHolder.getUserId(), lastId, pageSize);
+            OrderListResult result = orderDomainService.queryUserOrderList(UserHolder.getUserId(), lastId, pageSize, tradeType, orderStatus);
             return Response.success(toOrderListResponse(result));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
@@ -619,6 +621,8 @@ public class OrderController {
         response.setOrders(result.getOrders().stream().map(this::toOrderInfoResponse).collect(Collectors.toList()));
         response.setHasMore(result.getHasMore());
         response.setLastId(result.getLastId());
+        response.setTradeType(result.getTradeType());
+        response.setOrderStatus(result.getOrderStatus());
         return response;
     }
 

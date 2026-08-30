@@ -11,4 +11,6 @@ public class OrderListResult implements Serializable {
     private List<OrderSummaryEntity> orders;
     private Boolean hasMore;
     private Long lastId;
+    private String tradeType;
+    private String orderStatus;
 }
