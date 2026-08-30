@@ -48,11 +48,27 @@ import com.foodlife.trade.domain.order.service.settlement.OrderPaySettlementServ
 import com.foodlife.trade.domain.order.service.use.OrderUseService;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
 @Service
 public class OrderDomainService {
 
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 50;
+    private static final Set<String> SUPPORT_TRADE_TYPES = new HashSet<String>(Arrays.asList(
+            TradeTypeConstants.NORMAL,
+            TradeTypeConstants.GROUP_BUY,
+            TradeTypeConstants.SECKILL
+    ));
+    private static final Set<String> SUPPORT_ORDER_STATUSES = new HashSet<String>(Arrays.asList(
+            OrderStatusConstants.WAIT_PAY,
+            OrderStatusConstants.PAID,
+            OrderStatusConstants.USED,
+            OrderStatusConstants.CANCELED,
+            OrderStatusConstants.REFUNDED
+    ));
 
     private final IOrderRepository orderRepository;
     private final OrderCreateCheckChain orderCreateCheckChain;
@@ -157,11 +173,19 @@ public class OrderDomainService {
     }
 
     public OrderListResult queryUserOrderList(Long userId, Long lastId, Integer pageSize) {
+        return queryUserOrderList(userId, lastId, pageSize, null, null);
+    }
+
+    public OrderListResult queryUserOrderList(Long userId, Long lastId, Integer pageSize,
+                                              String tradeType, String orderStatus) {
         if (userId == null) {
             throw new IllegalArgumentException("user not login");
         }
         int normalizedPageSize = normalizePageSize(pageSize);
-        java.util.List<DiningOrderEntity> orders = orderRepository.listUserOrders(userId, lastId, normalizedPageSize + 1);
+        String normalizedTradeType = normalizeTradeType(tradeType);
+        String normalizedOrderStatus = normalizeOrderStatus(orderStatus);
+        java.util.List<DiningOrderEntity> orders = orderRepository.listUserOrders(userId, lastId, normalizedPageSize + 1,
+                normalizedTradeType, normalizedOrderStatus);
         boolean hasMore = orders.size() > normalizedPageSize;
         if (hasMore) {
             orders = orders.subList(0, normalizedPageSize);
@@ -175,6 +199,8 @@ public class OrderDomainService {
         result.setOrders(summaries);
         result.setHasMore(hasMore);
         result.setLastId(summaries.isEmpty() ? null : summaries.get(summaries.size() - 1).getOrderId());
+        result.setTradeType(normalizedTradeType);
+        result.setOrderStatus(normalizedOrderStatus);
         return result;
     }
 
@@ -274,6 +300,28 @@ public class OrderDomainService {
             return DEFAULT_PAGE_SIZE;
         }
         return Math.min(pageSize, MAX_PAGE_SIZE);
+    }
+
+    private String normalizeTradeType(String tradeType) {
+        if (tradeType == null || tradeType.trim().isEmpty()) {
+            return null;
+        }
+        String value = tradeType.trim().toUpperCase();
+        if (!SUPPORT_TRADE_TYPES.contains(value)) {
+            throw new IllegalArgumentException("tradeType not supported");
+        }
+        return value;
+    }
+
+    private String normalizeOrderStatus(String orderStatus) {
+        if (orderStatus == null || orderStatus.trim().isEmpty()) {
+            return null;
+        }
+        String value = orderStatus.trim().toUpperCase();
+        if (!SUPPORT_ORDER_STATUSES.contains(value)) {
+            throw new IllegalArgumentException("orderStatus not supported");
+        }
+        return value;
     }
 
     private OrderSummaryEntity toOrderSummary(DiningOrderEntity order) {

@@ -12,6 +12,8 @@ public class OrderListResponseDTO implements Serializable {
     private List<OrderInfo> orders;
     private Boolean hasMore;
     private Long lastId;
+    private String tradeType;
+    private String orderStatus;
 
     @Data
     public static class OrderInfo implements Serializable {
