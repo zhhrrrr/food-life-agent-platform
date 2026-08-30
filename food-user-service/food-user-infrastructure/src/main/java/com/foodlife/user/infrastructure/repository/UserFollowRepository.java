@@ -157,6 +157,22 @@ public class UserFollowRepository implements IUserFollowRepository {
         return result;
     }
 
+    @Override
+    public long countFollowing(Long userId) {
+        Long count = userFollowMapper.selectCount(new LambdaQueryWrapper<UserFollowPO>()
+                .eq(UserFollowPO::getUserId, userId)
+                .eq(UserFollowPO::getFollowStatus, 1));
+        return count == null ? 0 : count;
+    }
+
+    @Override
+    public long countFans(Long userId) {
+        Long count = userFollowMapper.selectCount(new LambdaQueryWrapper<UserFollowPO>()
+                .eq(UserFollowPO::getFollowUserId, userId)
+                .eq(UserFollowPO::getFollowStatus, 1));
+        return count == null ? 0 : count;
+    }
+
     private List<UserFollowPO> listActiveFollows(Long userId, Long lastId, Integer limit) {
         return userFollowMapper.selectPage(new Page<>(1, limit),
                         new LambdaQueryWrapper<UserFollowPO>()
