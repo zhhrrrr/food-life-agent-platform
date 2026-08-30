@@ -6,17 +6,19 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 @Data
-public class OrderUseResult implements Serializable {
+public class OrderUseRecordEntity implements Serializable {
 
-    private Long userId;
+    private Long id;
+    private String useRecordNo;
     private Long orderId;
     private String orderNo;
+    private Long userId;
     private Long shopId;
     private Long packageId;
     private String tradeType;
-    private String orderStatus;
-    private String useBehavior;
-    private Long useRecordId;
-    private String useRecordNo;
+    private String useSource;
+    private String useStatus;
     private LocalDateTime useTime;
+    private LocalDateTime createTime;
+    private LocalDateTime updateTime;
 }

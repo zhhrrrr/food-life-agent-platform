@@ -9,4 +9,5 @@ public class OrderUseCommandEntity implements Serializable {
 
     private Long userId;
     private Long orderId;
+    private String useSource;
 }
