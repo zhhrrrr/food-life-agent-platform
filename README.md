@@ -4,28 +4,34 @@
 
 ## Current Stage
 
-第一阶段先开发：
+当前先开发不涉及 Agent 的业务服务，Agent 和 Python Runtime 暂缓。
+
+当前核心服务：
 
 ```text
 food-auth-starter
 food-user-service
 food-business-service
+food-trade-service
 ```
 
-当前目标：
+当前已经完成的主流程：
 
 ```text
-1. 跑通黑马点评风格的手机号验证码登录
-2. 使用 Redis Token 和 UserHolder 管理登录态
-3. 使用 food-auth-starter 复用认证拦截器和 Feign Token 透传
-4. 使用 food-user-service 管理用户主数据
-5. 使用 food-business-service 提供店铺、分类、套餐查询能力
+1. 黑马点评风格手机号验证码登录
+2. Redis Token 和 UserHolder 登录态
+3. food-auth-starter 复用认证拦截器和 Token 透传
+4. 用户主数据、关注关系、用户资料、个人主页
+5. 店铺、分类、套餐、评价、收藏、店铺主页聚合
+6. 普通购买、拼团、秒杀
+7. 模拟支付、支付单、支付回调、超时关单
+8. 取消、退款、到店核销
+9. 订单详情、订单列表、交易链路查询
 ```
 
 后续开发：
 
 ```text
-food-trade-service
 food-gateway-service
 python-agent-service
 ```
@@ -44,4 +50,51 @@ SQL 脚本：
 ```text
 docs/sql/food_user_db.sql
 docs/sql/food_business_db.sql
+docs/sql/food_trade_db.sql
 ```
+
+## Local Services
+
+本地端口：
+
+```text
+food-user-service      http://localhost:8101
+food-business-service  http://localhost:8201
+food-trade-service     http://localhost:8301
+```
+
+启动三服务：
+
+```powershell
+.\scripts\start-local-services.ps1
+```
+
+重新打包并重启三服务：
+
+```powershell
+.\scripts\start-local-services.ps1 -Rebuild
+```
+
+停止三服务：
+
+```powershell
+.\scripts\stop-local-services.ps1
+```
+
+网关前冒烟检查：
+
+```powershell
+.\scripts\smoke-before-gateway.ps1
+```
+
+带登录 Token 的冒烟检查：
+
+```powershell
+.\scripts\smoke-before-gateway.ps1 -Token "{token}"
+```
+
+## Before Gateway
+
+当前还没有实现 `food-gateway-service`。
+
+网关开始前，三服务已经可以独立启动和验证。后续网关只负责统一入口、路由、鉴权透传、跨域和限流，业务逻辑继续留在各自微服务内。
