@@ -23,6 +23,18 @@ public class RedisUserRepository implements IUserRepository {
     }
 
     @Override
+    public UserEntity findById(Long id) {
+        if (id == null) {
+            return null;
+        }
+        Map<Object, Object> userMap = stringRedisTemplate.opsForHash().entries(UserRedisConstants.USER_DATA_KEY + id);
+        if (CollectionUtils.isEmpty(userMap)) {
+            return null;
+        }
+        return toEntity(userMap);
+    }
+
+    @Override
     public UserEntity findByPhone(String phone) {
         String id = stringRedisTemplate.opsForValue().get(UserRedisConstants.USER_PHONE_KEY + phone);
         if (id == null || id.length() == 0) {

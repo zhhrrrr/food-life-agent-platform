@@ -21,9 +21,22 @@ public class MySqlUserRepository implements IUserRepository {
     }
 
     @Override
+    public UserEntity findById(Long id) {
+        if (id == null) {
+            return null;
+        }
+        UserPO userPO = userMapper.selectById(id);
+        if (userPO == null || userPO.getStatus() == null || userPO.getStatus() != 1) {
+            return null;
+        }
+        return toEntity(userPO);
+    }
+
+    @Override
     public UserEntity findByPhone(String phone) {
         UserPO userPO = userMapper.selectOne(new LambdaQueryWrapper<UserPO>()
                 .eq(UserPO::getPhone, phone)
+                .eq(UserPO::getStatus, 1)
                 .last("limit 1"));
         return toEntity(userPO);
     }
