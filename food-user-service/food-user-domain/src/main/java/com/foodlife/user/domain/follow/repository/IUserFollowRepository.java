@@ -18,4 +18,8 @@ public interface IUserFollowRepository {
     List<FollowUserEntity> listFans(Long userId, Long lastId, Integer limit);
 
     List<FollowUserEntity> listCommonFollowUsers(Long userId, Long targetUserId, Integer limit);
+
+    long countFollowing(Long userId);
+
+    long countFans(Long userId);
 }
