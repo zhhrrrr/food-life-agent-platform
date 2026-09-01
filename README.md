@@ -13,6 +13,7 @@ food-auth-starter
 food-user-service
 food-business-service
 food-trade-service
+food-life-agent-web
 ```
 
 当前已经完成的主流程：
@@ -27,6 +28,7 @@ food-trade-service
 7. 模拟支付、支付单、支付回调、超时关单
 8. 取消、退款、到店核销
 9. 订单详情、订单列表、交易链路查询
+10. 面向用户的美食拼团 Agent 前端
 ```
 
 后续开发：
@@ -91,6 +93,36 @@ food-trade-service     http://localhost:8301
 
 ```powershell
 .\scripts\smoke-before-gateway.ps1 -Token "{token}"
+```
+
+## Local Frontend
+
+前端工程：
+
+```text
+food-life-agent-web
+```
+
+启动：
+
+```powershell
+cd food-life-agent-web
+npm install
+npm run dev
+```
+
+访问：
+
+```text
+http://localhost:5173
+```
+
+前端通过 Vite 代理联调本地后端：
+
+```text
+/user-api      -> http://localhost:8101/api/user
+/business-api  -> http://localhost:8201/api
+/trade-api     -> http://localhost:8301/api/trade
 ```
 
 ## Before Gateway
