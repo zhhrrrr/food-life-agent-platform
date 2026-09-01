@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $Services = @(
+    @{ Name = "food-gateway-service"; Port = 8080 },
     @{ Name = "food-user-service"; Port = 8101 },
     @{ Name = "food-business-service"; Port = 8201 },
     @{ Name = "food-trade-service"; Port = 8301 }

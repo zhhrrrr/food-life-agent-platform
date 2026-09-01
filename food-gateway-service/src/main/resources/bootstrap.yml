@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: food-gateway-service
+  cloud:
+    nacos:
+      server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD:nacos}
+      discovery:
+        enabled: ${NACOS_DISCOVERY_ENABLED:false}
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_DISCOVERY_GROUP:FOOD_LIFE_AGENT}
+      config:
+        enabled: ${NACOS_CONFIG_ENABLED:false}
+        import-check:
+          enabled: false
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_CONFIG_GROUP:FOOD_LIFE_AGENT}
+        file-extension: yaml
+        shared-configs:
+          - data-id: food-common.yaml
+            group: ${NACOS_CONFIG_GROUP:FOOD_LIFE_AGENT}
+            refresh: true

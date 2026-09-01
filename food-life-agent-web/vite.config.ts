@@ -8,17 +8,17 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/user-api': {
-        target: 'http://localhost:8101',
+        target: 'http://localhost:8080',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/user-api/, '/api/user'),
       },
       '/business-api': {
-        target: 'http://localhost:8201',
+        target: 'http://localhost:8080',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/business-api/, '/api'),
       },
       '/trade-api': {
-        target: 'http://localhost:8301',
+        target: 'http://localhost:8080',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/trade-api/, '/api/trade'),
       },
