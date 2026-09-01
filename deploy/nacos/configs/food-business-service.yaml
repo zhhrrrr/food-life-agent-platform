@@ -1,0 +1,28 @@
+server:
+  port: 8201
+
+spring:
+  application:
+    name: food-business-service
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/food_business_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+  cloud:
+    discovery:
+      client:
+        simple:
+          instances:
+            food-trade-service:
+              - uri: http://localhost:8301
+
+food:
+  auth:
+    include-paths:
+      - /**
+    exclude-paths:
+      - /health
+      - /api/shop-category/**
+      - /api/shop/**
+      - /api/package/**

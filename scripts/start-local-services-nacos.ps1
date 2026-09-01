@@ -27,6 +27,8 @@ Write-Host "NACOS_SERVER_ADDR=$env:NACOS_SERVER_ADDR"
 Write-Host "NACOS_DISCOVERY_GROUP=$env:NACOS_DISCOVERY_GROUP"
 Write-Host "NACOS_CONFIG_GROUP=$env:NACOS_CONFIG_GROUP"
 
+& (Join-Path $PSScriptRoot "check-nacos.ps1") -Port (($NacosServerAddr -split ":")[-1])
+
 if ($Rebuild -and $Restart) {
     & $startScript -Rebuild -Restart
 } elseif ($Rebuild) {
