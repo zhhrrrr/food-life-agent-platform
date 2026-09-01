@@ -9,10 +9,13 @@ target/
 logs/
 *.log
 
+# Local tools
+tools/
+.cache/
+
 # OS
 .DS_Store
 Thumbs.db
 
 # Runtime
 *.pid
-
