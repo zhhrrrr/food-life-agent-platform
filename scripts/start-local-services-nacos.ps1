@@ -1,6 +1,7 @@
 param(
     [switch]$Rebuild,
     [switch]$Restart,
+    [switch]$WithoutGateway,
     [string]$NacosServerAddr = "127.0.0.1:8848",
     [string]$NacosUsername = "nacos",
     [string]$NacosPassword = "nacos",
@@ -29,12 +30,15 @@ Write-Host "NACOS_CONFIG_GROUP=$env:NACOS_CONFIG_GROUP"
 
 & (Join-Path $PSScriptRoot "check-nacos.ps1") -Port (($NacosServerAddr -split ":")[-1])
 
-if ($Rebuild -and $Restart) {
-    & $startScript -Rebuild -Restart
-} elseif ($Rebuild) {
-    & $startScript -Rebuild
-} elseif ($Restart) {
-    & $startScript -Restart
-} else {
-    & $startScript
+$startArgs = @{}
+if ($Rebuild) {
+    $startArgs.Rebuild = $true
 }
+if ($Restart) {
+    $startArgs.Restart = $true
+}
+if (-not $WithoutGateway) {
+    $startArgs.IncludeGateway = $true
+}
+
+& $startScript @startArgs

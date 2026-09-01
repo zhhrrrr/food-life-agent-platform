@@ -23,6 +23,7 @@
         <module>food-user-service</module>
         <module>food-business-service</module>
         <module>food-trade-service</module>
+        <module>food-gateway-service</module>
     </modules>
 
     <properties>

@@ -1,6 +1,7 @@
 param(
     [switch]$Rebuild,
-    [switch]$Restart
+    [switch]$Restart,
+    [switch]$IncludeGateway
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,7 +10,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 $Logs = Join-Path $Root "logs"
 New-Item -ItemType Directory -Force -Path $Logs | Out-Null
 
-$Services = @(
+$CoreServices = @(
     @{
         Name = "food-user-service"
         Port = 8101
@@ -38,6 +39,21 @@ $Services = @(
         Health = "http://localhost:8301/health"
     }
 )
+
+$GatewayService = @{
+    Name = "food-gateway-service"
+    Port = 8080
+    MavenModule = "food-gateway-service"
+    Jar = "food-gateway-service/target/food-gateway-service-1.0-SNAPSHOT.jar"
+    OutLog = "logs/gateway-service-8080.out.log"
+    ErrLog = "logs/gateway-service-8080.err.log"
+    Health = "http://localhost:8080/health"
+}
+
+$Services = @($CoreServices)
+if ($IncludeGateway) {
+    $Services += $GatewayService
+}
 
 function Get-PortProcessId {
     param([int]$Port)
@@ -83,7 +99,8 @@ if ($Restart -or $Rebuild) {
 }
 
 if ($Rebuild) {
-    mvn -pl "food-user-service/food-user-app,food-business-service/food-business-app,food-trade-service/food-trade-app" -am package -DskipTests
+    $mavenModules = ($Services | ForEach-Object { $_.MavenModule }) -join ","
+    mvn -pl $mavenModules -am package -DskipTests
 }
 
 foreach ($service in $Services) {

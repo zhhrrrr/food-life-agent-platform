@@ -1,7 +1,7 @@
 param(
     [string]$NacosServerAddr = "127.0.0.1:8848",
     [string]$Group = "FOOD_LIFE_AGENT",
-    [string[]]$Services = @("food-user-service", "food-business-service", "food-trade-service")
+    [string[]]$Services = @("food-gateway-service", "food-user-service", "food-business-service", "food-trade-service")
 )
 
 $ErrorActionPreference = "Stop"
