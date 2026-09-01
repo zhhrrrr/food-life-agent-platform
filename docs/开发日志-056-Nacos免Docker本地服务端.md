@@ -164,7 +164,7 @@ NACOS_CONFIG_ENABLED=true
 127.0.0.1:8848
 ```
 
-## 9. 本次实测情况
+## 9. 首次实测情况
 
 本机环境：
 
@@ -175,7 +175,7 @@ Docker 不可用
 项目内原本没有 Nacos Server
 ```
 
-实际尝试从 GitHub Releases 下载 Nacos 2.2.3，但网络吞吐过慢：
+首次尝试从 GitHub Releases 下载 Nacos 2.2.3，但网络吞吐过慢：
 
 ```text
 下载速度约几十 KB/s
@@ -183,9 +183,87 @@ Docker 不可用
 预计需要约 1 小时
 ```
 
-因此没有继续等待完整下载。本次已提供可运行脚本和手动 zip 安装入口。
+因此首次没有继续等待完整下载。本次已提供可运行脚本和手动 zip 安装入口。
 
-## 10. 面试点对应
+## 10. 二次实测结果
+
+后续使用 Windows BITS 成功下载完整 Nacos 压缩包：
+
+```text
+.cache/nacos/nacos-server-2.2.3-full.zip
+大小：148,919,074 bytes
+ZIP 校验：通过
+```
+
+使用本地 zip 安装成功：
+
+```powershell
+.\scripts\install-nacos-server.ps1 -LocalZip ".cache\nacos\nacos-server-2.2.3-full.zip" -Force
+```
+
+安装目录：
+
+```text
+tools/nacos-server/nacos
+```
+
+启动成功：
+
+```powershell
+.\scripts\start-nacos-server.ps1 -WaitSeconds 120
+```
+
+检查成功：
+
+```powershell
+.\scripts\check-nacos.ps1
+```
+
+结果：
+
+```text
+Nacos port 8848 is listening
+Nacos console: http://127.0.0.1:8848/nacos
+HTTP status: 200
+```
+
+三个微服务使用 Nacos 模式启动成功：
+
+```powershell
+.\scripts\start-local-services-nacos.ps1 -Rebuild -Restart
+```
+
+三个服务均注册到 Nacos：
+
+```text
+FOOD_LIFE_AGENT@@food-user-service      100.67.58.243:8101 healthy=true
+FOOD_LIFE_AGENT@@food-business-service  100.67.58.243:8201 healthy=true
+FOOD_LIFE_AGENT@@food-trade-service     100.67.58.243:8301 healthy=true
+```
+
+Nacos 模式基础冒烟通过：
+
+```powershell
+.\scripts\smoke-before-gateway.ps1
+```
+
+结果：
+
+```text
+Pre-gateway smoke check completed.
+```
+
+Nacos + OpenFeign 业务链路验证通过：
+
+```text
+登录成功
+普通购买下单成功
+orderId=74
+orderNo=NO178825284760156
+orderStatus=WAIT_PAY
+```
+
+## 11. 面试点对应
 
 本次可以讲：
 
@@ -198,7 +276,7 @@ Docker 不可用
 6. 为什么 tools/ 和 .cache/ 不应该提交到 Git
 ```
 
-## 11. 下一步
+## 12. 下一步
 
 拿到完整 Nacos zip 后，建议验证：
 
