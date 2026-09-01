@@ -1,35 +1,35 @@
 package com.foodlife.trade.infrastructure.port;
 
+import com.foodlife.business.api.dto.PackageStockChangeRecordResponseDTO;
+import com.foodlife.business.api.dto.PackageStockChangeResponseDTO;
+import com.foodlife.business.api.dto.PackageTradeSnapshotResponseDTO;
+import com.foodlife.trade.infrastructure.feign.BusinessPackageClient;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import com.foodlife.trade.domain.order.normal.model.PackageStockChangeRecord;
 import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
-import com.foodlife.trade.types.response.Response;
-import org.springframework.beans.factory.annotation.Value;
+import feign.FeignException;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @Component
 public class BusinessPackagePort implements IBusinessPackagePort {
 
-    private final RestTemplate restTemplate;
-    private final String businessServiceBaseUrl;
+    private final BusinessPackageClient businessPackageClient;
 
-    public BusinessPackagePort(RestTemplate restTemplate,
-                               @Value("${food.business-service.base-url}") String businessServiceBaseUrl) {
-        this.restTemplate = restTemplate;
-        this.businessServiceBaseUrl = businessServiceBaseUrl;
+    public BusinessPackagePort(BusinessPackageClient businessPackageClient) {
+        this.businessPackageClient = businessPackageClient;
     }
 
     @Override
     public PackageTradeSnapshot queryTradeSnapshot(Long packageId) {
-        Response response = restTemplate.getForObject(
-                businessServiceBaseUrl + "/api/package/trade-snapshot/" + packageId,
-                Response.class
-        );
+        com.foodlife.business.types.response.Response<PackageTradeSnapshotResponseDTO> response;
+        try {
+            response = businessPackageClient.queryTradeSnapshot(packageId);
+        } catch (FeignException e) {
+            return null;
+        }
         if (response == null || !"0000".equals(response.getCode()) || response.getData() == null) {
             return null;
         }
@@ -38,14 +38,16 @@ public class BusinessPackagePort implements IBusinessPackagePort {
 
     @Override
     public List<PackageStockChangeRecord> listStockChangeRecords(String operationIdPrefix, Long packageId, Integer limit) {
-        StringBuilder url = new StringBuilder(businessServiceBaseUrl + "/api/package/stock-change-records?limit=" + (limit == null ? 20 : limit));
-        if (operationIdPrefix != null && !operationIdPrefix.trim().isEmpty()) {
-            url.append("&operationIdPrefix=").append(operationIdPrefix.trim());
+        com.foodlife.business.types.response.Response<List<PackageStockChangeRecordResponseDTO>> response;
+        try {
+            response = businessPackageClient.listStockChangeRecords(
+                    trimToNull(operationIdPrefix),
+                    packageId,
+                    limit == null ? 20 : limit
+            );
+        } catch (FeignException e) {
+            return new ArrayList<>();
         }
-        if (packageId != null) {
-            url.append("&packageId=").append(packageId);
-        }
-        Response response = restTemplate.getForObject(url.toString(), Response.class);
         if (response == null || !"0000".equals(response.getCode()) || response.getData() == null) {
             return new ArrayList<>();
         }
@@ -93,79 +95,78 @@ public class BusinessPackagePort implements IBusinessPackagePort {
     }
 
     private void postPackageStockAction(Long packageId, Integer quantity, String operationId, String actionPath) {
-        String url = businessServiceBaseUrl + "/api/package/" + packageId + actionPath + "?quantity=" + quantity;
-        if (operationId != null && !operationId.trim().isEmpty()) {
-            url = url + "&operationId=" + operationId.trim();
+        com.foodlife.business.types.response.Response<PackageStockChangeResponseDTO> response;
+        try {
+            response = doPostPackageStockAction(packageId, quantity, trimToNull(operationId), actionPath);
+        } catch (FeignException e) {
+            throw new IllegalStateException("package stock action failed");
         }
-        Response response = restTemplate.postForObject(
-                url,
-                null,
-                Response.class
-        );
         if (response == null || !"0000".equals(response.getCode())) {
             throw new IllegalStateException(response == null ? "package stock action failed" : response.getMessage());
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private PackageTradeSnapshot toSnapshot(Object data) {
-        Map<String, Object> map = (Map<String, Object>) data;
+    private com.foodlife.business.types.response.Response<PackageStockChangeResponseDTO> doPostPackageStockAction(Long packageId,
+                                                                                                                 Integer quantity,
+                                                                                                                 String operationId,
+                                                                                                                 String actionPath) {
+        if ("/stock/occupy".equals(actionPath)) {
+            return businessPackageClient.occupyPackageStock(packageId, quantity, operationId);
+        }
+        if ("/stock/release".equals(actionPath)) {
+            return businessPackageClient.releasePackageStock(packageId, quantity, operationId);
+        }
+        if ("/sold/confirm".equals(actionPath)) {
+            return businessPackageClient.confirmPackageSold(packageId, quantity, operationId);
+        }
+        if ("/sold/rollback".equals(actionPath)) {
+            return businessPackageClient.rollbackPackageSold(packageId, quantity, operationId);
+        }
+        throw new IllegalArgumentException("unsupported package stock action");
+    }
+
+    private PackageTradeSnapshot toSnapshot(PackageTradeSnapshotResponseDTO data) {
         PackageTradeSnapshot snapshot = new PackageTradeSnapshot();
-        snapshot.setShopId(toLong(map.get("shopId")));
-        snapshot.setShopName((String) map.get("shopName"));
-        snapshot.setPackageId(toLong(map.get("packageId")));
-        snapshot.setPackageName((String) map.get("packageName"));
-        snapshot.setPackageDescription((String) map.get("packageDescription"));
-        snapshot.setCoverImage((String) map.get("coverImage"));
-        snapshot.setPrice(toLong(map.get("price")));
-        snapshot.setOriginalPrice(toLong(map.get("originalPrice")));
-        snapshot.setStock(toInteger(map.get("stock")));
-        snapshot.setPackageStatus(toInteger(map.get("packageStatus")));
-        snapshot.setUseRule((String) map.get("useRule"));
+        snapshot.setShopId(data.getShopId());
+        snapshot.setShopName(data.getShopName());
+        snapshot.setPackageId(data.getPackageId());
+        snapshot.setPackageName(data.getPackageName());
+        snapshot.setPackageDescription(data.getPackageDescription());
+        snapshot.setCoverImage(data.getCoverImage());
+        snapshot.setPrice(data.getPrice());
+        snapshot.setOriginalPrice(data.getOriginalPrice());
+        snapshot.setStock(data.getStock());
+        snapshot.setPackageStatus(data.getPackageStatus());
+        snapshot.setUseRule(data.getUseRule());
         return snapshot;
     }
 
-    private Long toLong(Object value) {
+    private String trimToNull(String value) {
         if (value == null) {
             return null;
         }
-        return Long.valueOf(String.valueOf(value));
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
-    private Integer toInteger(Object value) {
-        if (value == null) {
-            return null;
-        }
-        return Integer.valueOf(String.valueOf(value));
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<PackageStockChangeRecord> toStockChangeRecords(Object data) {
-        List<Object> records = (List<Object>) data;
+    private List<PackageStockChangeRecord> toStockChangeRecords(List<PackageStockChangeRecordResponseDTO> records) {
         List<PackageStockChangeRecord> result = new ArrayList<>();
-        for (Object record : records) {
-            result.add(toStockChangeRecord((Map<String, Object>) record));
+        for (PackageStockChangeRecordResponseDTO record : records) {
+            result.add(toStockChangeRecord(record));
         }
         return result;
     }
 
-    private PackageStockChangeRecord toStockChangeRecord(Map<String, Object> map) {
+    private PackageStockChangeRecord toStockChangeRecord(PackageStockChangeRecordResponseDTO source) {
         PackageStockChangeRecord record = new PackageStockChangeRecord();
-        record.setId(toLong(map.get("id")));
-        record.setOperationId((String) map.get("operationId"));
-        record.setPackageId(toLong(map.get("packageId")));
-        record.setQuantity(toInteger(map.get("quantity")));
-        record.setChangeType((String) map.get("changeType"));
-        record.setChangeStatus((String) map.get("changeStatus"));
-        record.setCreateTime(toLocalDateTime(map.get("createTime")));
-        record.setUpdateTime(toLocalDateTime(map.get("updateTime")));
+        record.setId(source.getId());
+        record.setOperationId(source.getOperationId());
+        record.setPackageId(source.getPackageId());
+        record.setQuantity(source.getQuantity());
+        record.setChangeType(source.getChangeType());
+        record.setChangeStatus(source.getChangeStatus());
+        record.setCreateTime(source.getCreateTime());
+        record.setUpdateTime(source.getUpdateTime());
         return record;
-    }
-
-    private java.time.LocalDateTime toLocalDateTime(Object value) {
-        if (value == null) {
-            return null;
-        }
-        return java.time.LocalDateTime.parse(String.valueOf(value));
     }
 }
