@@ -1,5 +1,8 @@
 package com.foodlife.business.trigger.http;
 
+import com.foodlife.business.api.dto.PackageStockChangeRecordResponseDTO;
+import com.foodlife.business.api.dto.PackageStockChangeResponseDTO;
+import com.foodlife.business.api.dto.PackageTradeSnapshotResponseDTO;
 import com.foodlife.business.domain.packagee.model.MealPackageEntity;
 import com.foodlife.business.domain.packagee.model.PackageStockChangeRecordEntity;
 import com.foodlife.business.domain.packagee.model.PackageStockChangeResult;
@@ -36,62 +39,104 @@ public class PackageController {
     }
 
     @GetMapping("/trade-snapshot/{packageId}")
-    public Response<PackageTradeSnapshotEntity> queryTradeSnapshot(@PathVariable Long packageId) {
+    public Response<PackageTradeSnapshotResponseDTO> queryTradeSnapshot(@PathVariable Long packageId) {
         PackageTradeSnapshotEntity snapshot = packageDomainService.queryTradeSnapshot(packageId);
         if (snapshot == null) {
             return Response.fail("404", "package not found");
         }
-        return Response.success(snapshot);
+        return Response.success(toTradeSnapshotResponse(snapshot));
     }
 
     @GetMapping("/stock-change-records")
-    public Response<List<PackageStockChangeRecordEntity>> listStockChangeRecords(@RequestParam(required = false) String operationIdPrefix,
-                                                                                 @RequestParam(required = false) Long packageId,
-                                                                                 @RequestParam(required = false) Integer limit) {
-        return Response.success(packageDomainService.listStockChangeRecords(operationIdPrefix, packageId, limit));
+    public Response<List<PackageStockChangeRecordResponseDTO>> listStockChangeRecords(@RequestParam(required = false) String operationIdPrefix,
+                                                                                      @RequestParam(required = false) Long packageId,
+                                                                                      @RequestParam(required = false) Integer limit) {
+        return Response.success(packageDomainService.listStockChangeRecords(operationIdPrefix, packageId, limit)
+                .stream()
+                .map(this::toStockChangeRecordResponse)
+                .collect(java.util.stream.Collectors.toList()));
     }
 
     @PostMapping("/{packageId}/stock/occupy")
-    public Response<PackageStockChangeResult> occupyPackageStock(@PathVariable Long packageId,
-                                                                 @RequestParam Integer quantity,
-                                                                 @RequestParam(required = false) String operationId) {
+    public Response<PackageStockChangeResponseDTO> occupyPackageStock(@PathVariable Long packageId,
+                                                                      @RequestParam Integer quantity,
+                                                                      @RequestParam(required = false) String operationId) {
         try {
-            return Response.success(packageDomainService.occupyPackageStock(packageId, quantity, operationId));
+            return Response.success(toStockChangeResponse(packageDomainService.occupyPackageStock(packageId, quantity, operationId)));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
     }
 
     @PostMapping("/{packageId}/stock/release")
-    public Response<PackageStockChangeResult> releasePackageStock(@PathVariable Long packageId,
-                                                                 @RequestParam Integer quantity,
-                                                                 @RequestParam(required = false) String operationId) {
+    public Response<PackageStockChangeResponseDTO> releasePackageStock(@PathVariable Long packageId,
+                                                                       @RequestParam Integer quantity,
+                                                                       @RequestParam(required = false) String operationId) {
         try {
-            return Response.success(packageDomainService.releasePackageStock(packageId, quantity, operationId));
+            return Response.success(toStockChangeResponse(packageDomainService.releasePackageStock(packageId, quantity, operationId)));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
     }
 
     @PostMapping("/{packageId}/sold/confirm")
-    public Response<PackageStockChangeResult> confirmPackageSold(@PathVariable Long packageId,
-                                                                @RequestParam Integer quantity,
-                                                                @RequestParam(required = false) String operationId) {
+    public Response<PackageStockChangeResponseDTO> confirmPackageSold(@PathVariable Long packageId,
+                                                                     @RequestParam Integer quantity,
+                                                                     @RequestParam(required = false) String operationId) {
         try {
-            return Response.success(packageDomainService.confirmPackageSold(packageId, quantity, operationId));
+            return Response.success(toStockChangeResponse(packageDomainService.confirmPackageSold(packageId, quantity, operationId)));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
     }
 
     @PostMapping("/{packageId}/sold/rollback")
-    public Response<PackageStockChangeResult> rollbackPackageSold(@PathVariable Long packageId,
-                                                                 @RequestParam Integer quantity,
-                                                                 @RequestParam(required = false) String operationId) {
+    public Response<PackageStockChangeResponseDTO> rollbackPackageSold(@PathVariable Long packageId,
+                                                                      @RequestParam Integer quantity,
+                                                                      @RequestParam(required = false) String operationId) {
         try {
-            return Response.success(packageDomainService.rollbackPackageSold(packageId, quantity, operationId));
+            return Response.success(toStockChangeResponse(packageDomainService.rollbackPackageSold(packageId, quantity, operationId)));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
+    }
+
+    private PackageTradeSnapshotResponseDTO toTradeSnapshotResponse(PackageTradeSnapshotEntity source) {
+        PackageTradeSnapshotResponseDTO target = new PackageTradeSnapshotResponseDTO();
+        target.setShopId(source.getShopId());
+        target.setShopName(source.getShopName());
+        target.setPackageId(source.getPackageId());
+        target.setPackageName(source.getPackageName());
+        target.setPackageDescription(source.getPackageDescription());
+        target.setCoverImage(source.getCoverImage());
+        target.setPrice(source.getPrice());
+        target.setOriginalPrice(source.getOriginalPrice());
+        target.setStock(source.getStock());
+        target.setPackageStatus(source.getPackageStatus());
+        target.setUseRule(source.getUseRule());
+        return target;
+    }
+
+    private PackageStockChangeRecordResponseDTO toStockChangeRecordResponse(PackageStockChangeRecordEntity source) {
+        PackageStockChangeRecordResponseDTO target = new PackageStockChangeRecordResponseDTO();
+        target.setId(source.getId());
+        target.setOperationId(source.getOperationId());
+        target.setPackageId(source.getPackageId());
+        target.setQuantity(source.getQuantity());
+        target.setChangeType(source.getChangeType());
+        target.setChangeStatus(source.getChangeStatus());
+        target.setCreateTime(source.getCreateTime());
+        target.setUpdateTime(source.getUpdateTime());
+        return target;
+    }
+
+    private PackageStockChangeResponseDTO toStockChangeResponse(PackageStockChangeResult source) {
+        PackageStockChangeResponseDTO target = new PackageStockChangeResponseDTO();
+        target.setPackageId(source.getPackageId());
+        target.setQuantity(source.getQuantity());
+        target.setStock(source.getStock());
+        target.setSold(source.getSold());
+        target.setChangeType(source.getChangeType());
+        return target;
     }
 }
