@@ -1,0 +1,56 @@
+server:
+  port: 8301
+
+spring:
+  application:
+    name: food-trade-service
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/food_trade_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+  cloud:
+    discovery:
+      client:
+        simple:
+          instances:
+            food-business-service:
+              - uri: http://localhost:8201
+
+food:
+  trade:
+    normal:
+      order-timeout-cancel:
+        enabled: true
+        fixed-delay-ms: 60000
+        timeout-minutes: 30
+      package-stock-sync:
+        enabled: true
+        fixed-delay-ms: 60000
+    group-buy:
+      timeout-compensation:
+        enabled: true
+        fixed-delay-ms: 60000
+    coupon:
+      expire-scan:
+        enabled: true
+        fixed-delay-ms: 60000
+        limit: 500
+    payment:
+      order-timeout-close:
+        enabled: true
+        fixed-delay-ms: 60000
+        timeout-minutes: 30
+    seckill:
+      order-request-process:
+        enabled: true
+        fixed-delay-ms: 30000
+      order-request-recovery:
+        enabled: true
+        fixed-delay-ms: 60000
+  auth:
+    include-paths:
+      - /**
+    exclude-paths:
+      - /health
+      - /api/trade/pay/callback/**
