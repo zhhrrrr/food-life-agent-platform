@@ -40,6 +40,17 @@ mybatis-plus:
       id-type: auto
 
 food:
+  mq:
+    enabled: ${FOOD_MQ_ENABLED:false}
+    name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+    producer-group: food-trade-service-producer
+    retry-delay-seconds: 30
+    retry-limit: 50
+  jobs:
+    trade-event-retry:
+      enabled: true
+      fixed-delay-ms: 30000
+      limit: 50
   trade:
     normal:
       order-timeout-cancel:

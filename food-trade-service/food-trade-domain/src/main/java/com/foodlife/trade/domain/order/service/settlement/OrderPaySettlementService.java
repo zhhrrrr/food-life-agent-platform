@@ -3,6 +3,8 @@ package com.foodlife.trade.domain.order.service.settlement;
 import com.foodlife.patterns.framework.link.model2.chain.BusinessLinkedList;
 import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
 import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
+import com.foodlife.trade.domain.order.event.ITradeEventPublisher;
+import com.foodlife.trade.domain.order.event.TradeMqTopics;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyTeamEntity;
 import com.foodlife.trade.domain.order.groupbuy.repository.IGroupBuyRepository;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
@@ -24,18 +26,21 @@ public class OrderPaySettlementService {
     private final IGroupBuyRepository groupBuyRepository;
     private final ISeckillRepository seckillRepository;
     private final NormalPackageStockMessageService normalPackageStockMessageService;
+    private final ITradeEventPublisher tradeEventPublisher;
     private final BusinessLinkedList<OrderSettlementRuleCommandEntity, OrderSettlementRuleFilterFactory.DynamicContext, OrderSettlementRuleFilterBackEntity> orderPaySettlementRuleFilter;
 
     public OrderPaySettlementService(IOrderRepository orderRepository,
                                      IGroupBuyRepository groupBuyRepository,
                                      ISeckillRepository seckillRepository,
                                      NormalPackageStockMessageService normalPackageStockMessageService,
+                                     ITradeEventPublisher tradeEventPublisher,
                                      @Qualifier("orderPaySettlementRuleFilter")
                                      BusinessLinkedList<OrderSettlementRuleCommandEntity, OrderSettlementRuleFilterFactory.DynamicContext, OrderSettlementRuleFilterBackEntity> orderPaySettlementRuleFilter) {
         this.orderRepository = orderRepository;
         this.groupBuyRepository = groupBuyRepository;
         this.seckillRepository = seckillRepository;
         this.normalPackageStockMessageService = normalPackageStockMessageService;
+        this.tradeEventPublisher = tradeEventPublisher;
         this.orderPaySettlementRuleFilter = orderPaySettlementRuleFilter;
     }
 
@@ -49,13 +54,16 @@ public class OrderPaySettlementService {
             DiningOrderEntity order = filterBackEntity.getOrder();
             if (TradeTypeConstants.GROUP_BUY.equals(order.getTradeType())) {
                 GroupBuyTeamEntity team = groupBuyRepository.settlementGroupBuyPaySuccess(order, orderPaySuccessEntity.getOutTradeTime());
-                return buildSettlementEntity(orderPaySuccessEntity, order, team);
+                OrderPaySettlementEntity settlement = buildSettlementEntity(orderPaySuccessEntity, order, team);
+                publishOrderPaid(settlement);
+                return settlement;
             }
 
             if (TradeTypeConstants.SECKILL.equals(order.getTradeType())) {
                 Long activityId = seckillRepository.settlementSeckillPaySuccess(order);
                 OrderPaySettlementEntity settlementEntity = buildSettlementEntity(orderPaySuccessEntity, order, null);
                 settlementEntity.setActivityId(activityId);
+                publishOrderPaid(settlementEntity);
                 return settlementEntity;
             }
 
@@ -64,7 +72,9 @@ public class OrderPaySettlementService {
                 throw new IllegalArgumentException("order status can not pay");
             }
             normalPackageStockMessageService.confirmSold(order);
-            return buildSettlementEntity(orderPaySuccessEntity, order, null);
+            OrderPaySettlementEntity settlement = buildSettlementEntity(orderPaySuccessEntity, order, null);
+            publishOrderPaid(settlement);
+            return settlement;
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
@@ -83,6 +93,13 @@ public class OrderPaySettlementService {
             command.setOutTradeTime(orderPaySuccessEntity.getOutTradeTime());
         }
         return command;
+    }
+
+    private void publishOrderPaid(OrderPaySettlementEntity settlement) {
+        tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
+                TradeMqTopics.ORDER_PAID,
+                String.valueOf(settlement.getOrderId()),
+                settlement);
     }
 
     private OrderPaySettlementEntity buildSettlementEntity(OrderPaySuccessEntity paySuccessEntity, DiningOrderEntity order, GroupBuyTeamEntity team) {

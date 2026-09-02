@@ -1,6 +1,8 @@
 package com.foodlife.trade.domain.order.payment.service;
 
 import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
+import com.foodlife.trade.domain.order.event.ITradeEventPublisher;
+import com.foodlife.trade.domain.order.event.TradeMqTopics;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
 import com.foodlife.trade.domain.order.model.OrderPaySuccessEntity;
@@ -23,13 +25,16 @@ public class PaymentOrderService {
     private final IOrderRepository orderRepository;
     private final IPaymentOrderRepository paymentOrderRepository;
     private final OrderPaySettlementService orderPaySettlementService;
+    private final ITradeEventPublisher tradeEventPublisher;
 
     public PaymentOrderService(IOrderRepository orderRepository,
                                IPaymentOrderRepository paymentOrderRepository,
-                               OrderPaySettlementService orderPaySettlementService) {
+                               OrderPaySettlementService orderPaySettlementService,
+                               ITradeEventPublisher tradeEventPublisher) {
         this.orderRepository = orderRepository;
         this.paymentOrderRepository = paymentOrderRepository;
         this.orderPaySettlementService = orderPaySettlementService;
+        this.tradeEventPublisher = tradeEventPublisher;
     }
 
     public PaymentOrderEntity preparePayment(PaymentPrepareCommand command) {
@@ -59,7 +64,12 @@ public class PaymentOrderService {
         paymentOrder.setPayStatus(PaymentOrderStatusConstants.PREPARED);
         paymentOrder.setCreateTime(now);
         paymentOrder.setUpdateTime(now);
-        return paymentOrderRepository.save(paymentOrder);
+        PaymentOrderEntity savedPaymentOrder = paymentOrderRepository.save(paymentOrder);
+        tradeEventPublisher.publish(TradeMqTopics.PAYMENT_TOPIC,
+                TradeMqTopics.PAYMENT_CREATED,
+                savedPaymentOrder.getPayOrderNo(),
+                savedPaymentOrder);
+        return savedPaymentOrder;
     }
 
     public PaymentCallbackResult handlePaySuccessCallback(PaymentCallbackCommand command) {
@@ -77,6 +87,10 @@ public class PaymentOrderService {
             result.setPaymentOrder(paymentOrder);
             result.setCallbackBehavior("repeat");
             result.setSettlement(buildRepeatedSettlement(paymentOrder));
+            tradeEventPublisher.publish(TradeMqTopics.PAYMENT_TOPIC,
+                    TradeMqTopics.PAYMENT_SUCCESS,
+                    paymentOrder.getPayOrderNo(),
+                    result);
             return result;
         }
 
@@ -98,6 +112,10 @@ public class PaymentOrderService {
         result.setPaymentOrder(successPaymentOrder);
         result.setSettlement(settlement);
         result.setCallbackBehavior("success");
+        tradeEventPublisher.publish(TradeMqTopics.PAYMENT_TOPIC,
+                TradeMqTopics.PAYMENT_SUCCESS,
+                successPaymentOrder.getPayOrderNo(),
+                result);
         return result;
     }
 

@@ -1,5 +1,7 @@
 package com.foodlife.business.domain.packagee.service;
 
+import com.foodlife.business.domain.event.BusinessMqTopics;
+import com.foodlife.business.domain.event.IBusinessEventPublisher;
 import com.foodlife.business.domain.packagee.model.MealPackageEntity;
 import com.foodlife.business.domain.packagee.model.PackageStockChangeRecordEntity;
 import com.foodlife.business.domain.packagee.model.PackageStockChangeResult;
@@ -16,9 +18,12 @@ public class PackageDomainService {
     private static final int MAX_RECORD_LIMIT = 100;
 
     private final IPackageRepository packageRepository;
+    private final IBusinessEventPublisher businessEventPublisher;
 
-    public PackageDomainService(IPackageRepository packageRepository) {
+    public PackageDomainService(IPackageRepository packageRepository,
+                                IBusinessEventPublisher businessEventPublisher) {
         this.packageRepository = packageRepository;
+        this.businessEventPublisher = businessEventPublisher;
     }
 
     public MealPackageEntity queryPackageById(Long id) {
@@ -39,7 +44,9 @@ public class PackageDomainService {
 
     public PackageStockChangeResult occupyPackageStock(Long packageId, Integer quantity, String operationId) {
         checkPackageStockCommand(packageId, quantity);
-        return packageRepository.occupyPackageStock(packageId, quantity, operationId);
+        PackageStockChangeResult result = packageRepository.occupyPackageStock(packageId, quantity, operationId);
+        publishStockEvent(BusinessMqTopics.STOCK_OCCUPIED, result, operationId);
+        return result;
     }
 
     public PackageStockChangeResult releasePackageStock(Long packageId, Integer quantity) {
@@ -48,7 +55,9 @@ public class PackageDomainService {
 
     public PackageStockChangeResult releasePackageStock(Long packageId, Integer quantity, String operationId) {
         checkPackageStockCommand(packageId, quantity);
-        return packageRepository.releasePackageStock(packageId, quantity, operationId);
+        PackageStockChangeResult result = packageRepository.releasePackageStock(packageId, quantity, operationId);
+        publishStockEvent(BusinessMqTopics.STOCK_RELEASED, result, operationId);
+        return result;
     }
 
     public PackageStockChangeResult confirmPackageSold(Long packageId, Integer quantity) {
@@ -57,7 +66,9 @@ public class PackageDomainService {
 
     public PackageStockChangeResult confirmPackageSold(Long packageId, Integer quantity, String operationId) {
         checkPackageStockCommand(packageId, quantity);
-        return packageRepository.confirmPackageSold(packageId, quantity, operationId);
+        PackageStockChangeResult result = packageRepository.confirmPackageSold(packageId, quantity, operationId);
+        publishStockEvent(BusinessMqTopics.STOCK_SOLD_CONFIRMED, result, operationId);
+        return result;
     }
 
     public PackageStockChangeResult rollbackPackageSold(Long packageId, Integer quantity) {
@@ -66,7 +77,9 @@ public class PackageDomainService {
 
     public PackageStockChangeResult rollbackPackageSold(Long packageId, Integer quantity, String operationId) {
         checkPackageStockCommand(packageId, quantity);
-        return packageRepository.rollbackPackageSold(packageId, quantity, operationId);
+        PackageStockChangeResult result = packageRepository.rollbackPackageSold(packageId, quantity, operationId);
+        publishStockEvent(BusinessMqTopics.STOCK_ROLLBACK, result, operationId);
+        return result;
     }
 
     public List<PackageStockChangeRecordEntity> listStockChangeRecords(String operationIdPrefix, Long packageId, Integer limit) {
@@ -94,5 +107,14 @@ public class PackageDomainService {
             return null;
         }
         return value.trim();
+    }
+
+    private void publishStockEvent(String tag, PackageStockChangeResult result, String operationId) {
+        String key = result.getPackageId() + ":" + tag + ":" + readOrDefault(operationId, String.valueOf(System.currentTimeMillis()));
+        businessEventPublisher.publish(BusinessMqTopics.PACKAGE_STOCK_TOPIC, tag, key, result);
+    }
+
+    private String readOrDefault(String value, String defaultValue) {
+        return value == null || value.trim().isEmpty() ? defaultValue : value.trim();
     }
 }

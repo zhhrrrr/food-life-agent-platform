@@ -5,6 +5,8 @@ import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
 import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
 import com.foodlife.trade.domain.order.coupon.model.UserCouponEntity;
 import com.foodlife.trade.domain.order.coupon.service.CouponService;
+import com.foodlife.trade.domain.order.event.ITradeEventPublisher;
+import com.foodlife.trade.domain.order.event.TradeMqTopics;
 import com.foodlife.trade.domain.order.factory.OrderFactory;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockOrderCommand;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockResult;
@@ -85,6 +87,7 @@ public class OrderDomainService {
     private final IBusinessPackagePort businessPackagePort;
     private final NormalPackageStockMessageService normalPackageStockMessageService;
     private final CouponService couponService;
+    private final ITradeEventPublisher tradeEventPublisher;
 
     public OrderDomainService(IOrderRepository orderRepository,
                               OrderCreateCheckChain orderCreateCheckChain,
@@ -100,7 +103,8 @@ public class OrderDomainService {
                               ISeckillStockRepository seckillStockRepository,
                               IBusinessPackagePort businessPackagePort,
                               NormalPackageStockMessageService normalPackageStockMessageService,
-                              CouponService couponService) {
+                              CouponService couponService,
+                              ITradeEventPublisher tradeEventPublisher) {
         this.orderRepository = orderRepository;
         this.orderCreateCheckChain = orderCreateCheckChain;
         this.orderPricingService = orderPricingService;
@@ -116,6 +120,7 @@ public class OrderDomainService {
         this.businessPackagePort = businessPackagePort;
         this.normalPackageStockMessageService = normalPackageStockMessageService;
         this.couponService = couponService;
+        this.tradeEventPublisher = tradeEventPublisher;
     }
 
     public CreateOrderResult createNormalOrder(CreateOrderCommand command) {
@@ -142,6 +147,10 @@ public class OrderDomainService {
 
             DiningOrderItemEntity orderItem = orderFactory.createOrderItem(savedOrder, snapshot, command.getQuantity());
             orderRepository.saveOrderItem(orderItem);
+            tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
+                    TradeMqTopics.ORDER_CREATED,
+                    String.valueOf(savedOrder.getId()),
+                    savedOrder);
 
             return buildCreateOrderResult(savedOrder);
         } catch (IllegalArgumentException e) {
@@ -248,15 +257,34 @@ public class OrderDomainService {
     }
 
     public OrderRefundBehaviorEntity refundOrderMock(OrderRefundCommandEntity command) {
-        return orderRefundService.refundOrder(command);
+        OrderRefundBehaviorEntity refund = orderRefundService.refundOrder(command);
+        tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
+                TradeMqTopics.ORDER_REFUND_REQUESTED,
+                String.valueOf(refund.getOrderId()),
+                refund);
+        tradeEventPublisher.publish(TradeMqTopics.PAYMENT_TOPIC,
+                TradeMqTopics.PAYMENT_REFUNDED,
+                String.valueOf(refund.getOrderId()),
+                refund);
+        return refund;
     }
 
     public OrderUseResult useOrderMock(OrderUseCommandEntity command) {
-        return orderUseService.useOrder(command);
+        OrderUseResult result = orderUseService.useOrder(command);
+        tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
+                TradeMqTopics.ORDER_USED,
+                String.valueOf(result.getOrderId()),
+                result);
+        return result;
     }
 
     public GroupBuyLockResult createGroupBuyOrder(GroupBuyLockOrderCommand command) {
-        return groupBuyLockOrderService.lockOrder(command);
+        GroupBuyLockResult result = groupBuyLockOrderService.lockOrder(command);
+        tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
+                TradeMqTopics.ORDER_CREATED,
+                String.valueOf(result.getOrderId()),
+                result);
+        return result;
     }
 
     public java.util.List<SeckillActivityView> querySeckillActivities(Long packageId, Integer limit) {
@@ -268,7 +296,12 @@ public class OrderDomainService {
     }
 
     public SeckillOrderResult createSeckillOrder(SeckillOrderCommand command) {
-        return seckillOrderService.createSeckillOrder(command);
+        SeckillOrderResult result = seckillOrderService.createSeckillOrder(command);
+        tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
+                TradeMqTopics.ORDER_CREATED,
+                String.valueOf(result.getOrderId()),
+                result);
+        return result;
     }
 
     public SeckillOrderRequestResult createSeckillOrderRequest(SeckillOrderCommand command) {
