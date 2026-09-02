@@ -108,6 +108,9 @@ public class SeckillOrderService {
         } catch (IllegalArgumentException e) {
             releaseOccupiedStock(stockOccupied, activity, command);
             throw e;
+        } catch (IllegalStateException e) {
+            releaseOccupiedStock(stockOccupied, activity, command);
+            throw e;
         } catch (Exception e) {
             releaseOccupiedStock(stockOccupied, activity, command);
             throw new IllegalStateException("seckill order create failed", e);
@@ -134,6 +137,9 @@ public class SeckillOrderService {
             result.setRemainingStock(stockOccupyResult.getRemainingStock());
             return result;
         } catch (IllegalArgumentException e) {
+            releaseOccupiedStock(stockOccupied, activity, command);
+            throw e;
+        } catch (IllegalStateException e) {
             releaseOccupiedStock(stockOccupied, activity, command);
             throw e;
         } catch (Exception e) {

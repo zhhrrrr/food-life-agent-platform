@@ -49,6 +49,8 @@ public class GroupBuyLockOrderService {
             return groupBuyRepository.saveGroupBuyLockOrder(aggregate);
         } catch (IllegalArgumentException e) {
             throw e;
+        } catch (IllegalStateException e) {
+            throw e;
         } catch (Exception e) {
             throw new IllegalStateException("group buy lock order failed", e);
         }

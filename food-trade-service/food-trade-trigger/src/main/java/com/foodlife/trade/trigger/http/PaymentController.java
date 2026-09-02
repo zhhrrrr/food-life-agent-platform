@@ -1,5 +1,7 @@
 package com.foodlife.trade.trigger.http;
 
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.foodlife.auth.context.UserHolder;
 import com.foodlife.trade.api.dto.PayOrderResponseDTO;
 import com.foodlife.trade.api.dto.PaymentCallbackRequestDTO;
@@ -17,6 +19,7 @@ import com.foodlife.trade.domain.order.payment.model.PaymentPrepareCommand;
 import com.foodlife.trade.domain.order.payment.service.PaymentOrderService;
 import com.foodlife.trade.domain.order.payment.service.PaymentOrderTimeoutCloseService;
 import com.foodlife.trade.types.response.Response;
+import com.foodlife.trade.trigger.sentinel.TradeSentinelResources;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -52,13 +55,20 @@ public class PaymentController {
     }
 
     @PostMapping("/callback/mock")
+    @SentinelResource(value = TradeSentinelResources.PAYMENT_CALLBACK, blockHandler = "mockPaySuccessCallbackBlock")
     public Response<PaymentCallbackResponseDTO> mockPaySuccessCallback(@RequestBody PaymentCallbackRequestDTO request) {
         try {
             PaymentCallbackResult result = paymentOrderService.handlePaySuccessCallback(toCallbackCommand(request));
             return Response.success(toCallbackResponse(result));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
+        } catch (IllegalStateException e) {
+            return Response.fail("503", e.getMessage() == null ? "payment callback service busy" : e.getMessage());
         }
+    }
+
+    public Response<PaymentCallbackResponseDTO> mockPaySuccessCallbackBlock(PaymentCallbackRequestDTO request, BlockException e) {
+        return Response.fail("429", "payment callback service busy, please try again later");
     }
 
     @GetMapping("/orders/{payOrderNo}")

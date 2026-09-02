@@ -1,5 +1,34 @@
 # 数据记录-Gateway安全配置
 
+## 当前状态
+
+这份文档记录的是上一阶段的 Gateway 自研 Redis 固定窗口限流方案。
+
+第四阶段接入 Sentinel 后，当前主流量治理方案已经切换为 Sentinel：
+
+```text
+docs/数据记录-Sentinel治理规则.md
+```
+
+当前代码状态：
+
+```text
+Gateway 黑名单继续使用
+Redis IP 限流默认关闭
+Redis 用户维度限流默认关闭
+Gateway 入口限流默认由 Sentinel Gateway Adapter 承担
+```
+
+当前配置：
+
+```yaml
+food:
+  gateway:
+    security:
+      rate-limit:
+        enabled: false
+```
+
 ## 配置位置
 
 local 兜底配置：

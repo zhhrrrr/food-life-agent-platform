@@ -12,6 +12,10 @@ spring:
     port: 6379
     database: 0
   cloud:
+    sentinel:
+      transport:
+        dashboard: ${SENTINEL_DASHBOARD_ADDR:localhost:8858}
+        port: ${SENTINEL_TRANSPORT_PORT:8721}
     discovery:
       client:
         simple:
@@ -20,6 +24,8 @@ spring:
               - uri: http://localhost:8201
 
 feign:
+  sentinel:
+    enabled: true
   client:
     config:
       default:

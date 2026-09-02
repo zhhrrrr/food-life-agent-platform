@@ -3,6 +3,9 @@ server:
 
 spring:
   cloud:
+    sentinel:
+      transport:
+        port: ${SENTINEL_GATEWAY_TRANSPORT_PORT:8719}
     gateway:
       default-filters:
         - PreserveHostHeader
@@ -64,7 +67,7 @@ food:
           - /internal/**
           - /actuator/**
       rate-limit:
-        enabled: true
+        enabled: false
         ip:
           enabled: true
           capacity: 120
@@ -73,3 +76,14 @@ food:
           enabled: true
           capacity: 60
           window-seconds: 60
+    sentinel:
+      enabled: true
+      trade-route-qps: 300
+      business-route-qps: 500
+      user-route-qps: 200
+      trade-order-create-qps: 80
+      seckill-order-create-qps: 30
+      payment-callback-qps: 100
+      user-header-name: authorization
+      user-header-qps: 20
+      smoke-rule-enabled: true

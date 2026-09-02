@@ -1,5 +1,10 @@
 package com.foodlife.trade.trigger.http;
 
+import com.alibaba.csp.sentinel.Entry;
+import com.alibaba.csp.sentinel.EntryType;
+import com.alibaba.csp.sentinel.SphU;
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.foodlife.auth.context.UserHolder;
 import com.foodlife.trade.api.dto.CancelOrderResponseDTO;
 import com.foodlife.trade.api.dto.CreateGroupBuyOrderRequestDTO;
@@ -53,6 +58,7 @@ import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityEntity;
 import com.foodlife.trade.domain.order.service.OrderDomainService;
 import com.foodlife.trade.types.response.Response;
+import com.foodlife.trade.trigger.sentinel.TradeSentinelResources;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -63,6 +69,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @RestController
@@ -76,23 +83,33 @@ public class OrderController {
     }
 
     @PostMapping("/orders/normal")
+    @SentinelResource(value = TradeSentinelResources.NORMAL_ORDER_CREATE, blockHandler = "createNormalOrderBlock")
     public Response<CreateOrderResponseDTO> createNormalOrder(@RequestBody CreateOrderRequestDTO request) {
-        try {
-            CreateOrderResult result = orderDomainService.createNormalOrder(toCommand(request));
-            return Response.success(toResponse(result));
-        } catch (IllegalArgumentException e) {
-            return Response.fail("400", e.getMessage());
-        }
+        return withUserOrderLimit(() -> {
+            try {
+                CreateOrderResult result = orderDomainService.createNormalOrder(toCommand(request));
+                return Response.success(toResponse(result));
+            } catch (IllegalArgumentException e) {
+                return Response.fail("400", e.getMessage());
+            } catch (IllegalStateException e) {
+                return Response.fail("503", serviceBusyMessage(e));
+            }
+        });
     }
 
     @PostMapping("/orders/group-buy")
+    @SentinelResource(value = TradeSentinelResources.GROUP_BUY_ORDER_CREATE, blockHandler = "createGroupBuyOrderBlock")
     public Response<CreateGroupBuyOrderResponseDTO> createGroupBuyOrder(@RequestBody CreateGroupBuyOrderRequestDTO request) {
-        try {
-            GroupBuyLockResult result = orderDomainService.createGroupBuyOrder(toGroupBuyCommand(request));
-            return Response.success(toGroupBuyResponse(result));
-        } catch (IllegalArgumentException e) {
-            return Response.fail("400", e.getMessage());
-        }
+        return withUserOrderLimit(() -> {
+            try {
+                GroupBuyLockResult result = orderDomainService.createGroupBuyOrder(toGroupBuyCommand(request));
+                return Response.success(toGroupBuyResponse(result));
+            } catch (IllegalArgumentException e) {
+                return Response.fail("400", e.getMessage());
+            } catch (IllegalStateException e) {
+                return Response.fail("503", serviceBusyMessage(e));
+            }
+        });
     }
 
     @GetMapping("/seckill/activities")
@@ -107,23 +124,39 @@ public class OrderController {
     }
 
     @PostMapping("/orders/seckill")
+    @SentinelResource(value = TradeSentinelResources.SECKILL_ORDER_CREATE, blockHandler = "createSeckillOrderBlock")
     public Response<CreateSeckillOrderResponseDTO> createSeckillOrder(@RequestBody CreateSeckillOrderRequestDTO request) {
-        try {
-            SeckillOrderResult result = orderDomainService.createSeckillOrder(toSeckillCommand(request));
-            return Response.success(toSeckillOrderResponse(result));
-        } catch (IllegalArgumentException e) {
-            return Response.fail("400", e.getMessage());
-        }
+        return withUserOrderLimit(() -> {
+            try (Entry ignored = SphU.entry(TradeSentinelResources.SECKILL_STOCK_OCCUPY,
+                    EntryType.IN, 1, request == null ? null : request.getActivityId())) {
+                SeckillOrderResult result = orderDomainService.createSeckillOrder(toSeckillCommand(request));
+                return Response.success(toSeckillOrderResponse(result));
+            } catch (BlockException e) {
+                return Response.fail("429", "seckill stock service busy, please try again later");
+            } catch (IllegalArgumentException e) {
+                return Response.fail("400", e.getMessage());
+            } catch (IllegalStateException e) {
+                return Response.fail("503", serviceBusyMessage(e));
+            }
+        });
     }
 
     @PostMapping("/orders/seckill/async")
+    @SentinelResource(value = TradeSentinelResources.SECKILL_ORDER_ASYNC_CREATE, blockHandler = "createSeckillOrderAsyncBlock")
     public Response<CreateSeckillOrderRequestResponseDTO> createSeckillOrderAsync(@RequestBody CreateSeckillOrderRequestDTO request) {
-        try {
-            SeckillOrderRequestResult result = orderDomainService.createSeckillOrderRequest(toSeckillCommand(request));
-            return Response.success(toSeckillOrderRequestResponse(result));
-        } catch (IllegalArgumentException e) {
-            return Response.fail("400", e.getMessage());
-        }
+        return withUserOrderLimit(() -> {
+            try (Entry ignored = SphU.entry(TradeSentinelResources.SECKILL_STOCK_OCCUPY,
+                    EntryType.IN, 1, request == null ? null : request.getActivityId())) {
+                SeckillOrderRequestResult result = orderDomainService.createSeckillOrderRequest(toSeckillCommand(request));
+                return Response.success(toSeckillOrderRequestResponse(result));
+            } catch (BlockException e) {
+                return Response.fail("429", "seckill stock service busy, please try again later");
+            } catch (IllegalArgumentException e) {
+                return Response.fail("400", e.getMessage());
+            } catch (IllegalStateException e) {
+                return Response.fail("503", serviceBusyMessage(e));
+            }
+        });
     }
 
     @GetMapping("/seckill/order-requests/{requestNo}")
@@ -251,6 +284,37 @@ public class OrderController {
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
+    }
+
+    public Response<CreateOrderResponseDTO> createNormalOrderBlock(CreateOrderRequestDTO request, BlockException e) {
+        return Response.fail("429", "normal order service busy, please try again later");
+    }
+
+    public Response<CreateGroupBuyOrderResponseDTO> createGroupBuyOrderBlock(CreateGroupBuyOrderRequestDTO request, BlockException e) {
+        return Response.fail("429", "group buy order service busy, please try again later");
+    }
+
+    public Response<CreateSeckillOrderResponseDTO> createSeckillOrderBlock(CreateSeckillOrderRequestDTO request, BlockException e) {
+        return Response.fail("429", "seckill order service busy, please try again later");
+    }
+
+    public Response<CreateSeckillOrderRequestResponseDTO> createSeckillOrderAsyncBlock(CreateSeckillOrderRequestDTO request, BlockException e) {
+        return Response.fail("429", "seckill order request service busy, please try again later");
+    }
+
+    private <T> Response<T> withUserOrderLimit(Supplier<Response<T>> supplier) {
+        try (Entry ignored = SphU.entry(TradeSentinelResources.USER_ORDER_CREATE,
+                EntryType.IN, 1, UserHolder.getUserId())) {
+            return supplier.get();
+        } catch (BlockException e) {
+            return Response.fail("429", "order request too frequent, please try again later");
+        }
+    }
+
+    private String serviceBusyMessage(IllegalStateException e) {
+        return e.getMessage() == null || e.getMessage().trim().isEmpty()
+                ? "service busy, please try again later"
+                : e.getMessage();
     }
 
     private CreateOrderCommand toCommand(CreateOrderRequestDTO request) {

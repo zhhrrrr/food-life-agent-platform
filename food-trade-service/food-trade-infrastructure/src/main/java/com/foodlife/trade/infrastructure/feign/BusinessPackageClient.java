@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
-@FeignClient(name = "food-business-service", path = "/api/package")
+@FeignClient(name = "food-business-service", path = "/api/package", fallback = BusinessPackageClientFallback.class)
 public interface BusinessPackageClient {
 
     @GetMapping("/trade-snapshot/{packageId}")

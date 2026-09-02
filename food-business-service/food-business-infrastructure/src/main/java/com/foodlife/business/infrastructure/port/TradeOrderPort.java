@@ -22,7 +22,10 @@ public class TradeOrderPort implements ITradeOrderPort {
         try {
             response = tradeOrderClient.queryOrderDetail(orderId);
         } catch (FeignException e) {
-            return null;
+            throw new IllegalStateException("订单服务暂不可用");
+        }
+        if (response != null && "503".equals(response.getCode())) {
+            throw new IllegalStateException(response.getMessage());
         }
         if (response == null || !"0000".equals(response.getCode()) || response.getData() == null) {
             return null;
