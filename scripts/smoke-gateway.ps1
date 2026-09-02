@@ -38,6 +38,7 @@ function Invoke-SmokeGet {
 }
 
 Invoke-SmokeGet -Name "gateway health" -Uri "$GatewayBaseUrl/health" | Out-Null
+Invoke-SmokeGet -Name "gateway blacklist" -Uri "$GatewayBaseUrl/internal/ping" -ExpectedStatus 403 -ExpectedCode "403" | Out-Null
 Invoke-SmokeGet -Name "user route unauthenticated" -Uri "$GatewayBaseUrl/api/user/me" -ExpectedStatus 401 -ExpectedCode "401" | Out-Null
 Invoke-SmokeGet -Name "trade route unauthenticated" -Uri "$GatewayBaseUrl/api/trade/orders" -ExpectedStatus 401 -ExpectedCode "401" | Out-Null
 Invoke-SmokeGet -Name "shop category route" -Uri "$GatewayBaseUrl/api/shop-category/list" | Out-Null

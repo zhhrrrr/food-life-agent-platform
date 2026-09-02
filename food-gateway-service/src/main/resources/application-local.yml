@@ -71,3 +71,19 @@ food:
         - /api/shop/**
         - /api/package/**
         - /api/trade/pay/callback/**
+    security:
+      blacklist:
+        enabled: true
+        paths:
+          - /internal/**
+          - /actuator/**
+      rate-limit:
+        enabled: true
+        ip:
+          enabled: true
+          capacity: 120
+          window-seconds: 60
+        user:
+          enabled: true
+          capacity: 60
+          window-seconds: 60
