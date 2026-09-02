@@ -3,10 +3,13 @@ package com.foodlife.business.infrastructure.repository;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.foodlife.business.domain.event.BusinessMqTopics;
 import com.foodlife.business.domain.review.model.ShopReviewEntity;
 import com.foodlife.business.domain.review.repository.IShopReviewRepository;
+import com.foodlife.business.infrastructure.dao.IBusinessConsumedMessageMapper;
 import com.foodlife.business.infrastructure.dao.IShopMapper;
 import com.foodlife.business.infrastructure.dao.IShopReviewMapper;
+import com.foodlife.business.infrastructure.dao.po.BusinessConsumedMessagePO;
 import com.foodlife.business.infrastructure.dao.po.ShopPO;
 import com.foodlife.business.infrastructure.dao.po.ShopReviewPO;
 import org.springframework.dao.DuplicateKeyException;
@@ -21,10 +24,14 @@ public class ShopReviewRepository implements IShopReviewRepository {
 
     private final IShopReviewMapper shopReviewMapper;
     private final IShopMapper shopMapper;
+    private final IBusinessConsumedMessageMapper consumedMessageMapper;
 
-    public ShopReviewRepository(IShopReviewMapper shopReviewMapper, IShopMapper shopMapper) {
+    public ShopReviewRepository(IShopReviewMapper shopReviewMapper,
+                                IShopMapper shopMapper,
+                                IBusinessConsumedMessageMapper consumedMessageMapper) {
         this.shopReviewMapper = shopReviewMapper;
         this.shopMapper = shopMapper;
+        this.consumedMessageMapper = consumedMessageMapper;
     }
 
     @Override
@@ -51,11 +58,47 @@ public class ShopReviewRepository implements IShopReviewRepository {
         } catch (DuplicateKeyException e) {
             throw new IllegalArgumentException("order already reviewed", e);
         }
-        int updated = shopMapper.increaseReviewStats(po.getShopId(), po.getScore());
+        return toEntity(shopReviewMapper.selectById(po.getId()));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean applyReviewCreatedStats(String reviewNo, String messageId) {
+        if (reviewNo == null || reviewNo.trim().isEmpty()) {
+            throw new IllegalArgumentException("reviewNo required");
+        }
+        String idempotentMessageId = messageId == null || messageId.trim().isEmpty()
+                ? BusinessMqTopics.REVIEW_CREATED + ":" + reviewNo
+                : messageId.trim();
+        BusinessConsumedMessagePO consumedMessage = new BusinessConsumedMessagePO();
+        consumedMessage.setMessageId(idempotentMessageId);
+        consumedMessage.setTopic(BusinessMqTopics.SHOP_REVIEW_TOPIC);
+        consumedMessage.setTag(BusinessMqTopics.REVIEW_CREATED);
+        consumedMessage.setBizKey(reviewNo);
+        consumedMessage.setConsumeStatus("PROCESSING");
+        consumedMessage.setCreateTime(java.time.LocalDateTime.now());
+        consumedMessage.setUpdateTime(java.time.LocalDateTime.now());
+        try {
+            consumedMessageMapper.insert(consumedMessage);
+        } catch (DuplicateKeyException e) {
+            return false;
+        }
+
+        ShopReviewPO review = shopReviewMapper.selectOne(new LambdaQueryWrapper<ShopReviewPO>()
+                .eq(ShopReviewPO::getReviewNo, reviewNo)
+                .eq(ShopReviewPO::getReviewStatus, 1)
+                .last("limit 1"));
+        if (review == null) {
+            markConsumedSuccess(idempotentMessageId);
+            return false;
+        }
+        int updated = shopMapper.increaseReviewStats(review.getShopId(), review.getScore());
         if (updated != 1) {
+            markConsumedFailed(idempotentMessageId, "shop not found");
             throw new IllegalArgumentException("shop not found");
         }
-        return toEntity(shopReviewMapper.selectById(po.getId()));
+        markConsumedSuccess(idempotentMessageId);
+        return true;
     }
 
     @Override
@@ -156,6 +199,22 @@ public class ShopReviewRepository implements IShopReviewRepository {
         po.setCreateTime(entity.getCreateTime());
         po.setUpdateTime(entity.getUpdateTime());
         return po;
+    }
+
+    private void markConsumedSuccess(String messageId) {
+        consumedMessageMapper.update(null, new LambdaUpdateWrapper<BusinessConsumedMessagePO>()
+                .set(BusinessConsumedMessagePO::getConsumeStatus, "SUCCESS")
+                .set(BusinessConsumedMessagePO::getFailReason, null)
+                .set(BusinessConsumedMessagePO::getUpdateTime, java.time.LocalDateTime.now())
+                .eq(BusinessConsumedMessagePO::getMessageId, messageId));
+    }
+
+    private void markConsumedFailed(String messageId, String failReason) {
+        consumedMessageMapper.update(null, new LambdaUpdateWrapper<BusinessConsumedMessagePO>()
+                .set(BusinessConsumedMessagePO::getConsumeStatus, "FAILED")
+                .set(BusinessConsumedMessagePO::getFailReason, failReason)
+                .set(BusinessConsumedMessagePO::getUpdateTime, java.time.LocalDateTime.now())
+                .eq(BusinessConsumedMessagePO::getMessageId, messageId));
     }
 
     private ShopReviewEntity toEntity(ShopReviewPO po) {

@@ -15,6 +15,9 @@ spring:
     password: root
 
 food:
+  mq:
+    producer-group: food-business-service-producer
+    review-consumer-group: food-business-review-consumer
   auth:
     include-paths:
       - /**

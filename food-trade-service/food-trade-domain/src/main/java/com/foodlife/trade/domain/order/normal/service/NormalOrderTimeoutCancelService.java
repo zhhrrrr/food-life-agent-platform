@@ -2,6 +2,8 @@ package com.foodlife.trade.domain.order.normal.service;
 
 import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
 import com.foodlife.trade.domain.order.coupon.service.CouponService;
+import com.foodlife.trade.domain.order.event.ITradeEventPublisher;
+import com.foodlife.trade.domain.order.event.TradeMqTopics;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.normal.model.NormalOrderTimeoutCancelDetail;
 import com.foodlife.trade.domain.order.normal.model.NormalOrderTimeoutCancelResult;
@@ -23,13 +25,16 @@ public class NormalOrderTimeoutCancelService {
     private final IOrderRepository orderRepository;
     private final NormalPackageStockMessageService normalPackageStockMessageService;
     private final CouponService couponService;
+    private final ITradeEventPublisher tradeEventPublisher;
 
     public NormalOrderTimeoutCancelService(IOrderRepository orderRepository,
                                            NormalPackageStockMessageService normalPackageStockMessageService,
-                                           CouponService couponService) {
+                                           CouponService couponService,
+                                           ITradeEventPublisher tradeEventPublisher) {
         this.orderRepository = orderRepository;
         this.normalPackageStockMessageService = normalPackageStockMessageService;
         this.couponService = couponService;
+        this.tradeEventPublisher = tradeEventPublisher;
     }
 
     public NormalOrderTimeoutCancelResult cancelTimeoutOrders(Integer timeoutMinutes, Integer limit) {
@@ -80,6 +85,10 @@ public class NormalOrderTimeoutCancelService {
             detail.setCouponReleased(couponService.releaseCoupon(order.getUserCouponId(), order.getUserId(), order.getId()));
             normalPackageStockMessageService.releaseStock(order);
             detail.setReleaseStockMessageSent(true);
+            tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
+                    TradeMqTopics.ORDER_CANCEL_TIMEOUT,
+                    String.valueOf(order.getId()),
+                    detail);
             return detail;
         } catch (Exception e) {
             detail.setFailReason(e.getMessage());

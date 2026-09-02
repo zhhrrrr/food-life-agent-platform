@@ -1,6 +1,8 @@
 package com.foodlife.trade.domain.order.payment.service;
 
 import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
+import com.foodlife.trade.domain.order.event.ITradeEventPublisher;
+import com.foodlife.trade.domain.order.event.TradeMqTopics;
 import com.foodlife.trade.domain.order.model.CancelOrderResult;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.payment.constant.PaymentOrderStatusConstants;
@@ -25,13 +27,16 @@ public class PaymentOrderTimeoutCloseService {
     private final IPaymentOrderRepository paymentOrderRepository;
     private final IOrderRepository orderRepository;
     private final OrderDomainService orderDomainService;
+    private final ITradeEventPublisher tradeEventPublisher;
 
     public PaymentOrderTimeoutCloseService(IPaymentOrderRepository paymentOrderRepository,
                                            IOrderRepository orderRepository,
-                                           OrderDomainService orderDomainService) {
+                                           OrderDomainService orderDomainService,
+                                           ITradeEventPublisher tradeEventPublisher) {
         this.paymentOrderRepository = paymentOrderRepository;
         this.orderRepository = orderRepository;
         this.orderDomainService = orderDomainService;
+        this.tradeEventPublisher = tradeEventPublisher;
     }
 
     public PaymentOrderTimeoutCloseResult closeTimeoutPreparedPaymentOrders(Integer timeoutMinutes, Integer limit) {
@@ -82,6 +87,10 @@ public class PaymentOrderTimeoutCloseService {
                 detail.setFailReason("payment status can not close");
                 return detail;
             }
+            tradeEventPublisher.publish(TradeMqTopics.PAYMENT_TOPIC,
+                    TradeMqTopics.PAYMENT_CLOSED,
+                    paymentOrder.getPayOrderNo(),
+                    detail);
 
             if (order == null) {
                 detail.setFailReason("order not found");
@@ -94,6 +103,10 @@ public class PaymentOrderTimeoutCloseService {
             CancelOrderResult cancelOrderResult = orderDomainService.cancelOrder(order.getId(), order.getUserId());
             detail.setOrderCanceled(true);
             detail.setAfterOrderStatus(cancelOrderResult.getOrderStatus());
+            tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
+                    TradeMqTopics.ORDER_CANCEL_TIMEOUT,
+                    String.valueOf(order.getId()),
+                    detail);
             return detail;
         } catch (Exception e) {
             detail.setFailReason(e.getMessage());

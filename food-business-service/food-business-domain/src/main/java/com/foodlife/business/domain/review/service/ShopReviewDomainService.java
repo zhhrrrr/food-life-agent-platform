@@ -1,5 +1,7 @@
 package com.foodlife.business.domain.review.service;
 
+import com.foodlife.business.domain.event.BusinessMqTopics;
+import com.foodlife.business.domain.event.IBusinessEventPublisher;
 import com.foodlife.business.domain.review.model.CreateShopReviewCommand;
 import com.foodlife.business.domain.review.model.ShopReviewEntity;
 import com.foodlife.business.domain.review.model.ShopReviewListResult;
@@ -21,10 +23,14 @@ public class ShopReviewDomainService {
 
     private final IShopReviewRepository shopReviewRepository;
     private final ITradeOrderPort tradeOrderPort;
+    private final IBusinessEventPublisher businessEventPublisher;
 
-    public ShopReviewDomainService(IShopReviewRepository shopReviewRepository, ITradeOrderPort tradeOrderPort) {
+    public ShopReviewDomainService(IShopReviewRepository shopReviewRepository,
+                                   ITradeOrderPort tradeOrderPort,
+                                   IBusinessEventPublisher businessEventPublisher) {
         this.shopReviewRepository = shopReviewRepository;
         this.tradeOrderPort = tradeOrderPort;
+        this.businessEventPublisher = businessEventPublisher;
     }
 
     public ShopReviewEntity createReview(CreateShopReviewCommand command) {
@@ -46,7 +52,12 @@ public class ShopReviewDomainService {
         review.setContent(command.getContent().trim());
         review.setImages(trimToEmpty(command.getImages()));
         review.setReviewStatus(1);
-        return shopReviewRepository.saveReview(review);
+        ShopReviewEntity savedReview = shopReviewRepository.saveReview(review);
+        businessEventPublisher.publish(BusinessMqTopics.SHOP_REVIEW_TOPIC,
+                BusinessMqTopics.REVIEW_CREATED,
+                savedReview.getReviewNo(),
+                savedReview);
+        return savedReview;
     }
 
     public ShopReviewListResult listShopReviews(Long shopId, Long lastId, Integer pageSize) {

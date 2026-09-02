@@ -2,6 +2,8 @@ package com.foodlife.trade.domain.order.seckill.service;
 
 import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
 import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
+import com.foodlife.trade.domain.order.event.ITradeEventPublisher;
+import com.foodlife.trade.domain.order.event.TradeMqTopics;
 import com.foodlife.trade.domain.order.factory.OrderFactory;
 import com.foodlife.trade.domain.order.message.constant.LocalMessageStatusConstants;
 import com.foodlife.trade.domain.order.message.model.TradeLocalMessageEntity;
@@ -56,17 +58,20 @@ public class SeckillOrderService {
     private final IOrderRepository orderRepository;
     private final IBusinessPackagePort businessPackagePort;
     private final OrderFactory orderFactory;
+    private final ITradeEventPublisher tradeEventPublisher;
 
     public SeckillOrderService(ISeckillRepository seckillRepository,
                                ISeckillStockRepository seckillStockRepository,
                                IOrderRepository orderRepository,
                                IBusinessPackagePort businessPackagePort,
-                               OrderFactory orderFactory) {
+                               OrderFactory orderFactory,
+                               ITradeEventPublisher tradeEventPublisher) {
         this.seckillRepository = seckillRepository;
         this.seckillStockRepository = seckillStockRepository;
         this.orderRepository = orderRepository;
         this.businessPackagePort = businessPackagePort;
         this.orderFactory = orderFactory;
+        this.tradeEventPublisher = tradeEventPublisher;
     }
 
     public List<SeckillActivityView> queryAvailableActivities(Long packageId, Integer limit) {
@@ -333,6 +338,10 @@ public class SeckillOrderService {
             SeckillOrderResult orderResult = createActualOrderFromRequest(request);
             seckillRepository.markSeckillOrderRequestSuccess(request.getRequestNo(), orderResult);
             seckillRepository.markLocalMessageSuccess(message.getId());
+            tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
+                    TradeMqTopics.ORDER_CREATED,
+                    String.valueOf(orderResult.getOrderId()),
+                    orderResult);
             processResult.setSuccessCount(processResult.getSuccessCount() + 1);
         } catch (Exception e) {
             String failReason = rootMessage(e);
