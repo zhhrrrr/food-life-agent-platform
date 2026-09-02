@@ -17,6 +17,8 @@ spring:
 food:
   mq:
     producer-group: food-trade-service-producer
+    order-timeout-consumer-group: food-trade-order-timeout-consumer
+    order-timeout-delay-level: 16
     retry-delay-seconds: 30
     retry-limit: 50
   jobs:

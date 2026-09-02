@@ -122,6 +122,12 @@ if ([int]$tradeEventCount -lt 5) {
 }
 Write-Host "OK trade local event messages -> count=$tradeEventCount"
 
+$delayCloseCount = Invoke-MysqlScalar -Sql "SELECT COUNT(*) FROM food_trade_db.trade_local_message WHERE biz_type='TRADE_EVENT' AND message_id='trade_order_topic:order.cancel.timeout:timeout-close:$orderId' AND message_status='SUCCESS';"
+if ([int]$delayCloseCount -lt 1) {
+    throw "order timeout delay close message missing, orderId=$orderId"
+}
+Write-Host "OK order timeout delay close message -> count=$delayCloseCount"
+
 $reviewConsumeCount = Invoke-MysqlScalar -Sql "SELECT COUNT(*) FROM food_business_db.business_consumed_message WHERE biz_key='$reviewNo' AND consume_status='SUCCESS';"
 if ([int]$reviewConsumeCount -lt 1) {
     throw "review consumed message missing, reviewNo=$reviewNo"

@@ -44,6 +44,8 @@ food:
     enabled: ${FOOD_MQ_ENABLED:false}
     name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
     producer-group: food-trade-service-producer
+    order-timeout-consumer-group: food-trade-order-timeout-consumer
+    order-timeout-delay-level: 16
     retry-delay-seconds: 30
     retry-limit: 50
   jobs:

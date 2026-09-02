@@ -131,6 +131,24 @@ RocketMQ 事件固定使用：
 biz_type = TRADE_EVENT
 ```
 
+延迟关单消息的 message_id 规则：
+
+```text
+trade_order_topic:order.cancel.timeout:timeout-close:{orderId}
+```
+
+它和真正取消成功后的结果事件区分开：
+
+```text
+trade_order_topic:order.cancel.timeout:{orderId}
+```
+
+这样做的原因是：
+
+- `timeout-close:{orderId}` 表示“到期后尝试关闭”
+- `{orderId}` 表示“已经完成超时取消”
+- 两者语义不同，避免本地消息表唯一键冲突
+
 message_id 生成规则：
 
 ```text
@@ -274,6 +292,25 @@ trade-service 先写 trade_local_message，再发送 MQ。
 ```text
 当前订单超时仍由定时补偿扫描。
 生产可以把 order.created 后发送延迟消息，到期后消费 order.cancel.timeout，检查订单仍 WAIT_PAY 再关闭。
+
+本项目已经接入：
+
+```text
+下单成功 -> publishDelay(trade_order_topic, order.cancel.timeout, timeout-close:{orderId}, payload)
+RocketMQ -> 按 delayLevel 延迟投递
+消费者 -> TradeOrderTimeoutCloseConsumer
+领域服务 -> OrderTimeoutDelayCloseService
+```
+
+当前默认：
+
+```yaml
+food:
+  mq:
+    order-timeout-delay-level: 16
+```
+
+RocketMQ 4.x 默认延迟等级里，16 通常对应 30 分钟。
 ```
 
 事务消息：
