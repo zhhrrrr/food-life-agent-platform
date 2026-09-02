@@ -10,6 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.util.StringUtils;
@@ -48,7 +49,9 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
 
         String redisKey = gatewayAuthProperties.getTokenPrefix() + token;
         return redisTemplate.hasKey(redisKey)
-                .flatMap(exists -> Boolean.TRUE.equals(exists) ? chain.filter(exchange) : unauthorized(exchange))
+                .flatMap(exists -> Boolean.TRUE.equals(exists)
+                        ? chain.filter(mutatedExchangeWithToken(exchange, token))
+                        : unauthorized(exchange))
                 .onErrorResume(e -> unauthorized(exchange));
     }
 
@@ -82,6 +85,16 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
             token = token.substring(7).trim();
         }
         return token;
+    }
+
+    private ServerWebExchange mutatedExchangeWithToken(ServerWebExchange exchange, String token) {
+        ServerHttpRequest request = exchange.getRequest().mutate()
+                .headers(headers -> {
+                    headers.set(gatewayAuthProperties.getTokenHeader(), token);
+                    headers.set(HttpHeaders.AUTHORIZATION, token);
+                })
+                .build();
+        return exchange.mutate().request(request).build();
     }
 
     private Mono<Void> unauthorized(ServerWebExchange exchange) {
