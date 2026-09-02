@@ -28,7 +28,10 @@ public class BusinessPackagePort implements IBusinessPackagePort {
         try {
             response = businessPackageClient.queryTradeSnapshot(packageId);
         } catch (FeignException e) {
-            return null;
+            throw new IllegalStateException("服务繁忙，请稍后再试");
+        }
+        if (response != null && "503".equals(response.getCode())) {
+            throw new IllegalStateException(response.getMessage());
         }
         if (response == null || !"0000".equals(response.getCode()) || response.getData() == null) {
             return null;
@@ -100,6 +103,9 @@ public class BusinessPackagePort implements IBusinessPackagePort {
             response = doPostPackageStockAction(packageId, quantity, trimToNull(operationId), actionPath);
         } catch (FeignException e) {
             throw new IllegalStateException("package stock action failed");
+        }
+        if (response != null && "503".equals(response.getCode())) {
+            throw new IllegalStateException(response.getMessage());
         }
         if (response == null || !"0000".equals(response.getCode())) {
             throw new IllegalStateException(response == null ? "package stock action failed" : response.getMessage());

@@ -148,6 +148,10 @@ public class OrderDomainService {
             releaseOccupiedPackageStock(packageStockOccupied, command);
             couponService.releaseCoupon(usedCouponId, command == null ? null : command.getUserId(), savedOrderId);
             throw e;
+        } catch (IllegalStateException e) {
+            releaseOccupiedPackageStock(packageStockOccupied, command);
+            couponService.releaseCoupon(usedCouponId, command == null ? null : command.getUserId(), savedOrderId);
+            throw e;
         } catch (Exception e) {
             releaseOccupiedPackageStock(packageStockOccupied, command);
             couponService.releaseCoupon(usedCouponId, command == null ? null : command.getUserId(), savedOrderId);

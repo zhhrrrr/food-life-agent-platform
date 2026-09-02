@@ -1,5 +1,7 @@
 package com.foodlife.business.trigger.http;
 
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.foodlife.business.api.dto.PackageStockChangeRecordResponseDTO;
 import com.foodlife.business.api.dto.PackageStockChangeResponseDTO;
 import com.foodlife.business.api.dto.PackageTradeSnapshotResponseDTO;
@@ -9,6 +11,7 @@ import com.foodlife.business.domain.packagee.model.PackageStockChangeResult;
 import com.foodlife.business.domain.packagee.model.PackageTradeSnapshotEntity;
 import com.foodlife.business.domain.packagee.service.PackageDomainService;
 import com.foodlife.business.types.response.Response;
+import com.foodlife.business.trigger.sentinel.BusinessSentinelResources;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -58,6 +61,7 @@ public class PackageController {
     }
 
     @PostMapping("/{packageId}/stock/occupy")
+    @SentinelResource(value = BusinessSentinelResources.PACKAGE_STOCK_OCCUPY, blockHandler = "occupyPackageStockBlock")
     public Response<PackageStockChangeResponseDTO> occupyPackageStock(@PathVariable Long packageId,
                                                                       @RequestParam Integer quantity,
                                                                       @RequestParam(required = false) String operationId) {
@@ -69,6 +73,7 @@ public class PackageController {
     }
 
     @PostMapping("/{packageId}/stock/release")
+    @SentinelResource(value = BusinessSentinelResources.PACKAGE_STOCK_RELEASE, blockHandler = "releasePackageStockBlock")
     public Response<PackageStockChangeResponseDTO> releasePackageStock(@PathVariable Long packageId,
                                                                        @RequestParam Integer quantity,
                                                                        @RequestParam(required = false) String operationId) {
@@ -80,6 +85,7 @@ public class PackageController {
     }
 
     @PostMapping("/{packageId}/sold/confirm")
+    @SentinelResource(value = BusinessSentinelResources.PACKAGE_SOLD_CONFIRM, blockHandler = "confirmPackageSoldBlock")
     public Response<PackageStockChangeResponseDTO> confirmPackageSold(@PathVariable Long packageId,
                                                                      @RequestParam Integer quantity,
                                                                      @RequestParam(required = false) String operationId) {
@@ -91,6 +97,7 @@ public class PackageController {
     }
 
     @PostMapping("/{packageId}/sold/rollback")
+    @SentinelResource(value = BusinessSentinelResources.PACKAGE_SOLD_ROLLBACK, blockHandler = "rollbackPackageSoldBlock")
     public Response<PackageStockChangeResponseDTO> rollbackPackageSold(@PathVariable Long packageId,
                                                                       @RequestParam Integer quantity,
                                                                       @RequestParam(required = false) String operationId) {
@@ -99,6 +106,22 @@ public class PackageController {
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
+    }
+
+    public Response<PackageStockChangeResponseDTO> occupyPackageStockBlock(Long packageId, Integer quantity, String operationId, BlockException e) {
+        return Response.fail("429", "package stock service busy, please try again later");
+    }
+
+    public Response<PackageStockChangeResponseDTO> releasePackageStockBlock(Long packageId, Integer quantity, String operationId, BlockException e) {
+        return Response.fail("429", "package stock release busy, please try again later");
+    }
+
+    public Response<PackageStockChangeResponseDTO> confirmPackageSoldBlock(Long packageId, Integer quantity, String operationId, BlockException e) {
+        return Response.fail("429", "package sold confirm busy, please try again later");
+    }
+
+    public Response<PackageStockChangeResponseDTO> rollbackPackageSoldBlock(Long packageId, Integer quantity, String operationId, BlockException e) {
+        return Response.fail("429", "package sold rollback busy, please try again later");
     }
 
     private PackageTradeSnapshotResponseDTO toTradeSnapshotResponse(PackageTradeSnapshotEntity source) {

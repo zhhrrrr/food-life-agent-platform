@@ -1,36 +1,38 @@
 param(
-    [string]$GatewayBaseUrl = "http://localhost:8080",
-    [string]$RedisCli = "redis-cli",
-    [string]$RedisHost = "localhost",
-    [int]$RedisPort = 6379,
-    [int]$RedisDatabase = 0,
-    [int]$IpCapacity = 120,
-    [int]$UserCapacity = 60,
-    [int]$WindowSeconds = 60
+    [string]$GatewayBaseUrl = "http://localhost:8080"
 )
 
 $ErrorActionPreference = "Stop"
 
-function Get-Sha256Hex {
-    param([string]$Value)
+function Assert-SmokeResponse {
+    param(
+        [string]$Name,
+        [string]$Raw,
+        [int]$ExpectedStatus,
+        [string]$ExpectedCode
+    )
 
-    $sha256 = [System.Security.Cryptography.SHA256]::Create()
-    try {
-        $bytes = [System.Text.Encoding]::UTF8.GetBytes($Value)
-        return (($sha256.ComputeHash($bytes) | ForEach-Object { $_.ToString("x2") }) -join "")
-    } finally {
-        $sha256.Dispose()
+    $splitIndex = $Raw.LastIndexOf("`n")
+    if ($splitIndex -lt 0) {
+        throw "$Name failed. curl output is invalid."
     }
-}
+    $body = $Raw.Substring(0, $splitIndex)
+    $status = [int]$Raw.Substring($splitIndex + 1)
 
-function Invoke-Redis {
-    param([string[]]$RedisArgs)
-
-    $result = & $RedisCli -h $RedisHost -p $RedisPort -n $RedisDatabase @RedisArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "redis-cli failed: $($RedisArgs -join ' ')"
+    if (-not [string]::IsNullOrWhiteSpace($body)) {
+        $response = $body | ConvertFrom-Json
+    } else {
+        $response = @{ code = ""; message = "" }
     }
-    return $result
+
+    if ($status -ne $ExpectedStatus) {
+        throw "$Name failed. expected status=$ExpectedStatus, actual status=$status, body=$body"
+    }
+    if ($ExpectedCode -and $response.code -ne $ExpectedCode) {
+        throw "$Name failed. expected code=$ExpectedCode, actual code=$($response.code), message=$($response.message)"
+    }
+
+    Write-Host "OK $Name -> status=$status, code=$($response.code)"
 }
 
 function Invoke-SmokeGet {
@@ -49,27 +51,7 @@ function Invoke-SmokeGet {
     $curlArgs += $Uri
 
     $raw = (& curl.exe @curlArgs) -join "`n"
-    $splitIndex = $raw.LastIndexOf("`n")
-    if ($splitIndex -lt 0) {
-        throw "$Name failed. curl output is invalid."
-    }
-    $body = $raw.Substring(0, $splitIndex)
-    $status = [int]$raw.Substring($splitIndex + 1)
-
-    if (-not [string]::IsNullOrWhiteSpace($body)) {
-        $response = $body | ConvertFrom-Json
-    } else {
-        $response = @{ code = ""; message = "" }
-    }
-
-    if ($status -ne $ExpectedStatus) {
-        throw "$Name failed. expected status=$ExpectedStatus, actual status=$status, body=$body"
-    }
-    if ($ExpectedCode -and $response.code -ne $ExpectedCode) {
-        throw "$Name failed. expected code=$ExpectedCode, actual code=$($response.code), message=$($response.message)"
-    }
-
-    Write-Host "OK $Name -> status=$status, code=$($response.code)"
+    Assert-SmokeResponse -Name $Name -Raw $raw -ExpectedStatus $ExpectedStatus -ExpectedCode $ExpectedCode
 }
 
 Invoke-SmokeGet `
@@ -78,33 +60,19 @@ Invoke-SmokeGet `
     -ExpectedStatus 403 `
     -ExpectedCode "403"
 
-$bucket = [math]::Floor([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() / $WindowSeconds)
-$ip = "10.99.0.61"
-$token = "traffic-guard-smoke-token"
-$ipKey = "food:gateway:rate-limit:ip:$(Get-Sha256Hex $ip):$bucket"
-$userKey = "food:gateway:rate-limit:user:$(Get-Sha256Hex $token):$bucket"
+$smokeHeaderValue = "gateway-sentinel-$(Get-Random)"
+Invoke-SmokeGet `
+    -Name "gateway sentinel first request" `
+    -Uri "$GatewayBaseUrl/api/shop-category/list" `
+    -ExpectedStatus 200 `
+    -ExpectedCode "0000" `
+    -Headers @{ "X-Sentinel-Smoke" = $smokeHeaderValue }
 
-try {
-    Invoke-Redis -RedisArgs @("setex", $ipKey, "$WindowSeconds", "$IpCapacity") | Out-Null
-    Invoke-SmokeGet `
-        -Name "gateway ip rate limit" `
-        -Uri "$GatewayBaseUrl/api/shop-category/list" `
-        -ExpectedStatus 429 `
-        -ExpectedCode "429" `
-        -Headers @{ "X-Forwarded-For" = $ip }
-
-    Invoke-Redis -RedisArgs @("setex", $userKey, "$WindowSeconds", "$UserCapacity") | Out-Null
-    Invoke-SmokeGet `
-        -Name "gateway user rate limit" `
-        -Uri "$GatewayBaseUrl/api/user/me" `
-        -ExpectedStatus 429 `
-        -ExpectedCode "429" `
-        -Headers @{
-            "X-Forwarded-For" = "10.99.0.62"
-            "Authorization" = "Bearer $token"
-        }
-} finally {
-    Invoke-Redis -RedisArgs @("del", $ipKey, $userKey) | Out-Null
-}
+Invoke-SmokeGet `
+    -Name "gateway sentinel limited request" `
+    -Uri "$GatewayBaseUrl/api/shop-category/list" `
+    -ExpectedStatus 429 `
+    -ExpectedCode "429" `
+    -Headers @{ "X-Sentinel-Smoke" = $smokeHeaderValue }
 
 Write-Host "Gateway traffic guard smoke verification completed."

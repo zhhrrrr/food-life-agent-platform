@@ -43,6 +43,8 @@ public class ShopReviewController {
             return Response.success(toResponse(review));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
+        } catch (IllegalStateException e) {
+            return Response.fail("503", e.getMessage() == null ? "订单服务暂不可用" : e.getMessage());
         }
     }
 
