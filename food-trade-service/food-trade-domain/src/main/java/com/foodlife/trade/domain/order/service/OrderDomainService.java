@@ -6,6 +6,7 @@ import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
 import com.foodlife.trade.domain.order.coupon.model.UserCouponEntity;
 import com.foodlife.trade.domain.order.coupon.service.CouponService;
 import com.foodlife.trade.domain.order.event.ITradeEventPublisher;
+import com.foodlife.trade.domain.order.event.OrderTimeoutCloseMessage;
 import com.foodlife.trade.domain.order.event.TradeMqTopics;
 import com.foodlife.trade.domain.order.factory.OrderFactory;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyLockOrderCommand;
@@ -147,10 +148,7 @@ public class OrderDomainService {
 
             DiningOrderItemEntity orderItem = orderFactory.createOrderItem(savedOrder, snapshot, command.getQuantity());
             orderRepository.saveOrderItem(orderItem);
-            tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
-                    TradeMqTopics.ORDER_CREATED,
-                    String.valueOf(savedOrder.getId()),
-                    savedOrder);
+            publishOrderCreatedAndScheduleTimeoutClose(savedOrder, savedOrder);
 
             return buildCreateOrderResult(savedOrder);
         } catch (IllegalArgumentException e) {
@@ -284,6 +282,7 @@ public class OrderDomainService {
                 TradeMqTopics.ORDER_CREATED,
                 String.valueOf(result.getOrderId()),
                 result);
+        scheduleOrderTimeoutClose(result.getOrderId(), result.getOrderNo(), command.getUserId(), TradeTypeConstants.GROUP_BUY, null);
         return result;
     }
 
@@ -301,6 +300,7 @@ public class OrderDomainService {
                 TradeMqTopics.ORDER_CREATED,
                 String.valueOf(result.getOrderId()),
                 result);
+        scheduleOrderTimeoutClose(result.getOrderId(), result.getOrderNo(), command.getUserId(), TradeTypeConstants.SECKILL, null);
         return result;
     }
 
@@ -407,6 +407,27 @@ public class OrderDomainService {
         result.setUserCouponId(savedOrder.getUserCouponId());
         result.setOrderStatus(savedOrder.getOrderStatus());
         return result;
+    }
+
+    private void publishOrderCreatedAndScheduleTimeoutClose(DiningOrderEntity order, Object payload) {
+        tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
+                TradeMqTopics.ORDER_CREATED,
+                String.valueOf(order.getId()),
+                payload);
+        scheduleOrderTimeoutClose(order.getId(), order.getOrderNo(), order.getUserId(), order.getTradeType(), order.getCreateTime());
+    }
+
+    private void scheduleOrderTimeoutClose(Long orderId, String orderNo, Long userId, String tradeType, java.time.LocalDateTime orderCreateTime) {
+        OrderTimeoutCloseMessage message = new OrderTimeoutCloseMessage();
+        message.setOrderId(orderId);
+        message.setOrderNo(orderNo);
+        message.setUserId(userId);
+        message.setTradeType(tradeType);
+        message.setOrderCreateTime(orderCreateTime);
+        tradeEventPublisher.publishDelay(TradeMqTopics.TRADE_ORDER_TOPIC,
+                TradeMqTopics.ORDER_CANCEL_TIMEOUT,
+                "timeout-close:" + orderId,
+                message);
     }
 
     private void releaseOccupiedPackageStock(boolean stockOccupied, CreateOrderCommand command) {

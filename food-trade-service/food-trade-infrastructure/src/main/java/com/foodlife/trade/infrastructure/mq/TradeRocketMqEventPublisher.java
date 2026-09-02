@@ -61,7 +61,18 @@ public class TradeRocketMqEventPublisher implements ITradeEventPublisher, Initia
         String messageId = buildMessageId(topic, tag, key);
         TradeLocalMessagePO message = findByMessageId(messageId);
         if (message == null) {
-            message = saveInitMessage(messageId, topic, tag, key, payload);
+            message = saveInitMessage(messageId, topic, tag, key, payload, null);
+        }
+        publishStoredMessage(message);
+    }
+
+    @Override
+    public void publishDelay(String topic, String tag, String key, Object payload) {
+        validate(topic, tag, key);
+        String messageId = buildMessageId(topic, tag, key);
+        TradeLocalMessagePO message = findByMessageId(messageId);
+        if (message == null) {
+            message = saveInitMessage(messageId, topic, tag, key, payload, properties.getOrderTimeoutDelayLevel());
         }
         publishStoredMessage(message);
     }
@@ -115,6 +126,10 @@ public class TradeRocketMqEventPublisher implements ITradeEventPublisher, Initia
                     content.get("key").asText(),
                     message.getContent().getBytes(StandardCharsets.UTF_8)
             );
+            JsonNode delayLevel = content.get("delayLevel");
+            if (delayLevel != null && delayLevel.asInt(0) > 0) {
+                rocketMessage.setDelayTimeLevel(delayLevel.asInt());
+            }
             SendResult sendResult = producer.send(rocketMessage);
             markSuccess(message.getId());
             log.info("trade RocketMQ publish success, messageId={}, sendStatus={}, msgId={}",
@@ -127,7 +142,7 @@ public class TradeRocketMqEventPublisher implements ITradeEventPublisher, Initia
         }
     }
 
-    private TradeLocalMessagePO saveInitMessage(String messageId, String topic, String tag, String key, Object payload) {
+    private TradeLocalMessagePO saveInitMessage(String messageId, String topic, String tag, String key, Object payload, Integer delayLevel) {
         LocalDateTime now = LocalDateTime.now();
         TradeLocalMessagePO po = new TradeLocalMessagePO();
         po.setMessageId(messageId);
@@ -138,20 +153,23 @@ public class TradeRocketMqEventPublisher implements ITradeEventPublisher, Initia
         po.setRetryCount(0);
         po.setMaxRetryCount(DEFAULT_MAX_RETRY_COUNT);
         po.setNextRetryTime(now);
-        po.setContent(buildContent(topic, tag, key, payload));
+        po.setContent(buildContent(topic, tag, key, payload, delayLevel));
         po.setCreateTime(now);
         po.setUpdateTime(now);
         tradeLocalMessageMapper.insert(po);
         return po;
     }
 
-    private String buildContent(String topic, String tag, String key, Object payload) {
+    private String buildContent(String topic, String tag, String key, Object payload, Integer delayLevel) {
         try {
             Map<String, Object> content = new LinkedHashMap<>();
             content.put("topic", topic);
             content.put("tag", tag);
             content.put("key", key);
             content.put("payload", payload);
+            if (delayLevel != null && delayLevel > 0) {
+                content.put("delayLevel", delayLevel);
+            }
             content.put("eventTime", LocalDateTime.now().toString());
             return objectMapper.writeValueAsString(content);
         } catch (Exception e) {

@@ -12,7 +12,9 @@ public class TradeRocketMqProperties {
     private Boolean enabled = false;
     private String nameServer = "127.0.0.1:9876";
     private String producerGroup = "food-trade-service-producer";
+    private String orderTimeoutConsumerGroup = "food-trade-order-timeout-consumer";
     private Integer retryDelaySeconds = 30;
     private Integer retryLimit = 50;
+    private Integer orderTimeoutDelayLevel = 16;
 }
 

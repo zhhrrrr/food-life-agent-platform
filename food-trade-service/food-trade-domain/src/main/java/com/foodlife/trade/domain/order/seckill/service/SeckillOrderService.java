@@ -3,6 +3,7 @@ package com.foodlife.trade.domain.order.seckill.service;
 import com.foodlife.trade.domain.order.constant.OrderStatusConstants;
 import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
 import com.foodlife.trade.domain.order.event.ITradeEventPublisher;
+import com.foodlife.trade.domain.order.event.OrderTimeoutCloseMessage;
 import com.foodlife.trade.domain.order.event.TradeMqTopics;
 import com.foodlife.trade.domain.order.factory.OrderFactory;
 import com.foodlife.trade.domain.order.message.constant.LocalMessageStatusConstants;
@@ -342,6 +343,7 @@ public class SeckillOrderService {
                     TradeMqTopics.ORDER_CREATED,
                     String.valueOf(orderResult.getOrderId()),
                     orderResult);
+            scheduleOrderTimeoutClose(orderResult, request.getUserId());
             processResult.setSuccessCount(processResult.getSuccessCount() + 1);
         } catch (Exception e) {
             String failReason = rootMessage(e);
@@ -534,6 +536,18 @@ public class SeckillOrderService {
                 + ",\"packageId\":" + request.getPackageId()
                 + ",\"quantity\":" + request.getQuantity()
                 + "}";
+    }
+
+    private void scheduleOrderTimeoutClose(SeckillOrderResult orderResult, Long userId) {
+        OrderTimeoutCloseMessage message = new OrderTimeoutCloseMessage();
+        message.setOrderId(orderResult.getOrderId());
+        message.setOrderNo(orderResult.getOrderNo());
+        message.setUserId(userId);
+        message.setTradeType(TradeTypeConstants.SECKILL);
+        tradeEventPublisher.publishDelay(TradeMqTopics.TRADE_ORDER_TOPIC,
+                TradeMqTopics.ORDER_CANCEL_TIMEOUT,
+                "timeout-close:" + orderResult.getOrderId(),
+                message);
     }
 
     private String generateRequestNo(Long userId) {
