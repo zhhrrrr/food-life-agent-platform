@@ -31,6 +31,7 @@ Write-Host "NACOS_CONFIG_GROUP=$env:NACOS_CONFIG_GROUP"
 & (Join-Path $PSScriptRoot "check-nacos.ps1") -Port (($NacosServerAddr -split ":")[-1])
 
 $startArgs = @{}
+$startArgs.SpringProfilesActive = "nacos"
 if ($Rebuild) {
     $startArgs.Rebuild = $true
 }

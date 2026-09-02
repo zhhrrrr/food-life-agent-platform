@@ -9,13 +9,6 @@ spring:
     url: jdbc:mysql://localhost:3306/food_business_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: root
     password: root
-  cloud:
-    discovery:
-      client:
-        simple:
-          instances:
-            food-trade-service:
-              - uri: http://localhost:8301
 
 food:
   auth:

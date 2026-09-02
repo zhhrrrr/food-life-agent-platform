@@ -1,7 +1,8 @@
 param(
     [switch]$Rebuild,
     [switch]$Restart,
-    [switch]$IncludeGateway
+    [switch]$IncludeGateway,
+    [string]$SpringProfilesActive = "local"
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,6 +10,13 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Logs = Join-Path $Root "logs"
 New-Item -ItemType Directory -Force -Path $Logs | Out-Null
+
+$env:SPRING_PROFILES_ACTIVE = $SpringProfilesActive
+if ($SpringProfilesActive -eq "local") {
+    $env:NACOS_DISCOVERY_ENABLED = "false"
+    $env:NACOS_CONFIG_ENABLED = "false"
+}
+Write-Host "SPRING_PROFILES_ACTIVE=$env:SPRING_PROFILES_ACTIVE"
 
 $CoreServices = @(
     @{
