@@ -12,22 +12,18 @@ function Invoke-SmokeGet {
         [string]$ExpectedCode = "0000"
     )
 
-    try {
-        $webResponse = Invoke-WebRequest -Method Get -Uri $Uri -TimeoutSec 10 -UseBasicParsing
-        $status = [int]$webResponse.StatusCode
-        $response = $webResponse.Content | ConvertFrom-Json
-    } catch {
-        if ($null -eq $_.Exception.Response) {
-            throw
-        }
-        $status = [int]$_.Exception.Response.StatusCode
-        $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
-        $body = $reader.ReadToEnd()
-        if (-not [string]::IsNullOrWhiteSpace($body)) {
-            $response = $body | ConvertFrom-Json
-        } else {
-            $response = @{ code = ""; message = "" }
-        }
+    $raw = (& curl.exe -s -w "`n%{http_code}" --connect-timeout 10 --max-time 10 $Uri) -join "`n"
+    $splitIndex = $raw.LastIndexOf("`n")
+    if ($splitIndex -lt 0) {
+        throw "$Name failed. curl output is invalid."
+    }
+    $body = $raw.Substring(0, $splitIndex)
+    $status = [int]$raw.Substring($splitIndex + 1)
+
+    if (-not [string]::IsNullOrWhiteSpace($body)) {
+        $response = $body | ConvertFrom-Json
+    } else {
+        $response = @{ code = ""; message = "" }
     }
 
     if ($status -ne $ExpectedStatus) {
@@ -42,7 +38,8 @@ function Invoke-SmokeGet {
 }
 
 Invoke-SmokeGet -Name "gateway health" -Uri "$GatewayBaseUrl/health" | Out-Null
-Invoke-SmokeGet -Name "user route unauthenticated" -Uri "$GatewayBaseUrl/api/user/me" -ExpectedStatus 401 -ExpectedCode "" | Out-Null
+Invoke-SmokeGet -Name "user route unauthenticated" -Uri "$GatewayBaseUrl/api/user/me" -ExpectedStatus 401 -ExpectedCode "401" | Out-Null
+Invoke-SmokeGet -Name "trade route unauthenticated" -Uri "$GatewayBaseUrl/api/trade/orders" -ExpectedStatus 401 -ExpectedCode "401" | Out-Null
 Invoke-SmokeGet -Name "shop category route" -Uri "$GatewayBaseUrl/api/shop-category/list" | Out-Null
 Invoke-SmokeGet -Name "shop route" -Uri "$GatewayBaseUrl/api/shop/1" | Out-Null
 Invoke-SmokeGet -Name "package snapshot route" -Uri "$GatewayBaseUrl/api/package/trade-snapshot/1" | Out-Null

@@ -41,3 +41,19 @@ spring:
 logging:
   level:
     org.springframework.cloud.gateway: info
+
+food:
+  gateway:
+    auth:
+      enabled: true
+      token-header: authorization
+      token-prefix: "food:login:token:"
+      exclude-paths:
+        - /health
+        - /api/user/code
+        - /api/user/login
+        - /api/user/logout
+        - /api/shop-category/**
+        - /api/shop/**
+        - /api/package/**
+        - /api/trade/pay/callback/**
