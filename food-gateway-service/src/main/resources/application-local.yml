@@ -3,6 +3,16 @@ server:
 
 spring:
   cloud:
+    discovery:
+      client:
+        simple:
+          instances:
+            food-user-service:
+              - uri: http://localhost:8101
+            food-business-service:
+              - uri: http://localhost:8201
+            food-trade-service:
+              - uri: http://localhost:8301
     gateway:
       default-filters:
         - PreserveHostHeader

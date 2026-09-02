@@ -1,39 +1,33 @@
-server:
-  port: 8101
-
 spring:
   application:
     name: food-user-service
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/food_user_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
-    username: root
-    password: root
-  redis:
-    host: localhost
-    port: 6379
-    database: 0
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  cloud:
+    nacos:
+      config:
+        import-check:
+          enabled: false
 
-mybatis-plus:
-  configuration:
-    map-underscore-to-camel-case: true
-  global-config:
-    db-config:
-      id-type: auto
-
-food:
-  user:
-    repository:
-      type: mysql
-  auth:
-    enabled: true
-    token-header: authorization
-    token-prefix: "food:login:token:"
-    token-ttl-minutes: 30
-    include-paths:
-      - /**
-    exclude-paths:
-      - /health
-      - /api/user/code
-      - /api/user/login
-      - /api/user/logout
+---
+spring:
+  config:
+    activate:
+      on-profile: nacos
+    import:
+      - optional:nacos:food-common.yaml?group=${NACOS_CONFIG_GROUP:FOOD_LIFE_AGENT}&refreshEnabled=true
+      - optional:nacos:food-user-service.yaml?group=${NACOS_CONFIG_GROUP:FOOD_LIFE_AGENT}&refreshEnabled=true
+  cloud:
+    nacos:
+      server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD:nacos}
+      discovery:
+        enabled: ${NACOS_DISCOVERY_ENABLED:true}
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_DISCOVERY_GROUP:FOOD_LIFE_AGENT}
+      config:
+        enabled: ${NACOS_CONFIG_ENABLED:true}
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_CONFIG_GROUP:FOOD_LIFE_AGENT}
+        file-extension: yaml
