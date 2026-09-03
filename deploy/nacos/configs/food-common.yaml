@@ -10,6 +10,9 @@ spring:
     port: 6379
     database: 0
   cloud:
+    alibaba:
+      seata:
+        tx-service-group: ${SEATA_TX_GROUP:food-life-agent-tx-group}
     sentinel:
       transport:
         dashboard: ${SENTINEL_DASHBOARD_ADDR:localhost:8858}
@@ -22,6 +25,17 @@ feign:
       default:
         connectTimeout: 3000
         readTimeout: 5000
+
+seata:
+  enabled: ${SEATA_ENABLED:false}
+  application-id: ${spring.application.name}
+  tx-service-group: ${SEATA_TX_GROUP:food-life-agent-tx-group}
+  enable-auto-data-source-proxy: true
+  service:
+    vgroup-mapping:
+      food-life-agent-tx-group: ${SEATA_CLUSTER:default}
+    grouplist:
+      default: ${SEATA_SERVER_ADDR:127.0.0.1:8091}
 
 mybatis-plus:
   configuration:

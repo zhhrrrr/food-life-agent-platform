@@ -1,0 +1,427 @@
+# 开发日志-066-分布式事务治理与 Seata 示例链路
+
+## 本次目标
+
+第六阶段不把所有跨服务链路都套 Seata，而是按生产里更常见的事务治理方式拆开：
+
+- 单服务内强一致：继续使用本地事务 `@Transactional`
+- 高并发下单链路：继续使用本地消息表 + RabbitMQ + 补偿任务做最终一致性
+- 面试展示链路：新增一条低并发 Seata AT 示例链路
+
+本次选用的 Seata 示例是：
+
+```text
+trade-service 管理端库存调整入口
+  -> trade-service 写本地分布式事务演示审计
+  -> Feign 调 business-service 内部库存调整接口
+  -> business-service 修改 meal_package.stock
+  -> business-service 写 package_stock_change_record 幂等记录
+```
+
+选择这个链路的原因：
+
+- 它不是秒杀/下单这种高并发热点链路，不容易被全局锁拖垮。
+- 它确实跨了两个数据库：`food_trade_db` 和 `food_business_db`。
+- 它可以讲清 Seata AT 的 `undo_log`、全局事务、分支事务、全局锁。
+- 它不会破坏当前普通购买、秒杀、拼团已经形成的最终一致性方案。
+
+## 一、整体事务策略
+
+### 1. 普通购买
+
+当前继续保持：
+
+```text
+订单本地事务
+  -> business-service 套餐库存远程预占
+  -> trade-service 本地消息表记录库存同步/补偿状态
+  -> RabbitMQ 发送订单/支付事件
+  -> 定时补偿任务兜底
+```
+
+原因：
+
+- 普通购买可以接受短暂不一致。
+- 失败后可通过本地消息表和幂等库存操作补偿。
+- 不需要因为一次下单给套餐库存加全局锁。
+
+### 2. 秒杀
+
+当前继续保持：
+
+```text
+Sentinel 限流
+  -> Redis/Lua 预扣库存
+  -> 创建秒杀请求单
+  -> 异步处理请求单
+  -> 创建正式订单
+  -> 失败恢复 Redis/数据库库存
+```
+
+原因：
+
+- 秒杀高并发入口不适合 Seata AT。
+- Redis 预扣可以快速削峰。
+- 请求单 + 异步恢复比全局事务更适合高并发场景。
+
+### 3. 拼团
+
+当前继续保持：
+
+```text
+锁单
+  -> 支付成功后推进成团状态
+  -> 超时取消补偿
+  -> 退款策略按队伍状态处理
+```
+
+原因：
+
+- 拼团天然是状态机 + 补偿模型。
+- 支付、成团、退款之间不是一个必须同步强一致的大事务。
+
+### 4. Seata 示例
+
+新增：
+
+```text
+POST /api/trade/demo/seata/package-stock-adjust
+```
+
+这个接口作为 trade-service 的全局事务发起方。
+
+## 二、代码改造
+
+### 1. business-api 新增 DTO
+
+- `food-business-service/food-business-api/src/main/java/com/foodlife/business/api/dto/AdjustPackageStockRequestDTO.java`
+- `food-business-service/food-business-api/src/main/java/com/foodlife/business/api/dto/AdjustPackageStockResponseDTO.java`
+
+作用：
+
+- 定义 trade-service 调 business-service 时使用的请求/响应协议。
+- 请求包含 `operatorId`、`adjustQuantity`、`reason`、`operationId`。
+- 响应返回调整后的 `stock`、`sold`、`operationId`。
+
+### 2. business-domain 新增库存调整命令和结果
+
+- `food-business-service/food-business-domain/src/main/java/com/foodlife/business/domain/packagee/model/AdjustPackageStockCommand.java`
+- `food-business-service/food-business-domain/src/main/java/com/foodlife/business/domain/packagee/model/AdjustPackageStockResult.java`
+- `food-business-service/food-business-domain/src/main/java/com/foodlife/business/domain/packagee/service/PackageDomainService.java`
+- `food-business-service/food-business-domain/src/main/java/com/foodlife/business/domain/packagee/repository/IPackageRepository.java`
+
+作用：
+
+- `PackageDomainService.adjustPackageStock` 做参数校验。
+- `IPackageRepository.adjustPackageStock` 定义领域仓储端口。
+- 领域层只表达业务语义，不感知 MyBatis、Feign、Seata。
+
+### 3. business-infrastructure 新增库存调整实现
+
+- `food-business-service/food-business-infrastructure/src/main/java/com/foodlife/business/infrastructure/repository/PackageRepository.java`
+
+核心逻辑：
+
+```text
+先查 package_stock_change_record.operation_id
+  -> 如果已处理，返回当前库存结果
+  -> 如果没有处理，更新 meal_package.stock
+  -> 写入 package_stock_change_record
+```
+
+这里继续复用 `package_stock_change_record.operation_id` 唯一索引做幂等。
+
+`adjustQuantity > 0`：
+
+```text
+stock = stock + adjustQuantity
+```
+
+`adjustQuantity < 0`：
+
+```text
+stock = stock - abs(adjustQuantity)
+并校验 stock >= abs(adjustQuantity)
+```
+
+### 4. business-trigger 新增内部接口
+
+- `food-business-service/food-business-trigger/src/main/java/com/foodlife/business/trigger/http/PackageInternalController.java`
+- `food-business-service/food-business-trigger/src/main/java/com/foodlife/business/trigger/sentinel/BusinessSentinelResources.java`
+
+接口：
+
+```http
+POST /api/internal/package/{packageId}/stock/adjust
+```
+
+注意：
+
+- 没有挂在公开的 `/api/package/**` 下。
+- Gateway 当前只路由业务公开路径，不路由 `/api/internal/**`。
+- Gateway 黑名单也补了 `/api/internal/**`。
+- business-service 自身放行 `/api/internal/package/**`，用于服务内网 Feign 调用。
+- 这个接口主要给 trade-service 通过 Feign 内部调用。
+
+### 5. trade-api 新增 DTO
+
+- `food-trade-service/food-trade-api/src/main/java/com/foodlife/trade/api/dto/SeataPackageStockAdjustRequestDTO.java`
+- `food-trade-service/food-trade-api/src/main/java/com/foodlife/trade/api/dto/SeataPackageStockAdjustResponseDTO.java`
+
+作用：
+
+- 定义外部访问 trade-service Seata 示例接口的数据结构。
+
+### 6. trade-domain 新增 distributedtx 包
+
+- `food-trade-service/food-trade-domain/src/main/java/com/foodlife/trade/domain/order/distributedtx/model/DistributedPackageStockAdjustCommand.java`
+- `food-trade-service/food-trade-domain/src/main/java/com/foodlife/trade/domain/order/distributedtx/model/DistributedPackageStockAdjustResult.java`
+- `food-trade-service/food-trade-domain/src/main/java/com/foodlife/trade/domain/order/distributedtx/model/DistributedPackageStockAdjustLog.java`
+- `food-trade-service/food-trade-domain/src/main/java/com/foodlife/trade/domain/order/distributedtx/model/PackageStockAdjustResult.java`
+- `food-trade-service/food-trade-domain/src/main/java/com/foodlife/trade/domain/order/distributedtx/repository/IDistributedTxDemoRepository.java`
+- `food-trade-service/food-trade-domain/src/main/java/com/foodlife/trade/domain/order/distributedtx/service/DistributedTxDemoService.java`
+
+领域服务流程：
+
+```text
+校验 operatorId/packageId/adjustQuantity
+  -> 生成或规范化 operationId
+  -> 查询 trade_distributed_tx_demo_log
+  -> 已成功则幂等返回
+  -> 写 PROCESSING 审计
+  -> 调 business-service 调整库存
+  -> 更新审计为 SUCCESS
+```
+
+这里没有把通用下单业务抽象成模板，只把分布式事务示例做成独立领域能力。
+
+### 7. trade-infrastructure 新增 Feign 与审计仓储
+
+- `food-trade-service/food-trade-infrastructure/src/main/java/com/foodlife/trade/infrastructure/feign/BusinessInternalPackageClient.java`
+- `food-trade-service/food-trade-infrastructure/src/main/java/com/foodlife/trade/infrastructure/feign/BusinessInternalPackageClientFallback.java`
+- `food-trade-service/food-trade-infrastructure/src/main/java/com/foodlife/trade/infrastructure/port/BusinessPackagePort.java`
+- `food-trade-service/food-trade-infrastructure/src/main/java/com/foodlife/trade/infrastructure/dao/po/DistributedTxDemoLogPO.java`
+- `food-trade-service/food-trade-infrastructure/src/main/java/com/foodlife/trade/infrastructure/dao/IDistributedTxDemoLogMapper.java`
+- `food-trade-service/food-trade-infrastructure/src/main/java/com/foodlife/trade/infrastructure/repository/DistributedTxDemoRepository.java`
+
+Feign 调用：
+
+```text
+trade-service
+  -> BusinessInternalPackageClient
+  -> food-business-service /api/internal/package/{packageId}/stock/adjust
+```
+
+审计表：
+
+```text
+trade_distributed_tx_demo_log
+```
+
+### 8. trade-trigger 新增 Seata 发起方
+
+- `food-trade-service/food-trade-trigger/src/main/java/com/foodlife/trade/trigger/app/SeataDemoApplicationService.java`
+- `food-trade-service/food-trade-trigger/src/main/java/com/foodlife/trade/trigger/http/SeataDemoController.java`
+
+核心注解：
+
+```java
+@GlobalTransactional(name = "food-seata-package-stock-adjust", rollbackFor = Exception.class)
+```
+
+作用：
+
+- `SeataDemoApplicationService` 是全局事务发起方 TM。
+- `DistributedTxDemoService` 执行业务编排。
+- business-service 被 Feign 调用后作为 RM 参与分支事务。
+
+## 三、配置改造
+
+新增依赖：
+
+- `food-trade-service/food-trade-trigger/pom.xml`
+- `food-business-service/food-business-app/pom.xml`
+
+依赖：
+
+```xml
+com.alibaba.cloud:spring-cloud-starter-alibaba-seata
+```
+
+新增配置：
+
+- `food-trade-service/food-trade-app/src/main/resources/application-local.yml`
+- `food-business-service/food-business-app/src/main/resources/application-local.yml`
+- `deploy/nacos/configs/food-common.yaml`
+
+关键配置：
+
+```yaml
+spring:
+  cloud:
+    alibaba:
+      seata:
+        tx-service-group: ${SEATA_TX_GROUP:food-life-agent-tx-group}
+
+seata:
+  enabled: ${SEATA_ENABLED:false}
+  application-id: ${spring.application.name}
+  tx-service-group: ${SEATA_TX_GROUP:food-life-agent-tx-group}
+  enable-auto-data-source-proxy: true
+  service:
+    vgroup-mapping:
+      food-life-agent-tx-group: ${SEATA_CLUSTER:default}
+    grouplist:
+      default: ${SEATA_SERVER_ADDR:127.0.0.1:8091}
+```
+
+默认：
+
+```text
+SEATA_ENABLED=false
+```
+
+含义：
+
+- 本地不启 Seata Server 时，项目仍可正常启动和开发。
+- 真正演示 Seata 时，启动 Seata Server 后设置 `SEATA_ENABLED=true`。
+
+## 四、SQL 改造
+
+新增：
+
+- `docs/sql/food_trade_db_migration_066_seata_demo.sql`
+- `docs/sql/food_business_db_migration_066_seata_undo_log.sql`
+- `scripts/smoke-seata-demo.ps1`
+
+同步更新：
+
+- `docs/sql/food_trade_db.sql`
+- `docs/sql/food_business_db.sql`
+
+新增表：
+
+```text
+food_trade_db.trade_distributed_tx_demo_log
+food_trade_db.undo_log
+food_business_db.undo_log
+```
+
+更新字段说明：
+
+```text
+food_business_db.package_stock_change_record.change_type
+新增 ADMIN_ADJUST 类型
+```
+
+## 五、完整业务流程
+
+### 成功流程
+
+```text
+1. 用户登录，Gateway 校验 token
+2. 请求 POST /api/trade/demo/seata/package-stock-adjust
+3. trade-service 从 UserHolder 获取 operatorId
+4. SeataDemoApplicationService 开启 @GlobalTransactional
+5. DistributedTxDemoService 校验参数
+6. trade-service 写 trade_distributed_tx_demo_log，状态 PROCESSING
+7. trade-service Feign 调 business-service 内部库存调整接口
+8. business-service 执行本地事务，修改 meal_package.stock
+9. business-service 写 package_stock_change_record，change_type=ADMIN_ADJUST
+10. trade-service 更新审计状态 SUCCESS
+11. 全局事务提交
+```
+
+### 失败流程
+
+```text
+1. trade-service 写本地 PROCESSING 审计
+2. business-service 库存不足或接口异常
+3. 异常抛回 trade-service
+4. @GlobalTransactional 触发全局回滚
+5. Seata 根据 undo_log 回滚参与方本地数据
+```
+
+没有启用 Seata Server 时：
+
+```text
+SEATA_ENABLED=false
+```
+
+这条链路可以作为普通本地 + 远程调用链路编译运行，但没有真正的全局回滚能力。
+
+## 六、面试表达
+
+### 为什么不全用 Seata？
+
+高并发下单、秒杀、拼团链路更关注吞吐、削峰和可恢复性。Seata AT 会引入全局事务协调、分支注册、全局锁、undo_log 写入，高并发热点库存场景下容易放大锁竞争。
+
+所以当前项目采用：
+
+```text
+高并发核心链路：最终一致性 + 幂等 + 补偿
+低并发管理链路：Seata AT 展示强一致
+```
+
+### CAP
+
+- C：一致性
+- A：可用性
+- P：分区容错性
+
+分布式系统必须考虑网络分区，通常在 CP 和 AP 之间按业务选择。
+
+### BASE
+
+- Basically Available：基本可用
+- Soft State：软状态
+- Eventually Consistent：最终一致
+
+普通购买、秒杀、拼团更偏 BASE。
+
+### 2PC、TCC、Saga
+
+- 2PC：准备阶段 + 提交阶段，强一致但阻塞和锁资源明显。
+- TCC：Try/Confirm/Cancel，业务侵入高，但可控性强。
+- Saga：长事务拆成多个本地事务和补偿动作，适合长流程。
+
+### Seata AT
+
+AT 模式对业务侵入较低，通过数据源代理记录前后镜像到 `undo_log`，异常时按镜像回滚。
+
+### undo_log
+
+每个参与 AT 模式的数据库都需要 `undo_log`。它记录分支事务的回滚信息，不是业务表。
+
+### 全局锁
+
+Seata AT 为了保证隔离性，会对涉及的数据申请全局锁。热点下单库存不适合大量使用。
+
+### 最终一致性怎么保证？
+
+当前项目靠：
+
+- 本地事务
+- 本地消息表
+- RabbitMQ
+- 消费幂等表/业务幂等表
+- 定时补偿任务
+- 可查询的链路追踪接口
+
+## 七、验证结果
+
+已执行：
+
+```powershell
+mvn test
+scripts/smoke-gateway.ps1
+scripts/smoke-seata-demo.ps1
+```
+
+结果：
+
+```text
+BUILD SUCCESS
+Gateway smoke verification completed.
+Seata demo smoke verification completed.
+```

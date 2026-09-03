@@ -80,6 +80,7 @@ food:
         enabled: true
         paths:
           - /internal/**
+          - /api/internal/**
           - /actuator/**
       rate-limit:
         enabled: false

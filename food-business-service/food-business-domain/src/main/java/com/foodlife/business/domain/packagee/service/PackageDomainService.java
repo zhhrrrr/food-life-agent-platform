@@ -2,6 +2,8 @@ package com.foodlife.business.domain.packagee.service;
 
 import com.foodlife.business.domain.event.BusinessMqTopics;
 import com.foodlife.business.domain.event.IBusinessEventPublisher;
+import com.foodlife.business.domain.packagee.model.AdjustPackageStockCommand;
+import com.foodlife.business.domain.packagee.model.AdjustPackageStockResult;
 import com.foodlife.business.domain.packagee.model.MealPackageEntity;
 import com.foodlife.business.domain.packagee.model.PackageStockChangeRecordEntity;
 import com.foodlife.business.domain.packagee.model.PackageStockChangeResult;
@@ -82,6 +84,11 @@ public class PackageDomainService {
         return result;
     }
 
+    public AdjustPackageStockResult adjustPackageStock(AdjustPackageStockCommand command) {
+        checkAdjustPackageStockCommand(command);
+        return packageRepository.adjustPackageStock(command);
+    }
+
     public List<PackageStockChangeRecordEntity> listStockChangeRecords(String operationIdPrefix, Long packageId, Integer limit) {
         return packageRepository.listStockChangeRecords(trimToNull(operationIdPrefix), packageId, normalizeLimit(limit));
     }
@@ -92,6 +99,24 @@ public class PackageDomainService {
         }
         if (quantity == null || quantity <= 0) {
             throw new IllegalArgumentException("quantity must be positive");
+        }
+    }
+
+    private void checkAdjustPackageStockCommand(AdjustPackageStockCommand command) {
+        if (command == null) {
+            throw new IllegalArgumentException("adjust command required");
+        }
+        if (command.getPackageId() == null) {
+            throw new IllegalArgumentException("packageId required");
+        }
+        if (command.getOperatorId() == null) {
+            throw new IllegalArgumentException("operatorId required");
+        }
+        if (command.getAdjustQuantity() == null || command.getAdjustQuantity() == 0) {
+            throw new IllegalArgumentException("adjustQuantity must not be zero");
+        }
+        if (isBlank(command.getOperationId())) {
+            throw new IllegalArgumentException("operationId required");
         }
     }
 
@@ -107,6 +132,10 @@ public class PackageDomainService {
             return null;
         }
         return value.trim();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     private void publishStockEvent(String tag, PackageStockChangeResult result, String operationId) {

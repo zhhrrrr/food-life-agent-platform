@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS package_stock_change_record (
   operation_id VARCHAR(128) NOT NULL COMMENT 'idempotent operation id',
   package_id BIGINT NOT NULL COMMENT 'meal package id',
   quantity INT NOT NULL COMMENT 'quantity',
-  change_type VARCHAR(32) NOT NULL COMMENT 'OCCUPY/RELEASE/CONFIRM_SOLD/ROLLBACK_SOLD',
+  change_type VARCHAR(32) NOT NULL COMMENT 'OCCUPY/RELEASE/CONFIRM_SOLD/ROLLBACK_SOLD/ADMIN_ADJUST',
   change_status VARCHAR(32) NOT NULL COMMENT 'SUCCESS',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
@@ -67,6 +67,17 @@ CREATE TABLE IF NOT EXISTS package_stock_change_record (
   UNIQUE KEY uk_operation_id (operation_id),
   KEY idx_package_id (package_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='package stock change idempotent record';
+
+CREATE TABLE IF NOT EXISTS undo_log (
+  branch_id BIGINT NOT NULL COMMENT 'branch transaction id',
+  xid VARCHAR(128) NOT NULL COMMENT 'global transaction id',
+  context VARCHAR(128) NOT NULL COMMENT 'undo_log context',
+  rollback_info LONGBLOB NOT NULL COMMENT 'rollback info',
+  log_status INT NOT NULL COMMENT '0 normal, 1 defense',
+  log_created DATETIME(6) NOT NULL COMMENT 'create datetime',
+  log_modified DATETIME(6) NOT NULL COMMENT 'modify datetime',
+  UNIQUE KEY ux_undo_log (xid, branch_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Seata AT undo log';
 
 CREATE TABLE IF NOT EXISTS shop_review (
   id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'review id',
