@@ -26,3 +26,4 @@ food:
       - /api/shop-category/**
       - /api/shop/**
       - /api/package/**
+      - /api/internal/package/**

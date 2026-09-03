@@ -1,5 +1,7 @@
 package com.foodlife.trade.infrastructure.port;
 
+import com.foodlife.business.api.dto.AdjustPackageStockRequestDTO;
+import com.foodlife.business.api.dto.AdjustPackageStockResponseDTO;
 import com.alibaba.csp.sentinel.Entry;
 import com.alibaba.csp.sentinel.EntryType;
 import com.alibaba.csp.sentinel.SphU;
@@ -9,8 +11,10 @@ import com.foodlife.business.api.dto.PackageStockChangeRecordResponseDTO;
 import com.foodlife.business.api.dto.PackageStockChangeResponseDTO;
 import com.foodlife.business.api.dto.PackageTradeSnapshotResponseDTO;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
+import com.foodlife.trade.domain.order.distributedtx.model.PackageStockAdjustResult;
 import com.foodlife.trade.domain.order.normal.model.PackageStockChangeRecord;
 import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
+import com.foodlife.trade.infrastructure.feign.BusinessInternalPackageClient;
 import com.foodlife.trade.infrastructure.feign.BusinessPackageClient;
 import feign.FeignException;
 import org.springframework.stereotype.Component;
@@ -23,11 +27,15 @@ public class BusinessPackagePort implements IBusinessPackagePort {
 
     private static final String BUSINESS_PACKAGE_SNAPSHOT_RESOURCE = "trade.feign.business.package.snapshot";
     private static final String BUSINESS_PACKAGE_STOCK_RESOURCE = "trade.feign.business.package.stock";
+    private static final String BUSINESS_PACKAGE_STOCK_ADJUST_RESOURCE = "trade.feign.business.package.stock.adjust";
 
     private final BusinessPackageClient businessPackageClient;
+    private final BusinessInternalPackageClient businessInternalPackageClient;
 
-    public BusinessPackagePort(BusinessPackageClient businessPackageClient) {
+    public BusinessPackagePort(BusinessPackageClient businessPackageClient,
+                               BusinessInternalPackageClient businessInternalPackageClient) {
         this.businessPackageClient = businessPackageClient;
+        this.businessInternalPackageClient = businessInternalPackageClient;
     }
 
     @Override
@@ -117,6 +125,40 @@ public class BusinessPackagePort implements IBusinessPackagePort {
         postPackageStockAction(packageId, quantity, operationId, "/sold/rollback");
     }
 
+    @Override
+    public PackageStockAdjustResult adjustPackageStock(Long packageId, Integer adjustQuantity, Long operatorId, String reason, String operationId) {
+        Entry entry = null;
+        try {
+            entry = SphU.entry(BUSINESS_PACKAGE_STOCK_ADJUST_RESOURCE, EntryType.OUT, 1, packageId);
+            AdjustPackageStockRequestDTO request = new AdjustPackageStockRequestDTO();
+            request.setOperatorId(operatorId);
+            request.setAdjustQuantity(adjustQuantity);
+            request.setReason(reason);
+            request.setOperationId(trimToNull(operationId));
+            com.foodlife.business.types.response.Response<AdjustPackageStockResponseDTO> response =
+                    businessInternalPackageClient.adjustPackageStock(packageId, request);
+            if (response != null && "503".equals(response.getCode())) {
+                throw new IllegalStateException(response.getMessage());
+            }
+            if (response == null || !"0000".equals(response.getCode()) || response.getData() == null) {
+                throw new IllegalStateException(response == null ? "package stock adjust failed" : response.getMessage());
+            }
+            return toPackageStockAdjustResult(response.getData());
+        } catch (BlockException e) {
+            throw new IllegalStateException("package stock adjust busy, please try again later");
+        } catch (FeignException e) {
+            Tracer.trace(e);
+            throw new IllegalStateException("package stock adjust failed");
+        } catch (IllegalStateException e) {
+            Tracer.trace(e);
+            throw e;
+        } finally {
+            if (entry != null) {
+                entry.exit(1, packageId);
+            }
+        }
+    }
+
     private void postPackageStockAction(Long packageId, Integer quantity, String operationId, String actionPath) {
         Entry entry = null;
         try {
@@ -177,6 +219,17 @@ public class BusinessPackagePort implements IBusinessPackagePort {
         snapshot.setPackageStatus(data.getPackageStatus());
         snapshot.setUseRule(data.getUseRule());
         return snapshot;
+    }
+
+    private PackageStockAdjustResult toPackageStockAdjustResult(AdjustPackageStockResponseDTO source) {
+        PackageStockAdjustResult result = new PackageStockAdjustResult();
+        result.setPackageId(source.getPackageId());
+        result.setOperatorId(source.getOperatorId());
+        result.setAdjustQuantity(source.getAdjustQuantity());
+        result.setStock(source.getStock());
+        result.setSold(source.getSold());
+        result.setOperationId(source.getOperationId());
+        return result;
     }
 
     private String trimToNull(String value) {

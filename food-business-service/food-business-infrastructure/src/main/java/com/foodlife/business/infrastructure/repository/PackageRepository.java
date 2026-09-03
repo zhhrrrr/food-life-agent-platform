@@ -2,6 +2,8 @@ package com.foodlife.business.infrastructure.repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.foodlife.business.domain.packagee.model.AdjustPackageStockCommand;
+import com.foodlife.business.domain.packagee.model.AdjustPackageStockResult;
 import com.foodlife.business.domain.packagee.model.MealPackageEntity;
 import com.foodlife.business.domain.packagee.model.PackageStockChangeRecordEntity;
 import com.foodlife.business.domain.packagee.model.PackageStockChangeResult;
@@ -174,6 +176,30 @@ public class PackageRepository implements IPackageRepository {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public AdjustPackageStockResult adjustPackageStock(AdjustPackageStockCommand command) {
+        String changeType = "ADMIN_ADJUST";
+        AdjustPackageStockResult handledResult = queryHandledAdjustOperationResult(command, changeType);
+        if (handledResult != null) {
+            return handledResult;
+        }
+
+        Integer adjustQuantity = command.getAdjustQuantity();
+        LambdaUpdateWrapper<MealPackagePO> wrapper = new LambdaUpdateWrapper<MealPackagePO>()
+                .eq(MealPackagePO::getId, command.getPackageId())
+                .setSql(buildStockAdjustSql(adjustQuantity));
+        if (adjustQuantity < 0) {
+            wrapper.ge(MealPackagePO::getStock, -adjustQuantity);
+        }
+        int updated = mealPackageMapper.update(null, wrapper);
+        if (updated <= 0) {
+            throw new IllegalArgumentException(adjustQuantity < 0 ? "package stock not enough" : "package not found");
+        }
+        saveHandledOperation(command.getOperationId(), command.getPackageId(), adjustQuantity, changeType);
+        return buildAdjustPackageStockResult(command, changeType);
+    }
+
+    @Override
     public List<PackageStockChangeRecordEntity> listStockChangeRecords(String operationIdPrefix, Long packageId, Integer limit) {
         LambdaQueryWrapper<PackageStockChangeRecordPO> wrapper = new LambdaQueryWrapper<PackageStockChangeRecordPO>()
                 .orderByDesc(PackageStockChangeRecordPO::getId)
@@ -206,6 +232,28 @@ public class PackageRepository implements IPackageRepository {
             throw new IllegalArgumentException("operationId already used by another stock change");
         }
         return buildStockChangeResult(packageId, quantity, changeType);
+    }
+
+    private AdjustPackageStockResult queryHandledAdjustOperationResult(AdjustPackageStockCommand command, String changeType) {
+        PackageStockChangeRecordPO record = packageStockChangeRecordMapper.selectOne(new LambdaQueryWrapper<PackageStockChangeRecordPO>()
+                .eq(PackageStockChangeRecordPO::getOperationId, command.getOperationId())
+                .last("limit 1"));
+        if (record == null) {
+            return null;
+        }
+        if (!command.getPackageId().equals(record.getPackageId())
+                || !command.getAdjustQuantity().equals(record.getQuantity())
+                || !changeType.equals(record.getChangeType())) {
+            throw new IllegalArgumentException("operationId already used by another stock change");
+        }
+        return buildAdjustPackageStockResult(command, changeType);
+    }
+
+    private String buildStockAdjustSql(Integer adjustQuantity) {
+        if (adjustQuantity > 0) {
+            return "stock = stock + " + adjustQuantity;
+        }
+        return "stock = stock - " + (-adjustQuantity);
     }
 
     private void saveHandledOperation(String operationId, Long packageId, Integer quantity, String changeType) {
@@ -250,6 +298,21 @@ public class PackageRepository implements IPackageRepository {
         result.setPackageId(packageId);
         result.setQuantity(quantity);
         result.setChangeType(changeType);
+        if (packagePO != null) {
+            result.setStock(packagePO.getStock());
+            result.setSold(packagePO.getSold());
+        }
+        return result;
+    }
+
+    private AdjustPackageStockResult buildAdjustPackageStockResult(AdjustPackageStockCommand command, String changeType) {
+        MealPackagePO packagePO = mealPackageMapper.selectById(command.getPackageId());
+        AdjustPackageStockResult result = new AdjustPackageStockResult();
+        result.setPackageId(command.getPackageId());
+        result.setOperatorId(command.getOperatorId());
+        result.setAdjustQuantity(command.getAdjustQuantity());
+        result.setChangeType(changeType);
+        result.setOperationId(command.getOperationId());
         if (packagePO != null) {
             result.setStock(packagePO.getStock());
             result.setSold(packagePO.getSold());

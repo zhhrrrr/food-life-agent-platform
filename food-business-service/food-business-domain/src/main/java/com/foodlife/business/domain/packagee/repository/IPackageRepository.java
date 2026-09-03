@@ -1,5 +1,7 @@
 package com.foodlife.business.domain.packagee.repository;
 
+import com.foodlife.business.domain.packagee.model.AdjustPackageStockCommand;
+import com.foodlife.business.domain.packagee.model.AdjustPackageStockResult;
 import com.foodlife.business.domain.packagee.model.MealPackageEntity;
 import com.foodlife.business.domain.packagee.model.PackageStockChangeRecordEntity;
 import com.foodlife.business.domain.packagee.model.PackageStockChangeResult;
@@ -30,6 +32,8 @@ public interface IPackageRepository {
     PackageStockChangeResult rollbackPackageSold(Long packageId, Integer quantity);
 
     PackageStockChangeResult rollbackPackageSold(Long packageId, Integer quantity, String operationId);
+
+    AdjustPackageStockResult adjustPackageStock(AdjustPackageStockCommand command);
 
     List<PackageStockChangeRecordEntity> listStockChangeRecords(String operationIdPrefix, Long packageId, Integer limit);
 }
