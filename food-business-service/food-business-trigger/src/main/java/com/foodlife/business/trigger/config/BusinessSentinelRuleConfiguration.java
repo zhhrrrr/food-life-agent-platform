@@ -2,6 +2,8 @@ package com.foodlife.business.trigger.config;
 
 import com.alibaba.csp.sentinel.annotation.aspectj.SentinelResourceAspect;
 import com.alibaba.csp.sentinel.slots.block.RuleConstant;
+import com.alibaba.csp.sentinel.slots.block.degrade.DegradeRule;
+import com.alibaba.csp.sentinel.slots.block.degrade.DegradeRuleManager;
 import com.alibaba.csp.sentinel.slots.block.flow.param.ParamFlowRule;
 import com.alibaba.csp.sentinel.slots.block.flow.param.ParamFlowRuleManager;
 import com.foodlife.business.trigger.sentinel.BusinessSentinelResources;
@@ -25,6 +27,7 @@ public class BusinessSentinelRuleConfiguration {
     @PostConstruct
     public void initRules() {
         ParamFlowRuleManager.loadRules(buildParamFlowRules());
+        DegradeRuleManager.loadRules(buildDegradeRules());
     }
 
     private List<ParamFlowRule> buildParamFlowRules() {
@@ -42,5 +45,23 @@ public class BusinessSentinelRuleConfiguration {
                 .setGrade(RuleConstant.FLOW_GRADE_QPS)
                 .setCount(count)
                 .setDurationInSec(1);
+    }
+
+    private List<DegradeRule> buildDegradeRules() {
+        List<DegradeRule> rules = new ArrayList<>();
+        rules.add(packageStockExceptionRatioRule(BusinessSentinelResources.PACKAGE_STOCK_OCCUPY));
+        rules.add(packageStockExceptionRatioRule(BusinessSentinelResources.PACKAGE_STOCK_RELEASE));
+        rules.add(packageStockExceptionRatioRule(BusinessSentinelResources.PACKAGE_SOLD_CONFIRM));
+        rules.add(packageStockExceptionRatioRule(BusinessSentinelResources.PACKAGE_SOLD_ROLLBACK));
+        return rules;
+    }
+
+    private DegradeRule packageStockExceptionRatioRule(String resource) {
+        return new DegradeRule(resource)
+                .setGrade(RuleConstant.DEGRADE_GRADE_EXCEPTION_RATIO)
+                .setCount(0.5)
+                .setMinRequestAmount(5)
+                .setStatIntervalMs(10000)
+                .setTimeWindow(10);
     }
 }

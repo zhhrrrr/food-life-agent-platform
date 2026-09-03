@@ -3,8 +3,8 @@ USE food_business_db;
 CREATE TABLE IF NOT EXISTS business_consumed_message (
   id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'consumed message id',
   message_id VARCHAR(128) NOT NULL COMMENT 'idempotent message id',
-  topic VARCHAR(64) NOT NULL COMMENT 'RocketMQ topic',
-  tag VARCHAR(64) NOT NULL COMMENT 'RocketMQ tag',
+  topic VARCHAR(64) NOT NULL COMMENT 'RabbitMQ exchange',
+  tag VARCHAR(64) NOT NULL COMMENT 'RabbitMQ routing key',
   biz_key VARCHAR(128) NOT NULL COMMENT 'business key',
   consume_status VARCHAR(32) NOT NULL COMMENT 'PROCESSING/SUCCESS/FAILED',
   fail_reason VARCHAR(512) DEFAULT NULL COMMENT 'fail reason',

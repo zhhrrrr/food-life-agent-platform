@@ -11,6 +11,12 @@ spring:
     host: localhost
     port: 6379
     database: 0
+  rabbitmq:
+    host: ${RABBITMQ_HOST:127.0.0.1}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VIRTUAL_HOST:/}
   cloud:
     sentinel:
       transport:
@@ -42,9 +48,8 @@ mybatis-plus:
 food:
   mq:
     enabled: ${FOOD_MQ_ENABLED:false}
-    name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
-    producer-group: food-business-service-producer
-    review-consumer-group: food-business-review-consumer
+    review-created-queue: food.business.review.created.queue
+    package-stock-event-queue: food.business.package.stock.event.queue
   auth:
     enabled: true
     token-header: authorization

@@ -108,7 +108,7 @@ $review = Invoke-JsonPost `
     -Name "create review" `
     -Uri "$GatewayBaseUrl/api/reviews" `
     -Headers $headers `
-    -Body @{ orderId = $orderId; score = 5; content = "rocketmq event smoke review"; images = "" } `
+    -Body @{ orderId = $orderId; score = 5; content = "rabbitmq event smoke review"; images = "" } `
     -ExpectedCode "0000"
 
 $reviewNo = $review.data.reviewNo
@@ -134,5 +134,4 @@ if ([int]$reviewConsumeCount -lt 1) {
 }
 Write-Host "OK review async stats idempotent message -> count=$reviewConsumeCount"
 
-Write-Host "RocketMQ event smoke verification completed. orderId=$orderId, payOrderNo=$payOrderNo, reviewNo=$reviewNo"
-
+Write-Host "RabbitMQ event smoke verification completed. orderId=$orderId, payOrderNo=$payOrderNo, reviewNo=$reviewNo"

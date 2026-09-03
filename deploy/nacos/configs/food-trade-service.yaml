@@ -16,9 +16,12 @@ spring:
 
 food:
   mq:
-    producer-group: food-trade-service-producer
-    order-timeout-consumer-group: food-trade-order-timeout-consumer
-    order-timeout-delay-level: 16
+    trade-order-event-queue: food.trade.order.event.queue
+    payment-event-queue: food.trade.payment.event.queue
+    order-timeout-close-queue: food.trade.order.timeout.close.queue
+    order-timeout-delay-queue: food.trade.order.timeout.delay.queue
+    order-timeout-delay-routing-key: order.cancel.timeout.delay
+    order-timeout-delay-millis: ${ORDER_TIMEOUT_DELAY_MILLIS:1800000}
     retry-delay-seconds: 30
     retry-limit: 50
   jobs:

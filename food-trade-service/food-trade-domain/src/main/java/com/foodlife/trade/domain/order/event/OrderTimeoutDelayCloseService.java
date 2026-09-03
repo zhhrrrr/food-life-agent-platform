@@ -84,7 +84,7 @@ public class OrderTimeoutDelayCloseService {
         result.setTradeType(message.getTradeType());
         result.setOrderCanceled(false);
         result.setPaymentClosed(false);
-        result.setCloseSource("ROCKETMQ_DELAY");
+        result.setCloseSource("RABBITMQ_DELAY");
         return result;
     }
 
