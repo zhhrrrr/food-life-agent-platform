@@ -6,13 +6,13 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
-public class TradeRocketMqEventRetryJob {
+public class TradeRabbitMqEventRetryJob {
 
     private final ITradeEventPublisher tradeEventPublisher;
     private final boolean enabled;
     private final int limit;
 
-    public TradeRocketMqEventRetryJob(ITradeEventPublisher tradeEventPublisher,
+    public TradeRabbitMqEventRetryJob(ITradeEventPublisher tradeEventPublisher,
                                       @Value("${food.jobs.trade-event-retry.enabled:true}") boolean enabled,
                                       @Value("${food.jobs.trade-event-retry.limit:50}") int limit) {
         this.tradeEventPublisher = tradeEventPublisher;
@@ -28,4 +28,3 @@ public class TradeRocketMqEventRetryJob {
         tradeEventPublisher.retryPendingEvents(limit);
     }
 }
-

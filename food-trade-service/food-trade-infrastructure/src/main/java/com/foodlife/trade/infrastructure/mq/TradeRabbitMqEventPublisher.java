@@ -5,16 +5,14 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.foodlife.trade.domain.order.event.ITradeEventPublisher;
-import com.foodlife.trade.domain.order.message.constant.LocalMessageStatusConstants;
 import com.foodlife.trade.infrastructure.dao.ITradeLocalMessageMapper;
 import com.foodlife.trade.infrastructure.dao.po.TradeLocalMessagePO;
-import org.apache.rocketmq.client.producer.DefaultMQProducer;
-import org.apache.rocketmq.client.producer.SendResult;
-import org.apache.rocketmq.common.message.Message;
+import com.foodlife.trade.domain.order.message.constant.LocalMessageStatusConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.DisposableBean;
-import org.springframework.beans.factory.InitializingBean;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -24,35 +22,25 @@ import java.util.List;
 import java.util.Map;
 
 @Component
-public class TradeRocketMqEventPublisher implements ITradeEventPublisher, InitializingBean, DisposableBean {
+public class TradeRabbitMqEventPublisher implements ITradeEventPublisher {
 
-    private static final Logger log = LoggerFactory.getLogger(TradeRocketMqEventPublisher.class);
+    private static final Logger log = LoggerFactory.getLogger(TradeRabbitMqEventPublisher.class);
     private static final String BIZ_TYPE = "TRADE_EVENT";
     private static final int DEFAULT_MAX_RETRY_COUNT = 5;
 
-    private final TradeRocketMqProperties properties;
+    private final TradeRabbitMqProperties properties;
     private final ITradeLocalMessageMapper tradeLocalMessageMapper;
     private final ObjectMapper objectMapper;
-    private DefaultMQProducer producer;
+    private final RabbitTemplate rabbitTemplate;
 
-    public TradeRocketMqEventPublisher(TradeRocketMqProperties properties,
+    public TradeRabbitMqEventPublisher(TradeRabbitMqProperties properties,
                                        ITradeLocalMessageMapper tradeLocalMessageMapper,
-                                       ObjectMapper objectMapper) {
+                                       ObjectMapper objectMapper,
+                                       RabbitTemplate rabbitTemplate) {
         this.properties = properties;
         this.tradeLocalMessageMapper = tradeLocalMessageMapper;
         this.objectMapper = objectMapper;
-    }
-
-    @Override
-    public void afterPropertiesSet() throws Exception {
-        if (!Boolean.TRUE.equals(properties.getEnabled())) {
-            log.info("trade RocketMQ disabled, event publish uses local mock-success mode");
-            return;
-        }
-        producer = new DefaultMQProducer(properties.getProducerGroup());
-        producer.setNamesrvAddr(properties.getNameServer());
-        producer.start();
-        log.info("trade RocketMQ producer started, nameServer={}, group={}", properties.getNameServer(), properties.getProducerGroup());
+        this.rabbitTemplate = rabbitTemplate;
     }
 
     @Override
@@ -72,7 +60,7 @@ public class TradeRocketMqEventPublisher implements ITradeEventPublisher, Initia
         String messageId = buildMessageId(topic, tag, key);
         TradeLocalMessagePO message = findByMessageId(messageId);
         if (message == null) {
-            message = saveInitMessage(messageId, topic, tag, key, payload, properties.getOrderTimeoutDelayLevel());
+            message = saveInitMessage(messageId, topic, tag, key, payload, properties.getOrderTimeoutDelayMillis());
         }
         publishStoredMessage(message);
     }
@@ -96,13 +84,6 @@ public class TradeRocketMqEventPublisher implements ITradeEventPublisher, Initia
         return successCount;
     }
 
-    @Override
-    public void destroy() {
-        if (producer != null) {
-            producer.shutdown();
-        }
-    }
-
     private boolean publishStoredMessage(TradeLocalMessagePO message) {
         if (message == null || LocalMessageStatusConstants.SUCCESS.equals(message.getMessageStatus())) {
             return true;
@@ -115,34 +96,45 @@ public class TradeRocketMqEventPublisher implements ITradeEventPublisher, Initia
         }
         try {
             if (!Boolean.TRUE.equals(properties.getEnabled())) {
-                log.info("trade RocketMQ mock publish, messageId={}, type={}", message.getMessageId(), message.getMessageType());
+                log.info("trade RabbitMQ mock publish, messageId={}, type={}", message.getMessageId(), message.getMessageType());
                 markSuccess(message.getId());
                 return true;
             }
             JsonNode content = objectMapper.readTree(message.getContent());
-            Message rocketMessage = new Message(
-                    content.get("topic").asText(),
-                    content.get("tag").asText(),
-                    content.get("key").asText(),
-                    message.getContent().getBytes(StandardCharsets.UTF_8)
-            );
-            JsonNode delayLevel = content.get("delayLevel");
-            if (delayLevel != null && delayLevel.asInt(0) > 0) {
-                rocketMessage.setDelayTimeLevel(delayLevel.asInt());
-            }
-            SendResult sendResult = producer.send(rocketMessage);
+            sendRabbitMessage(message, content);
             markSuccess(message.getId());
-            log.info("trade RocketMQ publish success, messageId={}, sendStatus={}, msgId={}",
-                    message.getMessageId(), sendResult.getSendStatus(), sendResult.getMsgId());
+            log.info("trade RabbitMQ publish success, messageId={}", message.getMessageId());
             return true;
         } catch (Exception e) {
             markRetryOrFailed(message, e.getMessage());
-            log.warn("trade RocketMQ publish failed, messageId={}, reason={}", message.getMessageId(), e.getMessage());
+            log.warn("trade RabbitMQ publish failed, messageId={}, reason={}", message.getMessageId(), e.getMessage());
             return false;
         }
     }
 
-    private TradeLocalMessagePO saveInitMessage(String messageId, String topic, String tag, String key, Object payload, Integer delayLevel) {
+    private void sendRabbitMessage(TradeLocalMessagePO message, JsonNode content) {
+        String exchange = content.get("topic").asText();
+        String routingKey = content.get("tag").asText();
+        long delayMillis = content.hasNonNull("delayMillis") ? content.get("delayMillis").asLong(0L) : 0L;
+        if (delayMillis > 0) {
+            routingKey = content.hasNonNull("delayRoutingKey")
+                    ? content.get("delayRoutingKey").asText()
+                    : properties.getOrderTimeoutDelayRoutingKey();
+        }
+        MessageProperties messageProperties = new MessageProperties();
+        messageProperties.setContentType(MessageProperties.CONTENT_TYPE_JSON);
+        messageProperties.setContentEncoding(StandardCharsets.UTF_8.name());
+        messageProperties.setMessageId(message.getMessageId());
+        messageProperties.setHeader("eventKey", content.get("key").asText());
+        messageProperties.setHeader("eventType", content.get("tag").asText());
+        if (delayMillis > 0) {
+            messageProperties.setExpiration(String.valueOf(delayMillis));
+        }
+        rabbitTemplate.send(exchange, routingKey,
+                new Message(message.getContent().getBytes(StandardCharsets.UTF_8), messageProperties));
+    }
+
+    private TradeLocalMessagePO saveInitMessage(String messageId, String topic, String tag, String key, Object payload, Long delayMillis) {
         LocalDateTime now = LocalDateTime.now();
         TradeLocalMessagePO po = new TradeLocalMessagePO();
         po.setMessageId(messageId);
@@ -153,22 +145,23 @@ public class TradeRocketMqEventPublisher implements ITradeEventPublisher, Initia
         po.setRetryCount(0);
         po.setMaxRetryCount(DEFAULT_MAX_RETRY_COUNT);
         po.setNextRetryTime(now);
-        po.setContent(buildContent(topic, tag, key, payload, delayLevel));
+        po.setContent(buildContent(topic, tag, key, payload, delayMillis));
         po.setCreateTime(now);
         po.setUpdateTime(now);
         tradeLocalMessageMapper.insert(po);
         return po;
     }
 
-    private String buildContent(String topic, String tag, String key, Object payload, Integer delayLevel) {
+    private String buildContent(String topic, String tag, String key, Object payload, Long delayMillis) {
         try {
             Map<String, Object> content = new LinkedHashMap<>();
             content.put("topic", topic);
             content.put("tag", tag);
             content.put("key", key);
             content.put("payload", payload);
-            if (delayLevel != null && delayLevel > 0) {
-                content.put("delayLevel", delayLevel);
+            if (delayMillis != null && delayMillis > 0) {
+                content.put("delayMillis", delayMillis);
+                content.put("delayRoutingKey", properties.getOrderTimeoutDelayRoutingKey());
             }
             content.put("eventTime", LocalDateTime.now().toString());
             return objectMapper.writeValueAsString(content);

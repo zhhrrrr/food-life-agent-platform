@@ -4,13 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.foodlife.business.domain.event.BusinessMqTopics;
 import com.foodlife.business.domain.event.IBusinessEventPublisher;
 import com.foodlife.business.domain.review.repository.IShopReviewRepository;
-import org.apache.rocketmq.client.producer.DefaultMQProducer;
-import org.apache.rocketmq.client.producer.SendResult;
-import org.apache.rocketmq.common.message.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.DisposableBean;
-import org.springframework.beans.factory.InitializingBean;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -19,33 +17,23 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Component
-public class BusinessRocketMqEventPublisher implements IBusinessEventPublisher, InitializingBean, DisposableBean {
+public class BusinessRabbitMqEventPublisher implements IBusinessEventPublisher {
 
-    private static final Logger log = LoggerFactory.getLogger(BusinessRocketMqEventPublisher.class);
+    private static final Logger log = LoggerFactory.getLogger(BusinessRabbitMqEventPublisher.class);
 
-    private final BusinessRocketMqProperties properties;
+    private final BusinessRabbitMqProperties properties;
     private final ObjectMapper objectMapper;
     private final IShopReviewRepository shopReviewRepository;
-    private DefaultMQProducer producer;
+    private final RabbitTemplate rabbitTemplate;
 
-    public BusinessRocketMqEventPublisher(BusinessRocketMqProperties properties,
+    public BusinessRabbitMqEventPublisher(BusinessRabbitMqProperties properties,
                                           ObjectMapper objectMapper,
-                                          IShopReviewRepository shopReviewRepository) {
+                                          IShopReviewRepository shopReviewRepository,
+                                          RabbitTemplate rabbitTemplate) {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.shopReviewRepository = shopReviewRepository;
-    }
-
-    @Override
-    public void afterPropertiesSet() throws Exception {
-        if (!Boolean.TRUE.equals(properties.getEnabled())) {
-            log.info("business RocketMQ disabled, event publish uses local fallback mode");
-            return;
-        }
-        producer = new DefaultMQProducer(properties.getProducerGroup());
-        producer.setNamesrvAddr(properties.getNameServer());
-        producer.start();
-        log.info("business RocketMQ producer started, nameServer={}, group={}", properties.getNameServer(), properties.getProducerGroup());
+        this.rabbitTemplate = rabbitTemplate;
     }
 
     @Override
@@ -53,25 +41,23 @@ public class BusinessRocketMqEventPublisher implements IBusinessEventPublisher, 
         validate(topic, tag, key);
         String eventId = buildEventId(topic, tag, key);
         if (!Boolean.TRUE.equals(properties.getEnabled())) {
-            log.info("business RocketMQ mock publish, eventId={}", eventId);
+            log.info("business RabbitMQ mock publish, eventId={}", eventId);
             fallbackIfNeeded(topic, tag, key, eventId);
             return;
         }
         try {
-            Message message = new Message(topic, tag, key, buildContent(eventId, topic, tag, key, payload).getBytes(StandardCharsets.UTF_8));
-            SendResult sendResult = producer.send(message);
-            log.info("business RocketMQ publish success, eventId={}, sendStatus={}, msgId={}",
-                    eventId, sendResult.getSendStatus(), sendResult.getMsgId());
+            MessageProperties messageProperties = new MessageProperties();
+            messageProperties.setContentType(MessageProperties.CONTENT_TYPE_JSON);
+            messageProperties.setContentEncoding(StandardCharsets.UTF_8.name());
+            messageProperties.setMessageId(eventId);
+            messageProperties.setHeader("eventKey", key);
+            messageProperties.setHeader("eventType", tag);
+            rabbitTemplate.send(topic, tag,
+                    new Message(buildContent(eventId, topic, tag, key, payload).getBytes(StandardCharsets.UTF_8), messageProperties));
+            log.info("business RabbitMQ publish success, eventId={}", eventId);
         } catch (Exception e) {
-            log.warn("business RocketMQ publish failed, eventId={}, reason={}", eventId, e.getMessage());
+            log.warn("business RabbitMQ publish failed, eventId={}, reason={}", eventId, e.getMessage());
             fallbackIfNeeded(topic, tag, key, eventId);
-        }
-    }
-
-    @Override
-    public void destroy() {
-        if (producer != null) {
-            producer.shutdown();
         }
     }
 
@@ -102,7 +88,7 @@ public class BusinessRocketMqEventPublisher implements IBusinessEventPublisher, 
 
     private void validate(String topic, String tag, String key) {
         if (isBlank(topic) || isBlank(tag) || isBlank(key)) {
-            throw new IllegalArgumentException("mq topic, tag and key required");
+            throw new IllegalArgumentException("mq topic, routingKey and key required");
         }
     }
 
@@ -110,4 +96,3 @@ public class BusinessRocketMqEventPublisher implements IBusinessEventPublisher, 
         return value == null || value.trim().isEmpty();
     }
 }
-

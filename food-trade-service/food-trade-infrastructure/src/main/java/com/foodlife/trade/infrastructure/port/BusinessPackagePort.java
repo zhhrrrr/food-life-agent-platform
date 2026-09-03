@@ -1,12 +1,17 @@
 package com.foodlife.trade.infrastructure.port;
 
+import com.alibaba.csp.sentinel.Entry;
+import com.alibaba.csp.sentinel.EntryType;
+import com.alibaba.csp.sentinel.SphU;
+import com.alibaba.csp.sentinel.Tracer;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.foodlife.business.api.dto.PackageStockChangeRecordResponseDTO;
 import com.foodlife.business.api.dto.PackageStockChangeResponseDTO;
 import com.foodlife.business.api.dto.PackageTradeSnapshotResponseDTO;
-import com.foodlife.trade.infrastructure.feign.BusinessPackageClient;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import com.foodlife.trade.domain.order.normal.model.PackageStockChangeRecord;
 import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
+import com.foodlife.trade.infrastructure.feign.BusinessPackageClient;
 import feign.FeignException;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +21,9 @@ import java.util.List;
 @Component
 public class BusinessPackagePort implements IBusinessPackagePort {
 
+    private static final String BUSINESS_PACKAGE_SNAPSHOT_RESOURCE = "trade.feign.business.package.snapshot";
+    private static final String BUSINESS_PACKAGE_STOCK_RESOURCE = "trade.feign.business.package.stock";
+
     private final BusinessPackageClient businessPackageClient;
 
     public BusinessPackagePort(BusinessPackageClient businessPackageClient) {
@@ -24,19 +32,31 @@ public class BusinessPackagePort implements IBusinessPackagePort {
 
     @Override
     public PackageTradeSnapshot queryTradeSnapshot(Long packageId) {
-        com.foodlife.business.types.response.Response<PackageTradeSnapshotResponseDTO> response;
+        Entry entry = null;
         try {
-            response = businessPackageClient.queryTradeSnapshot(packageId);
+            entry = SphU.entry(BUSINESS_PACKAGE_SNAPSHOT_RESOURCE, EntryType.OUT, 1, packageId);
+            com.foodlife.business.types.response.Response<PackageTradeSnapshotResponseDTO> response =
+                    businessPackageClient.queryTradeSnapshot(packageId);
+            if (response != null && "503".equals(response.getCode())) {
+                throw new IllegalStateException(response.getMessage());
+            }
+            if (response == null || !"0000".equals(response.getCode()) || response.getData() == null) {
+                return null;
+            }
+            return toSnapshot(response.getData());
+        } catch (BlockException e) {
+            throw new IllegalStateException("service busy, please try again later");
         } catch (FeignException e) {
-            throw new IllegalStateException("服务繁忙，请稍后再试");
+            Tracer.trace(e);
+            throw new IllegalStateException("service busy, please try again later");
+        } catch (IllegalStateException e) {
+            Tracer.trace(e);
+            throw e;
+        } finally {
+            if (entry != null) {
+                entry.exit(1, packageId);
+            }
         }
-        if (response != null && "503".equals(response.getCode())) {
-            throw new IllegalStateException(response.getMessage());
-        }
-        if (response == null || !"0000".equals(response.getCode()) || response.getData() == null) {
-            return null;
-        }
-        return toSnapshot(response.getData());
     }
 
     @Override
@@ -98,17 +118,29 @@ public class BusinessPackagePort implements IBusinessPackagePort {
     }
 
     private void postPackageStockAction(Long packageId, Integer quantity, String operationId, String actionPath) {
-        com.foodlife.business.types.response.Response<PackageStockChangeResponseDTO> response;
+        Entry entry = null;
         try {
-            response = doPostPackageStockAction(packageId, quantity, trimToNull(operationId), actionPath);
+            entry = SphU.entry(BUSINESS_PACKAGE_STOCK_RESOURCE, EntryType.OUT, 1, packageId);
+            com.foodlife.business.types.response.Response<PackageStockChangeResponseDTO> response =
+                    doPostPackageStockAction(packageId, quantity, trimToNull(operationId), actionPath);
+            if (response != null && "503".equals(response.getCode())) {
+                throw new IllegalStateException(response.getMessage());
+            }
+            if (response == null || !"0000".equals(response.getCode())) {
+                throw new IllegalStateException(response == null ? "package stock action failed" : response.getMessage());
+            }
+        } catch (BlockException e) {
+            throw new IllegalStateException("package stock service busy, please try again later");
         } catch (FeignException e) {
+            Tracer.trace(e);
             throw new IllegalStateException("package stock action failed");
-        }
-        if (response != null && "503".equals(response.getCode())) {
-            throw new IllegalStateException(response.getMessage());
-        }
-        if (response == null || !"0000".equals(response.getCode())) {
-            throw new IllegalStateException(response == null ? "package stock action failed" : response.getMessage());
+        } catch (IllegalStateException e) {
+            Tracer.trace(e);
+            throw e;
+        } finally {
+            if (entry != null) {
+                entry.exit(1, packageId);
+            }
         }
     }
 

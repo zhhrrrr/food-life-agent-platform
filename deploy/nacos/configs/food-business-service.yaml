@@ -16,8 +16,8 @@ spring:
 
 food:
   mq:
-    producer-group: food-business-service-producer
-    review-consumer-group: food-business-review-consumer
+    review-created-queue: food.business.review.created.queue
+    package-stock-event-queue: food.business.package.stock.event.queue
   auth:
     include-paths:
       - /**

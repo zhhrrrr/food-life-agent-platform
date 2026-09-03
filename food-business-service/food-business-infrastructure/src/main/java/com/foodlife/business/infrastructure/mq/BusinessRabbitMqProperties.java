@@ -7,11 +7,9 @@ import org.springframework.stereotype.Component;
 @Data
 @Component
 @ConfigurationProperties(prefix = "food.mq")
-public class BusinessRocketMqProperties {
+public class BusinessRabbitMqProperties {
 
     private Boolean enabled = false;
-    private String nameServer = "127.0.0.1:9876";
-    private String producerGroup = "food-business-service-producer";
-    private String reviewConsumerGroup = "food-business-review-consumer";
+    private String reviewCreatedQueue = "food.business.review.created.queue";
+    private String packageStockEventQueue = "food.business.package.stock.event.queue";
 }
-
