@@ -71,7 +71,7 @@ public class BusinessPackagePort implements IBusinessPackagePort {
     public List<PackageStockChangeRecord> listStockChangeRecords(String operationIdPrefix, Long packageId, Integer limit) {
         com.foodlife.business.types.response.Response<List<PackageStockChangeRecordResponseDTO>> response;
         try {
-            response = businessPackageClient.listStockChangeRecords(
+            response = businessInternalPackageClient.listStockChangeRecords(
                     trimToNull(operationIdPrefix),
                     packageId,
                     limit == null ? 20 : limit
@@ -191,16 +191,16 @@ public class BusinessPackagePort implements IBusinessPackagePort {
                                                                                                                  String operationId,
                                                                                                                  String actionPath) {
         if ("/stock/occupy".equals(actionPath)) {
-            return businessPackageClient.occupyPackageStock(packageId, quantity, operationId);
+            return businessInternalPackageClient.occupyPackageStock(packageId, quantity, operationId);
         }
         if ("/stock/release".equals(actionPath)) {
-            return businessPackageClient.releasePackageStock(packageId, quantity, operationId);
+            return businessInternalPackageClient.releasePackageStock(packageId, quantity, operationId);
         }
         if ("/sold/confirm".equals(actionPath)) {
-            return businessPackageClient.confirmPackageSold(packageId, quantity, operationId);
+            return businessInternalPackageClient.confirmPackageSold(packageId, quantity, operationId);
         }
         if ("/sold/rollback".equals(actionPath)) {
-            return businessPackageClient.rollbackPackageSold(packageId, quantity, operationId);
+            return businessInternalPackageClient.rollbackPackageSold(packageId, quantity, operationId);
         }
         throw new IllegalArgumentException("unsupported package stock action");
     }

@@ -19,4 +19,18 @@ public class AuthProperties {
         add("/**");
     }};
     private List<String> excludePaths = new ArrayList<String>();
+    private InternalCall internalCall = new InternalCall();
+
+    @Data
+    public static class InternalCall {
+
+        private boolean enabled = true;
+        private List<String> paths = new ArrayList<String>() {{
+            add("/api/internal/**");
+        }};
+        private String headerName = "x-internal-call";
+        private String headerValue = "food-life-agent";
+        private String secretHeaderName = "x-internal-secret";
+        private String secret = "local-internal-secret";
+    }
 }

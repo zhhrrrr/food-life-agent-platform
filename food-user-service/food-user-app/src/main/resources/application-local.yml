@@ -28,10 +28,20 @@ food:
     token-header: authorization
     token-prefix: "food:login:token:"
     token-ttl-minutes: 30
+    internal-call:
+      enabled: true
+      paths:
+        - /api/internal/**
+      header-name: x-internal-call
+      header-value: food-life-agent
+      secret-header-name: x-internal-secret
+      secret: ${FOOD_INTERNAL_SECRET:local-internal-secret}
     include-paths:
       - /**
     exclude-paths:
       - /health
+      - /error
       - /api/user/code
       - /api/user/login
       - /api/user/logout
+      - /api/internal/**

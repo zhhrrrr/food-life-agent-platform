@@ -18,6 +18,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 @Component
 public class GatewayAuthFilter implements GlobalFilter, Ordered {
@@ -36,23 +37,25 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        ServerWebExchange sanitizedExchange = sanitizedExchange(exchange);
         if (!Boolean.TRUE.equals(gatewayAuthProperties.getEnabled())
                 || HttpMethod.OPTIONS.equals(exchange.getRequest().getMethod())
                 || isExcluded(exchange.getRequest().getURI().getRawPath())) {
-            return chain.filter(exchange);
+            return chain.filter(sanitizedExchange);
         }
 
-        String token = readToken(exchange);
+        String token = readToken(sanitizedExchange);
         if (!StringUtils.hasText(token)) {
-            return unauthorized(exchange);
+            return unauthorized(sanitizedExchange);
         }
 
         String redisKey = gatewayAuthProperties.getTokenPrefix() + token;
-        return redisTemplate.hasKey(redisKey)
-                .flatMap(exists -> Boolean.TRUE.equals(exists)
-                        ? chain.filter(mutatedExchangeWithToken(exchange, token))
-                        : unauthorized(exchange))
-                .onErrorResume(e -> unauthorized(exchange));
+        return redisTemplate.opsForHash().entries(redisKey)
+                .collectMap(entry -> String.valueOf(entry.getKey()), entry -> String.valueOf(entry.getValue()))
+                .flatMap(userMap -> userMap.isEmpty()
+                        ? unauthorized(sanitizedExchange)
+                        : chain.filter(mutatedExchangeWithUser(sanitizedExchange, token, userMap)))
+                .onErrorResume(e -> unauthorized(sanitizedExchange));
     }
 
     @Override
@@ -87,14 +90,40 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
         return token;
     }
 
-    private ServerWebExchange mutatedExchangeWithToken(ServerWebExchange exchange, String token) {
+    private ServerWebExchange sanitizedExchange(ServerWebExchange exchange) {
+        ServerHttpRequest request = exchange.getRequest().mutate()
+                .headers(headers -> {
+                    headers.remove(gatewayAuthProperties.getUserIdHeader());
+                    headers.remove(gatewayAuthProperties.getUserNicknameHeader());
+                    headers.remove(gatewayAuthProperties.getUserIconHeader());
+                    headers.remove(gatewayAuthProperties.getInternalHeaderName());
+                    headers.remove(gatewayAuthProperties.getInternalSecretHeaderName());
+                })
+                .build();
+        return exchange.mutate().request(request).build();
+    }
+
+    private ServerWebExchange mutatedExchangeWithUser(ServerWebExchange exchange, String token, Map<String, String> userMap) {
         ServerHttpRequest request = exchange.getRequest().mutate()
                 .headers(headers -> {
                     headers.set(gatewayAuthProperties.getTokenHeader(), token);
                     headers.set(HttpHeaders.AUTHORIZATION, token);
+                    setHeaderIfPresent(headers, gatewayAuthProperties.getUserIdHeader(), userMap.get("id"));
+                    setHeaderIfPresent(headers, gatewayAuthProperties.getUserNicknameHeader(), userMap.get("nickName"));
+                    setHeaderIfPresent(headers, gatewayAuthProperties.getUserIconHeader(), userMap.get("icon"));
                 })
                 .build();
         return exchange.mutate().request(request).build();
+    }
+
+    private void setHeaderIfPresent(HttpHeaders headers, String headerName, String value) {
+        if (StringUtils.hasText(headerName) && StringUtils.hasText(value)) {
+            headers.set(headerName, sanitizeHeaderValue(value));
+        }
+    }
+
+    private String sanitizeHeaderValue(String value) {
+        return value.replace("\r", "").replace("\n", "");
     }
 
     private Mono<Void> unauthorized(ServerWebExchange exchange) {

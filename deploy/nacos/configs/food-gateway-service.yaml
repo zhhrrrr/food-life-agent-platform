@@ -51,8 +51,14 @@ food:
       enabled: true
       token-header: authorization
       token-prefix: "food:login:token:"
+      user-id-header: x-user-id
+      user-nickname-header: x-user-nickname
+      user-icon-header: x-user-icon
+      internal-header-name: x-internal-call
+      internal-secret-header-name: x-internal-secret
       exclude-paths:
         - /health
+        - /error
         - /api/user/code
         - /api/user/login
         - /api/user/logout
@@ -67,6 +73,10 @@ food:
           - /internal/**
           - /api/internal/**
           - /actuator/**
+          - /api/package/*/stock/occupy
+          - /api/package/*/stock/release
+          - /api/package/*/sold/confirm
+          - /api/package/*/sold/rollback
       rate-limit:
         enabled: false
         ip:
@@ -85,6 +95,6 @@ food:
       trade-order-create-qps: 80
       seckill-order-create-qps: 30
       payment-callback-qps: 100
-      user-header-name: authorization
+      user-header-name: x-user-id
       user-header-qps: 20
       smoke-rule-enabled: true
