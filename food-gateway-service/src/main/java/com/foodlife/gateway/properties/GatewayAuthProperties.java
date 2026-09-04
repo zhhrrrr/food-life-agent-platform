@@ -14,6 +14,11 @@ public class GatewayAuthProperties {
     private Boolean enabled = true;
     private String tokenHeader = "authorization";
     private String tokenPrefix = "food:login:token:";
+    private String userIdHeader = "x-user-id";
+    private String userNicknameHeader = "x-user-nickname";
+    private String userIconHeader = "x-user-icon";
+    private String internalHeaderName = "x-internal-call";
+    private String internalSecretHeaderName = "x-internal-secret";
     private List<String> excludePaths = new ArrayList<>(Arrays.asList(
             "/health",
             "/api/user/code",
@@ -47,6 +52,46 @@ public class GatewayAuthProperties {
 
     public void setTokenPrefix(String tokenPrefix) {
         this.tokenPrefix = tokenPrefix;
+    }
+
+    public String getUserIdHeader() {
+        return userIdHeader;
+    }
+
+    public void setUserIdHeader(String userIdHeader) {
+        this.userIdHeader = userIdHeader;
+    }
+
+    public String getUserNicknameHeader() {
+        return userNicknameHeader;
+    }
+
+    public void setUserNicknameHeader(String userNicknameHeader) {
+        this.userNicknameHeader = userNicknameHeader;
+    }
+
+    public String getUserIconHeader() {
+        return userIconHeader;
+    }
+
+    public void setUserIconHeader(String userIconHeader) {
+        this.userIconHeader = userIconHeader;
+    }
+
+    public String getInternalHeaderName() {
+        return internalHeaderName;
+    }
+
+    public void setInternalHeaderName(String internalHeaderName) {
+        this.internalHeaderName = internalHeaderName;
+    }
+
+    public String getInternalSecretHeaderName() {
+        return internalSecretHeaderName;
+    }
+
+    public void setInternalSecretHeaderName(String internalSecretHeaderName) {
+        this.internalSecretHeaderName = internalSecretHeaderName;
     }
 
     public List<String> getExcludePaths() {

@@ -19,11 +19,22 @@ food:
     review-created-queue: food.business.review.created.queue
     package-stock-event-queue: food.business.package.stock.event.queue
   auth:
+    internal-call:
+      enabled: true
+      paths:
+        - /api/internal/**
+      header-name: x-internal-call
+      header-value: food-life-agent
+      secret-header-name: x-internal-secret
+      secret: ${FOOD_INTERNAL_SECRET:local-internal-secret}
     include-paths:
       - /**
     exclude-paths:
       - /health
+      - /error
       - /api/shop-category/**
       - /api/shop/**
-      - /api/package/**
-      - /api/internal/package/**
+      - /api/package/*
+      - /api/package/of/shop
+      - /api/package/trade-snapshot/*
+      - /api/internal/**

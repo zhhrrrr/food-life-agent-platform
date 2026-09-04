@@ -1,6 +1,7 @@
 package com.foodlife.auth.config;
 
 import com.foodlife.auth.feign.FeignAuthRequestInterceptor;
+import com.foodlife.auth.interceptor.InternalCallInterceptor;
 import com.foodlife.auth.interceptor.LoginInterceptor;
 import com.foodlife.auth.interceptor.RefreshTokenInterceptor;
 import com.foodlife.auth.properties.AuthProperties;
@@ -14,6 +15,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @EnableConfigurationProperties(AuthProperties.class)
@@ -34,16 +39,38 @@ public class AuthAutoConfiguration implements WebMvcConfigurer {
                 .addPathPatterns("/**")
                 .order(0);
 
-        registry.addInterceptor(new LoginInterceptor())
+        if (authProperties.getInternalCall() != null
+                && authProperties.getInternalCall().getPaths() != null
+                && !authProperties.getInternalCall().getPaths().isEmpty()) {
+            registry.addInterceptor(new InternalCallInterceptor(authProperties))
+                    .addPathPatterns(authProperties.getInternalCall().getPaths())
+                    .order(1);
+        }
+
+        registry.addInterceptor(new LoginInterceptor(buildLoginExcludePaths()))
                 .addPathPatterns(authProperties.getIncludePaths())
-                .excludePathPatterns(authProperties.getExcludePaths())
-                .order(1);
+                .excludePathPatterns(buildLoginExcludePaths())
+                .order(2);
     }
 
     @Bean
     @ConditionalOnClass(RequestInterceptor.class)
-    @ConditionalOnMissingBean(RequestInterceptor.class)
+    @ConditionalOnMissingBean(FeignAuthRequestInterceptor.class)
     public RequestInterceptor feignAuthRequestInterceptor() {
         return new FeignAuthRequestInterceptor(authProperties);
+    }
+
+    private List<String> buildLoginExcludePaths() {
+        List<String> paths = new ArrayList<>(Arrays.asList(
+                "/health",
+                "/error",
+                "/api/user/code",
+                "/api/user/login",
+                "/api/user/logout"
+        ));
+        if (authProperties.getExcludePaths() != null) {
+            paths.addAll(authProperties.getExcludePaths());
+        }
+        return paths;
     }
 }
