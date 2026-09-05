@@ -11,7 +11,7 @@ import com.foodlife.business.api.dto.PackageStockChangeRecordResponseDTO;
 import com.foodlife.business.api.dto.PackageStockChangeResponseDTO;
 import com.foodlife.business.api.dto.PackageTradeSnapshotResponseDTO;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
-import com.foodlife.trade.domain.order.distributedtx.model.PackageStockAdjustResult;
+import com.foodlife.trade.domain.order.operation.model.PackageStockAdjustResult;
 import com.foodlife.trade.domain.order.normal.model.PackageStockChangeRecord;
 import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
 import com.foodlife.trade.infrastructure.feign.BusinessInternalPackageClient;

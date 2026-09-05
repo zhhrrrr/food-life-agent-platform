@@ -189,8 +189,8 @@ CREATE TABLE IF NOT EXISTS trade_local_message (
   KEY idx_biz_id (biz_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='trade local reliable message';
 
-CREATE TABLE IF NOT EXISTS trade_distributed_tx_demo_log (
-  id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'distributed tx demo log id',
+CREATE TABLE IF NOT EXISTS trade_operation_stock_adjust_log (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'operation stock adjustment log id',
   operation_id VARCHAR(128) NOT NULL COMMENT 'idempotent operation id',
   operator_id BIGINT NOT NULL COMMENT 'operator user id',
   package_id BIGINT NOT NULL COMMENT 'meal package id',
@@ -205,7 +205,7 @@ CREATE TABLE IF NOT EXISTS trade_distributed_tx_demo_log (
   UNIQUE KEY uk_operation_id (operation_id),
   KEY idx_package_id (package_id),
   KEY idx_operator_time (operator_id, create_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='trade distributed transaction demo log';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='trade operation stock adjustment log';
 
 CREATE TABLE IF NOT EXISTS undo_log (
   branch_id BIGINT NOT NULL COMMENT 'branch transaction id',

@@ -46,32 +46,32 @@ $login = Invoke-JsonPost `
 
 $headers = @{ authorization = $login.data.token }
 
-$plusOperationId = "SEATA_SMOKE_PLUS_$([DateTimeOffset]::Now.ToUnixTimeMilliseconds())"
+$plusOperationId = "OPERATION_STOCK_PLUS_$([DateTimeOffset]::Now.ToUnixTimeMilliseconds())"
 $plus = Invoke-JsonPost `
-    -Name "seata demo stock plus" `
-    -Uri "$GatewayBaseUrl/api/trade/demo/seata/package-stock-adjust" `
+    -Name "operation stock adjustment plus" `
+    -Uri "$GatewayBaseUrl/api/trade/operations/package-stock-adjustments" `
     -Headers $headers `
     -Body @{
         packageId = $PackageId
         adjustQuantity = 1
-        reason = "seata smoke plus"
+        reason = "operation stock smoke plus"
         operationId = $plusOperationId
     } `
     -ExpectedCode "0000"
 
-$minusOperationId = "SEATA_SMOKE_MINUS_$([DateTimeOffset]::Now.ToUnixTimeMilliseconds())"
+$minusOperationId = "OPERATION_STOCK_MINUS_$([DateTimeOffset]::Now.ToUnixTimeMilliseconds())"
 $minus = Invoke-JsonPost `
-    -Name "seata demo stock minus" `
-    -Uri "$GatewayBaseUrl/api/trade/demo/seata/package-stock-adjust" `
+    -Name "operation stock adjustment minus" `
+    -Uri "$GatewayBaseUrl/api/trade/operations/package-stock-adjustments" `
     -Headers $headers `
     -Body @{
         packageId = $PackageId
         adjustQuantity = -1
-        reason = "seata smoke minus"
+        reason = "operation stock smoke minus"
         operationId = $minusOperationId
     } `
     -ExpectedCode "0000"
 
-Write-Host "Seata demo smoke verification completed."
+Write-Host "Operation stock adjustment smoke verification completed."
 Write-Host "Plus operationId=$($plus.data.operationId), stock=$($plus.data.stock)"
 Write-Host "Minus operationId=$($minus.data.operationId), stock=$($minus.data.stock)"

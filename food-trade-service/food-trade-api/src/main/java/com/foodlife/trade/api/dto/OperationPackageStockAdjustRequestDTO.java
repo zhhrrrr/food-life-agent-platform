@@ -5,7 +5,7 @@ import lombok.Data;
 import java.io.Serializable;
 
 @Data
-public class SeataPackageStockAdjustRequestDTO implements Serializable {
+public class OperationPackageStockAdjustRequestDTO implements Serializable {
 
     private Long packageId;
     private Integer adjustQuantity;
