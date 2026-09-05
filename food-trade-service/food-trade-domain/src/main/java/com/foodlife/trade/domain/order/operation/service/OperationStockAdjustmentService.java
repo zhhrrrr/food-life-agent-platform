@@ -1,31 +1,31 @@
-package com.foodlife.trade.domain.order.distributedtx.service;
+package com.foodlife.trade.domain.order.operation.service;
 
-import com.foodlife.trade.domain.order.distributedtx.model.DistributedPackageStockAdjustCommand;
-import com.foodlife.trade.domain.order.distributedtx.model.DistributedPackageStockAdjustLog;
-import com.foodlife.trade.domain.order.distributedtx.model.DistributedPackageStockAdjustResult;
-import com.foodlife.trade.domain.order.distributedtx.model.PackageStockAdjustResult;
-import com.foodlife.trade.domain.order.distributedtx.repository.IDistributedTxDemoRepository;
+import com.foodlife.trade.domain.order.operation.model.OperationPackageStockAdjustCommand;
+import com.foodlife.trade.domain.order.operation.model.OperationPackageStockAdjustLog;
+import com.foodlife.trade.domain.order.operation.model.OperationPackageStockAdjustResult;
+import com.foodlife.trade.domain.order.operation.model.PackageStockAdjustResult;
+import com.foodlife.trade.domain.order.operation.repository.IOperationStockAdjustmentRepository;
 import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class DistributedTxDemoService {
+public class OperationStockAdjustmentService {
 
     private final IBusinessPackagePort businessPackagePort;
-    private final IDistributedTxDemoRepository distributedTxDemoRepository;
+    private final IOperationStockAdjustmentRepository operationStockAdjustmentRepository;
 
-    public DistributedTxDemoService(IBusinessPackagePort businessPackagePort,
-                                    IDistributedTxDemoRepository distributedTxDemoRepository) {
+    public OperationStockAdjustmentService(IBusinessPackagePort businessPackagePort,
+                                           IOperationStockAdjustmentRepository operationStockAdjustmentRepository) {
         this.businessPackagePort = businessPackagePort;
-        this.distributedTxDemoRepository = distributedTxDemoRepository;
+        this.operationStockAdjustmentRepository = operationStockAdjustmentRepository;
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public DistributedPackageStockAdjustResult adjustPackageStock(DistributedPackageStockAdjustCommand command) {
+    public OperationPackageStockAdjustResult adjustPackageStock(OperationPackageStockAdjustCommand command) {
         checkCommand(command);
         fillOperationId(command);
-        DistributedPackageStockAdjustLog handledLog = distributedTxDemoRepository.findByOperationId(command.getOperationId());
+        OperationPackageStockAdjustLog handledLog = operationStockAdjustmentRepository.findByOperationId(command.getOperationId());
         if (handledLog != null) {
             if ("SUCCESS".equals(handledLog.getTxStatus())) {
                 return toResult(handledLog);
@@ -33,7 +33,7 @@ public class DistributedTxDemoService {
             throw new IllegalArgumentException("operation is processing");
         }
 
-        distributedTxDemoRepository.saveProcessingLog(command);
+        operationStockAdjustmentRepository.saveProcessingLog(command);
         PackageStockAdjustResult stockAdjustResult = businessPackagePort.adjustPackageStock(
                 command.getPackageId(),
                 command.getAdjustQuantity(),
@@ -41,11 +41,11 @@ public class DistributedTxDemoService {
                 command.getReason(),
                 command.getOperationId()
         );
-        distributedTxDemoRepository.markSuccess(command.getOperationId(), stockAdjustResult.getStock(), stockAdjustResult.getSold());
+        operationStockAdjustmentRepository.markSuccess(command.getOperationId(), stockAdjustResult.getStock(), stockAdjustResult.getSold());
         return toResult(command, stockAdjustResult);
     }
 
-    private void checkCommand(DistributedPackageStockAdjustCommand command) {
+    private void checkCommand(OperationPackageStockAdjustCommand command) {
         if (command == null) {
             throw new IllegalArgumentException("adjust command required");
         }
@@ -60,17 +60,17 @@ public class DistributedTxDemoService {
         }
     }
 
-    private void fillOperationId(DistributedPackageStockAdjustCommand command) {
+    private void fillOperationId(OperationPackageStockAdjustCommand command) {
         if (command.getOperationId() == null || command.getOperationId().trim().isEmpty()) {
-            command.setOperationId("SEATA_PACKAGE_STOCK_ADJUST:" + command.getOperatorId() + ":"
+            command.setOperationId("OPERATION_PACKAGE_STOCK_ADJUST:" + command.getOperatorId() + ":"
                     + command.getPackageId() + ":" + System.currentTimeMillis());
         } else {
             command.setOperationId(command.getOperationId().trim());
         }
     }
 
-    private DistributedPackageStockAdjustResult toResult(DistributedPackageStockAdjustLog log) {
-        DistributedPackageStockAdjustResult result = new DistributedPackageStockAdjustResult();
+    private OperationPackageStockAdjustResult toResult(OperationPackageStockAdjustLog log) {
+        OperationPackageStockAdjustResult result = new OperationPackageStockAdjustResult();
         result.setOperationId(log.getOperationId());
         result.setOperatorId(log.getOperatorId());
         result.setPackageId(log.getPackageId());
@@ -81,9 +81,9 @@ public class DistributedTxDemoService {
         return result;
     }
 
-    private DistributedPackageStockAdjustResult toResult(DistributedPackageStockAdjustCommand command,
-                                                        PackageStockAdjustResult stockAdjustResult) {
-        DistributedPackageStockAdjustResult result = new DistributedPackageStockAdjustResult();
+    private OperationPackageStockAdjustResult toResult(OperationPackageStockAdjustCommand command,
+                                                       PackageStockAdjustResult stockAdjustResult) {
+        OperationPackageStockAdjustResult result = new OperationPackageStockAdjustResult();
         result.setOperationId(command.getOperationId());
         result.setOperatorId(command.getOperatorId());
         result.setPackageId(command.getPackageId());

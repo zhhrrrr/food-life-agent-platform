@@ -1,4 +1,4 @@
-package com.foodlife.trade.domain.order.distributedtx.model;
+package com.foodlife.trade.domain.order.operation.model;
 
 import lombok.Data;
 

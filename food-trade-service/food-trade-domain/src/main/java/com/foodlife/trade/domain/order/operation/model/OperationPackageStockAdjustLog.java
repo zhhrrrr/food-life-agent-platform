@@ -1,11 +1,11 @@
-package com.foodlife.trade.api.dto;
+package com.foodlife.trade.domain.order.operation.model;
 
 import lombok.Data;
 
 import java.io.Serializable;
 
 @Data
-public class SeataPackageStockAdjustResponseDTO implements Serializable {
+public class OperationPackageStockAdjustLog implements Serializable {
 
     private String operationId;
     private Long operatorId;

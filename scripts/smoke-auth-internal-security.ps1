@@ -116,9 +116,9 @@ Invoke-Http `
 
 $plusOperationId = "AUTH_INTERNAL_PLUS_$([DateTimeOffset]::Now.ToUnixTimeMilliseconds())"
 Invoke-Http `
-    -Name "feign internal secret allows seata demo plus" `
+    -Name "feign internal secret allows operation stock adjustment plus" `
     -Method "POST" `
-    -Uri "$GatewayBaseUrl/api/trade/demo/seata/package-stock-adjust" `
+    -Uri "$GatewayBaseUrl/api/trade/operations/package-stock-adjustments" `
     -Headers @{ authorization = $login.data.token } `
     -Body @{ packageId = $PackageId; adjustQuantity = 1; reason = "auth smoke plus"; operationId = $plusOperationId } `
     -ExpectedStatus 200 `
@@ -126,9 +126,9 @@ Invoke-Http `
 
 $minusOperationId = "AUTH_INTERNAL_MINUS_$([DateTimeOffset]::Now.ToUnixTimeMilliseconds())"
 Invoke-Http `
-    -Name "feign internal secret allows seata demo minus" `
+    -Name "feign internal secret allows operation stock adjustment minus" `
     -Method "POST" `
-    -Uri "$GatewayBaseUrl/api/trade/demo/seata/package-stock-adjust" `
+    -Uri "$GatewayBaseUrl/api/trade/operations/package-stock-adjustments" `
     -Headers @{ authorization = $login.data.token } `
     -Body @{ packageId = $PackageId; adjustQuantity = -1; reason = "auth smoke minus"; operationId = $minusOperationId } `
     -ExpectedStatus 200 `

@@ -1,11 +1,11 @@
-package com.foodlife.trade.domain.order.distributedtx.model;
+package com.foodlife.trade.domain.order.operation.model;
 
 import lombok.Data;
 
 import java.io.Serializable;
 
 @Data
-public class DistributedPackageStockAdjustResult implements Serializable {
+public class OperationPackageStockAdjustResult implements Serializable {
 
     private String operationId;
     private Long operatorId;

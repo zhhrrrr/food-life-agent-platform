@@ -1,7 +1,7 @@
 package com.foodlife.trade.domain.order.port;
 
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
-import com.foodlife.trade.domain.order.distributedtx.model.PackageStockAdjustResult;
+import com.foodlife.trade.domain.order.operation.model.PackageStockAdjustResult;
 import com.foodlife.trade.domain.order.normal.model.PackageStockChangeRecord;
 
 import java.util.List;

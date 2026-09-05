@@ -9,8 +9,8 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("trade_distributed_tx_demo_log")
-public class DistributedTxDemoLogPO implements Serializable {
+@TableName("trade_operation_stock_adjust_log")
+public class OperationStockAdjustLogPO implements Serializable {
 
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
