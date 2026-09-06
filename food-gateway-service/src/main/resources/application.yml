@@ -20,8 +20,8 @@ spring:
   cloud:
     nacos:
       server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
-      username: ${NACOS_USERNAME:nacos}
-      password: ${NACOS_PASSWORD:nacos}
+      username: ${NACOS_USERNAME:}
+      password: ${NACOS_PASSWORD:}
       discovery:
         enabled: ${NACOS_DISCOVERY_ENABLED:true}
         namespace: ${NACOS_NAMESPACE:}

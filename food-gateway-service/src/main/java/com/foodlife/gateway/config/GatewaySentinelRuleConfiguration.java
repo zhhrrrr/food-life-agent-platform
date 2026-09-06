@@ -18,7 +18,7 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -36,6 +36,27 @@ public class GatewaySentinelRuleConfiguration {
         this.properties = properties;
     }
 
+    /**
+     *
+     * @PostConstruct
+     * ↓
+     * Bean 初始化完成后自动执行
+     *
+     * 1. 检查 Sentinel 是否开启
+     *    properties.getEnabled()
+     *
+     * 2. 加载 API 分组
+     *    GatewayApiDefinitionManager
+     *    → 定义哪些 URL 属于哪个 API
+     *
+     * 3. 加载 Gateway 限流规则
+     *    GatewayRuleManager
+     *    → 配置不同 Route / API 的 QPS 限制
+     *
+     * 4. 注册限流后的统一处理器
+     *    GatewayCallbackManager
+     *    → 超过限流后返回自定义 JSON
+     */
     @PostConstruct
     public void initGatewayRules() {
         if (!Boolean.TRUE.equals(properties.getEnabled())) {
@@ -51,6 +72,8 @@ public class GatewaySentinelRuleConfiguration {
         return new JsonBlockRequestHandler();
     }
 
+    // 把一组具体 URL 归类成 Sentinel 的“自定义 API 分组”，后面可以直接针对这个 API 分组做限流。
+    // Gateway 层面精准匹配来做限流
     private Set<ApiDefinition> buildApiDefinitions() {
         Set<ApiDefinition> definitions = new HashSet<>();
         definitions.add(api(API_TRADE_ORDER_CREATE,
@@ -77,6 +100,19 @@ public class GatewaySentinelRuleConfiguration {
 
     private Set<GatewayFlowRule> buildGatewayFlowRules() {
         Set<GatewayFlowRule> rules = new HashSet<>();
+        /**
+         * 资源：
+         * API_TRADE_ORDER_CREATE
+         *
+         * 资源类型：
+         * 自定义 API 分组
+         *
+         * 阈值：
+         * tradeOrderCreateQps
+         *
+         * 统计窗口：
+         * 1 秒
+         */
         rules.add(new GatewayFlowRule(API_TRADE_ORDER_CREATE)
                 .setResourceMode(SentinelGatewayConstants.RESOURCE_MODE_CUSTOM_API_NAME)
                 .setCount(properties.getTradeOrderCreateQps())
@@ -101,6 +137,7 @@ public class GatewaySentinelRuleConfiguration {
                 .setResourceMode(SentinelGatewayConstants.RESOURCE_MODE_ROUTE_ID)
                 .setCount(properties.getUserRouteQps())
                 .setIntervalSec(1));
+        // 对下单 API，从请求头里提取 authorization，基于这个 Header 参数做更细粒度的限流，阈值是每秒 20。
         rules.add(new GatewayFlowRule(API_TRADE_ORDER_CREATE)
                 .setResourceMode(SentinelGatewayConstants.RESOURCE_MODE_CUSTOM_API_NAME)
                 .setCount(properties.getUserHeaderQps())
@@ -108,6 +145,8 @@ public class GatewaySentinelRuleConfiguration {
                 .setParamItem(new GatewayParamFlowItem()
                         .setParseStrategy(SentinelGatewayConstants.PARAM_PARSE_STRATEGY_HEADER)
                         .setFieldName(properties.getUserHeaderName())));
+        // 这段代码在 smokeRuleEnabled=true 时，对 API_SMOKE 增加一条基于 X-Sentinel-Smoke Header 的 60 秒阈值 1 的测试限流规则，
+        // 用来快速验证 Sentinel Gateway 限流和 BlockHandler 是否正常工作。
         if (Boolean.TRUE.equals(properties.getSmokeRuleEnabled())) {
             rules.add(new GatewayFlowRule(API_SMOKE)
                     .setResourceMode(SentinelGatewayConstants.RESOURCE_MODE_CUSTOM_API_NAME)
@@ -117,6 +156,7 @@ public class GatewaySentinelRuleConfiguration {
                             .setParseStrategy(SentinelGatewayConstants.PARAM_PARSE_STRATEGY_HEADER)
                             .setFieldName("X-Sentinel-Smoke")));
         }
+        // 先用少量、最关键的测试，快速确认系统“基本能不能跑起来”。
         return rules;
     }
 

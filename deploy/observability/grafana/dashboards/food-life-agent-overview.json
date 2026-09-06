@@ -1,0 +1,80 @@
+{
+  "uid": "food-life-agent-overview",
+  "title": "Food Life Agent Overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "tags": ["food-life-agent", "spring-boot", "micrometer"],
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Service Up",
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+      "targets": [
+        {
+          "expr": "up{job=~\"food-.*\"}",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP QPS",
+      "gridPos": {"x": 6, "y": 0, "w": 9, "h": 8},
+      "targets": [
+        {
+          "expr": "sum by (application, uri, method) (rate(http_server_requests_seconds_count[1m]))",
+          "legendFormat": "{{application}} {{method}} {{uri}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP P95 Latency",
+      "gridPos": {"x": 15, "y": 0, "w": 9, "h": 8},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, application, uri) (rate(http_server_requests_seconds_bucket[5m])))",
+          "legendFormat": "{{application}} {{uri}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Slow API Count",
+      "gridPos": {"x": 0, "y": 8, "w": 8, "h": 8},
+      "targets": [
+        {
+          "expr": "sum by (application, path) (increase(food_http_server_slow_request_total[5m]))",
+          "legendFormat": "{{application}} {{path}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "JVM Memory Used",
+      "gridPos": {"x": 8, "y": 8, "w": 8, "h": 8},
+      "targets": [
+        {
+          "expr": "sum by (application, area) (jvm_memory_used_bytes)",
+          "legendFormat": "{{application}} {{area}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Process CPU Usage",
+      "gridPos": {"x": 16, "y": 8, "w": 8, "h": 8},
+      "targets": [
+        {
+          "expr": "process_cpu_usage",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'food-gateway-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets:
+          - 'host.docker.internal:8081'
+        labels:
+          application: 'food-gateway-service'
+
+  - job_name: 'food-user-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets:
+          - 'host.docker.internal:8102'
+        labels:
+          application: 'food-user-service'
+
+  - job_name: 'food-business-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets:
+          - 'host.docker.internal:8202'
+        labels:
+          application: 'food-business-service'
+
+  - job_name: 'food-trade-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets:
+          - 'host.docker.internal:8302'
+        labels:
+          application: 'food-trade-service'

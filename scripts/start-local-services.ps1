@@ -11,6 +11,8 @@ $Root = Split-Path -Parent $PSScriptRoot
 $Logs = Join-Path $Root "logs"
 New-Item -ItemType Directory -Force -Path $Logs | Out-Null
 
+& (Join-Path $PSScriptRoot "use-java17-plus.ps1")
+
 $env:SPRING_PROFILES_ACTIVE = $SpringProfilesActive
 if ($SpringProfilesActive -eq "local") {
     $env:NACOS_DISCOVERY_ENABLED = "false"
@@ -125,7 +127,8 @@ foreach ($service in $Services) {
     }
 
     Write-Host "Starting $($service.Name) on port $($service.Port)"
-    Start-Process -FilePath "java" `
+    $javaExe = Join-Path $env:JAVA_HOME "bin\java.exe"
+    Start-Process -FilePath $javaExe `
         -ArgumentList "-jar", $jarPath `
         -WorkingDirectory $Root `
         -RedirectStandardOutput (Join-Path $Root $service.OutLog) `
