@@ -1,0 +1,4 @@
+com.foodlife.observability.config.ObservabilityAutoConfiguration
+com.foodlife.observability.config.ServletObservabilityAutoConfiguration
+com.foodlife.observability.config.ReactiveObservabilityAutoConfiguration
+com.foodlife.observability.config.FeignObservabilityAutoConfiguration

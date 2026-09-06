@@ -1,6 +1,10 @@
 server:
   port: 8201
 
+management:
+  server:
+    port: 8202
+
 spring:
   application:
     name: food-business-service

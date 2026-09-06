@@ -16,15 +16,51 @@ spring:
     sentinel:
       transport:
         dashboard: ${SENTINEL_DASHBOARD_ADDR:localhost:8858}
+    openfeign:
+      circuitbreaker:
+        enabled: true
+      micrometer:
+        enabled: true
+      client:
+        config:
+          default:
+            connectTimeout: 3000
+            readTimeout: 5000
+            loggerLevel: basic
 
 feign:
   sentinel:
-    enabled: true
+    enabled: false
   client:
     config:
       default:
         connectTimeout: 3000
         readTimeout: 5000
+        loggerLevel: basic
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  health:
+    rabbit:
+      enabled: ${FOOD_RABBIT_HEALTH_ENABLED:false}
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        food_http_server_request_duration: true
+  tracing:
+    sampling:
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
 
 seata:
   enabled: ${SEATA_ENABLED:false}
@@ -47,6 +83,13 @@ mybatis-plus:
 food:
   mq:
     enabled: ${FOOD_MQ_ENABLED:false}
+  observability:
+    enabled: true
+    trace-header: X-Trace-Id
+    request-log-enabled: true
+    log-normal-request: ${FOOD_OBSERVABILITY_LOG_NORMAL_REQUEST:false}
+    slow-api-threshold-ms: ${FOOD_SLOW_API_THRESHOLD_MS:1000}
+    slow-feign-threshold-ms: ${FOOD_SLOW_FEIGN_THRESHOLD_MS:1000}
   auth:
     enabled: true
     token-header: authorization

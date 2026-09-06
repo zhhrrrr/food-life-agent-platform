@@ -3,7 +3,7 @@ package com.foodlife.gateway.filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -37,7 +37,7 @@ public class GatewayRequestLogFilter implements WebFilter, Ordered {
         mutatedExchange.getResponse().getHeaders().set(TRACE_ID_HEADER, finalTraceId);
 
         return chain.filter(mutatedExchange).doFinally(signalType -> {
-            HttpStatus status = mutatedExchange.getResponse().getStatusCode();
+            HttpStatusCode status = mutatedExchange.getResponse().getStatusCode();
             long durationMillis = System.currentTimeMillis() - startMillis;
             log.info("gateway request finished, traceId={}, method={}, path={}, status={}, durationMs={}",
                     finalTraceId,

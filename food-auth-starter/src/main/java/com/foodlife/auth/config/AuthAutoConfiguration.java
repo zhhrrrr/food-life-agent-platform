@@ -63,6 +63,7 @@ public class AuthAutoConfiguration implements WebMvcConfigurer {
     private List<String> buildLoginExcludePaths() {
         List<String> paths = new ArrayList<>(Arrays.asList(
                 "/health",
+                "/actuator/**",
                 "/error",
                 "/api/user/code",
                 "/api/user/login",

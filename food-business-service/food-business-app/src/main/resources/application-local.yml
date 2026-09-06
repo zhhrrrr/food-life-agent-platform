@@ -1,6 +1,32 @@
 server:
   port: 8201
 
+management:
+  server:
+    port: 8202
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  health:
+    rabbit:
+      enabled: ${FOOD_RABBIT_HEALTH_ENABLED:false}
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        food_http_server_request_duration: true
+  tracing:
+    sampling:
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
+
 spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -31,15 +57,27 @@ spring:
           instances:
             food-trade-service:
               - uri: http://localhost:8301
+    openfeign:
+      circuitbreaker:
+        enabled: true
+      micrometer:
+        enabled: true
+      client:
+        config:
+          default:
+            connectTimeout: 3000
+            readTimeout: 5000
+            loggerLevel: basic
 
 feign:
   sentinel:
-    enabled: true
+    enabled: false
   client:
     config:
       default:
         connectTimeout: 3000
         readTimeout: 5000
+        loggerLevel: basic
 
 seata:
   enabled: ${SEATA_ENABLED:false}
@@ -60,6 +98,13 @@ mybatis-plus:
       id-type: auto
 
 food:
+  observability:
+    enabled: true
+    trace-header: X-Trace-Id
+    request-log-enabled: true
+    log-normal-request: ${FOOD_OBSERVABILITY_LOG_NORMAL_REQUEST:false}
+    slow-api-threshold-ms: ${FOOD_SLOW_API_THRESHOLD_MS:1000}
+    slow-feign-threshold-ms: ${FOOD_SLOW_FEIGN_THRESHOLD_MS:1000}
   mq:
     enabled: ${FOOD_MQ_ENABLED:false}
     review-created-queue: food.business.review.created.queue

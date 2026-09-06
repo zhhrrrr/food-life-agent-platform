@@ -56,6 +56,10 @@ public class GatewayTrafficGuardFilter implements WebFilter, Ordered {
         }
 
         String path = exchange.getRequest().getURI().getRawPath();
+        if (path != null && path.startsWith("/actuator")) {
+            return chain.filter(exchange);
+        }
+
         if (isBlacklisted(path)) {
             return forbidden(exchange);
         }

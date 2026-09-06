@@ -1,6 +1,10 @@
 server:
   port: 8101
 
+management:
+  server:
+    port: 8102
+
 spring:
   application:
     name: food-user-service
