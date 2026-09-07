@@ -17,4 +17,6 @@ public interface IPaymentOrderRepository {
     java.util.List<PaymentOrderEntity> listTimeoutPreparedPaymentOrders(LocalDateTime timeoutBefore, Integer limit);
 
     boolean markPayClosed(String payOrderNo, String fromStatus);
+
+    boolean markPayRefunded(Long orderId, Long userId, String fromStatus);
 }

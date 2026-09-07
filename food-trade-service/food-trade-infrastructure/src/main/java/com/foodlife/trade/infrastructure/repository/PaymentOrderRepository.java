@@ -83,6 +83,18 @@ public class PaymentOrderRepository implements IPaymentOrderRepository {
         return updated > 0;
     }
 
+    @Override
+    public boolean markPayRefunded(Long orderId, Long userId, String fromStatus) {
+        PaymentOrderPO updatePO = new PaymentOrderPO();
+        updatePO.setPayStatus(PaymentOrderStatusConstants.REFUNDED);
+        updatePO.setUpdateTime(LocalDateTime.now());
+        int updated = paymentOrderMapper.update(updatePO, new LambdaUpdateWrapper<PaymentOrderPO>()
+                .eq(PaymentOrderPO::getOrderId, orderId)
+                .eq(PaymentOrderPO::getUserId, userId)
+                .eq(PaymentOrderPO::getPayStatus, fromStatus));
+        return updated > 0;
+    }
+
     private PaymentOrderPO toPO(PaymentOrderEntity entity) {
         PaymentOrderPO po = new PaymentOrderPO();
         po.setId(entity.getId());

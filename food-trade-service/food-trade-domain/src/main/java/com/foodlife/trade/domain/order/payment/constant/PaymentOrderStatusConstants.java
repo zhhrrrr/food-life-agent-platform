@@ -5,6 +5,7 @@ public final class PaymentOrderStatusConstants {
     public static final String PREPARED = "PREPARED";
     public static final String SUCCESS = "SUCCESS";
     public static final String CLOSED = "CLOSED";
+    public static final String REFUNDED = "REFUNDED";
 
     private PaymentOrderStatusConstants() {
     }

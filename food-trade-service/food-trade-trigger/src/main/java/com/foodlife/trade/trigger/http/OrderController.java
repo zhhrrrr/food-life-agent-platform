@@ -58,6 +58,7 @@ import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityEntity;
 import com.foodlife.trade.domain.order.service.OrderDomainService;
 import com.foodlife.trade.types.response.Response;
+import com.foodlife.trade.trigger.app.RefundConfirmApplicationService;
 import com.foodlife.trade.trigger.sentinel.TradeSentinelResources;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -77,9 +78,12 @@ import java.util.stream.Collectors;
 public class OrderController {
 
     private final OrderDomainService orderDomainService;
+    private final RefundConfirmApplicationService refundConfirmApplicationService;
 
-    public OrderController(OrderDomainService orderDomainService) {
+    public OrderController(OrderDomainService orderDomainService,
+                           RefundConfirmApplicationService refundConfirmApplicationService) {
         this.orderDomainService = orderDomainService;
+        this.refundConfirmApplicationService = refundConfirmApplicationService;
     }
 
     @PostMapping("/orders/normal")
@@ -268,8 +272,14 @@ public class OrderController {
     @PostMapping("/orders/{orderId}/refund/mock")
     public Response<RefundOrderResponseDTO> refundOrderMock(@PathVariable Long orderId,
                                                             @RequestBody(required = false) RefundOrderRequestDTO request) {
+        return confirmRefund(orderId, request);
+    }
+
+    @PostMapping("/orders/{orderId}/refund/confirm")
+    public Response<RefundOrderResponseDTO> confirmRefund(@PathVariable Long orderId,
+                                                          @RequestBody(required = false) RefundOrderRequestDTO request) {
         try {
-            OrderRefundBehaviorEntity result = orderDomainService.refundOrderMock(toRefundCommand(orderId, request));
+            OrderRefundBehaviorEntity result = refundConfirmApplicationService.confirmRefund(toRefundCommand(orderId, request));
             return Response.success(toRefundResponse(result));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
@@ -640,6 +650,9 @@ public class OrderController {
         response.setUserCouponId(result.getUserCouponId());
         response.setCouponReturned(result.getCouponReturned());
         response.setCouponReturnStatus(result.getCouponReturnStatus());
+        response.setPaymentRefunded(result.getPaymentRefunded());
+        response.setPackageStockRolledBack(result.getPackageStockRolledBack());
+        response.setPackageStockReleased(result.getPackageStockReleased());
         response.setTeamId(result.getTeamId());
         response.setActivityId(result.getActivityId());
         response.setTeamStatus(result.getTeamStatus());
