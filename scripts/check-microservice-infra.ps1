@@ -3,6 +3,7 @@ param(
     [int]$RedisPort = 6379,
     [int]$NacosPort = 8848,
     [int]$RabbitMqPort = 5672,
+    [int]$RabbitMqManagementPort = 15672,
     [int]$SeataPort = 8091,
     [int]$SentinelDashboardPort = 8858
 )
@@ -29,11 +30,13 @@ $missing += Assert-PortListening -Name "MySQL" -Port $MysqlPort
 $missing += Assert-PortListening -Name "Redis" -Port $RedisPort
 $missing += Assert-PortListening -Name "Nacos" -Port $NacosPort
 $missing += Assert-PortListening -Name "RabbitMQ" -Port $RabbitMqPort
+$missing += Assert-PortListening -Name "RabbitMQ Management" -Port $RabbitMqManagementPort
 $missing += Assert-PortListening -Name "Seata" -Port $SeataPort
 $missing += Assert-PortListening -Name "Sentinel Dashboard" -Port $SentinelDashboardPort
+$missing = @($missing | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 
 if ($missing.Count -gt 0) {
-    $message = ($missing | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join [Environment]::NewLine
+    $message = $missing -join [Environment]::NewLine
     throw $message
 }
 

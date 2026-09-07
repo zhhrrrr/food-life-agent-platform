@@ -5,6 +5,7 @@ param(
     [string]$SpringProfilesActive = "nacos",
     [string]$RabbitMqHost = "127.0.0.1",
     [string]$RabbitMqPort = "5672",
+    [string]$RabbitMqManagementPort = "15672",
     [string]$RabbitMqUsername = "guest",
     [string]$RabbitMqPassword = "guest",
     [string]$RabbitMqVirtualHost = "/",
@@ -42,6 +43,7 @@ Write-Host "SEATA_ENABLED=$env:SEATA_ENABLED"
 
 & (Join-Path $PSScriptRoot "check-microservice-infra.ps1") `
     -RabbitMqPort ([int]$RabbitMqPort) `
+    -RabbitMqManagementPort ([int]$RabbitMqManagementPort) `
     -SeataPort (($SeataServerAddr -split ":")[-1]) `
     -SentinelDashboardPort (($SentinelDashboardAddr -split ":")[-1])
 
@@ -49,6 +51,7 @@ $CoreServices = @(
     @{
         Name = "food-user-service"
         Port = 8101
+        SentinelTransportPort = 8733
         MavenModule = "food-user-service/food-user-app"
         Jar = "food-user-service/food-user-app/target/food-user-app-1.0-SNAPSHOT.jar"
         OutLog = "logs/user-service-8101.out.log"
@@ -58,6 +61,7 @@ $CoreServices = @(
     @{
         Name = "food-business-service"
         Port = 8201
+        SentinelTransportPort = 8731
         MavenModule = "food-business-service/food-business-app"
         Jar = "food-business-service/food-business-app/target/food-business-app-1.0-SNAPSHOT.jar"
         OutLog = "logs/business-service-8201.out.log"
@@ -67,6 +71,7 @@ $CoreServices = @(
     @{
         Name = "food-trade-service"
         Port = 8301
+        SentinelTransportPort = 8732
         MavenModule = "food-trade-service/food-trade-app"
         Jar = "food-trade-service/food-trade-app/target/food-trade-app-1.0-SNAPSHOT.jar"
         OutLog = "logs/trade-service-8301.out.log"
@@ -78,6 +83,7 @@ $CoreServices = @(
 $GatewayService = @{
     Name = "food-gateway-service"
     Port = 8080
+    SentinelTransportPort = 8730
     MavenModule = "food-gateway-service"
     Jar = "food-gateway-service/target/food-gateway-service-1.0-SNAPSHOT.jar"
     OutLog = "logs/gateway-service-8080.out.log"
@@ -153,8 +159,15 @@ foreach ($service in $Services) {
 
     Write-Host "Starting $($service.Name) on port $($service.Port)"
     $javaExe = Join-Path $env:JAVA_HOME "bin\java.exe"
+    $javaArgs = @(
+        "-Dproject.name=$($service.Name)",
+        "-Dcsp.sentinel.dashboard.server=$env:SENTINEL_DASHBOARD_ADDR",
+        "-Dcsp.sentinel.api.port=$($service.SentinelTransportPort)",
+        "-jar",
+        $jarPath
+    )
     Start-Process -FilePath $javaExe `
-        -ArgumentList "-jar", $jarPath `
+        -ArgumentList $javaArgs `
         -WorkingDirectory $Root `
         -RedirectStandardOutput (Join-Path $Root $service.OutLog) `
         -RedirectStandardError (Join-Path $Root $service.ErrLog) `

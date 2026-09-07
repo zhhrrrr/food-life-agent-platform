@@ -9,7 +9,8 @@ spring:
   cloud:
     sentinel:
       transport:
-        port: ${SENTINEL_GATEWAY_TRANSPORT_PORT:8719}
+        dashboard: ${SENTINEL_DASHBOARD_ADDR:localhost:8858}
+        port: ${SENTINEL_GATEWAY_TRANSPORT_PORT:8730}
     gateway:
       default-filters:
         - PreserveHostHeader
