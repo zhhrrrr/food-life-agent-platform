@@ -124,16 +124,6 @@ food:
           - /api/package/*/stock/release
           - /api/package/*/sold/confirm
           - /api/package/*/sold/rollback
-      rate-limit:
-        enabled: true
-        ip:
-          enabled: true
-          capacity: 120
-          window-seconds: 60
-        user:
-          enabled: true
-          capacity: 60
-          window-seconds: 60
     sentinel:
       enabled: true
       trade-route-qps: 300
@@ -142,6 +132,6 @@ food:
       trade-order-create-qps: 80
       seckill-order-create-qps: 30
       payment-callback-qps: 100
-      user-header-name: x-user-id
+      user-header-name: authorization
       user-header-qps: 20
       smoke-rule-enabled: true

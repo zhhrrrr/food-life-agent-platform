@@ -186,10 +186,12 @@ foreach ($config in @($gatewayLocalConfig, $gatewayNacosConfig)) {
     Assert-Contains `
         -Path $config `
         -Patterns @(
-            'rate-limit:',
+            'sentinel:',
+            'trade-route-qps:',
+            'user-header-qps:',
             'enabled: true'
         ) `
-        -Message "Gateway rate limit must be enabled"
+        -Message "Gateway traffic limit must be owned by Sentinel"
 }
 
 Assert-Contains `

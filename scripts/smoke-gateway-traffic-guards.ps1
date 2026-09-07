@@ -60,6 +60,12 @@ Invoke-SmokeGet `
     -ExpectedStatus 403 `
     -ExpectedCode "403"
 
+Invoke-SmokeGet `
+    -Name "gateway public actuator blocked" `
+    -Uri "$GatewayBaseUrl/actuator/health" `
+    -ExpectedStatus 403 `
+    -ExpectedCode "403"
+
 $smokeHeaderValue = "gateway-sentinel-$(Get-Random)"
 Invoke-SmokeGet `
     -Name "gateway sentinel first request" `
