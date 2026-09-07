@@ -50,7 +50,7 @@ spring:
     sentinel:
       transport:
         dashboard: ${SENTINEL_DASHBOARD_ADDR:localhost:8858}
-        port: ${SENTINEL_TRANSPORT_PORT:8720}
+        port: ${SENTINEL_TRANSPORT_PORT:8731}
     discovery:
       client:
         simple:

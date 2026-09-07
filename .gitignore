@@ -8,6 +8,7 @@ target/
 # Logs
 logs/
 *.log
+.runtime/
 
 # Local tools
 tools/
