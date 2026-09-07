@@ -26,7 +26,9 @@ public class GatewayAuthProperties {
             "/api/user/logout",
             "/api/shop-category/**",
             "/api/shop/**",
-            "/api/package/**",
+            "/api/package/*",
+            "/api/package/of/shop",
+            "/api/package/trade-snapshot/*",
             "/api/trade/pay/callback/**"
     ));
 
