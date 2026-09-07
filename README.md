@@ -1,109 +1,71 @@
 # food-life-agent-platform
 
-美食生活业务 Agent 项目。
+美食生活业务平台，当前阶段先完成 Agent 之前的业务底座：用户、店铺套餐、交易下单、拼团、秒杀、支付回调骨架、退款、核销、评价、收藏、关注、网关、限流熔断、消息最终一致性、分布式事务示例链路与可观测性。
 
-## Current Stage
+项目采用微服务 + DDD 分层，保留后续接入业务 Agent 与 Python Runtime 的边界。
 
-当前先开发不涉及 Agent 的业务服务，Agent 和 Python Runtime 暂缓。
-
-当前核心服务：
+## 架构
 
 ```text
-food-auth-starter
-food-user-service
-food-business-service
-food-trade-service
-food-life-agent-web
+food-life-agent-platform
+├── food-gateway-service          # 统一入口、路由、CORS、鉴权、黑名单、限流、traceId
+├── food-user-service             # 登录、用户资料、关注关系
+├── food-business-service         # 店铺、分类、套餐、库存、评价、收藏、店铺主页
+├── food-trade-service            # 普通购买、拼团、秒杀、支付、退款、核销、订单查询
+├── food-auth-starter             # Redis Token、UserHolder、Feign Token 透传、内部调用保护
+├── food-observability-starter    # traceId、统一日志、慢接口、Feign 耗时、Actuator、Prometheus
+├── food-domain-patterns          # xfg 风格责任链、规则树等领域设计模式模板
+└── food-life-agent-web           # Vue 3 用户端前端
 ```
 
-当前已经完成的主流程：
+## 技术栈
 
-```text
-1. 黑马点评风格手机号验证码登录
-2. Redis Token 和 UserHolder 登录态
-3. food-auth-starter 复用认证拦截器和 Token 透传
-4. 用户主数据、关注关系、用户资料、个人主页
-5. 店铺、分类、套餐、评价、收藏、店铺主页聚合
-6. 普通购买、拼团、秒杀
-7. 模拟支付、支付单、支付回调、超时关单
-8. 取消、退款、到店核销
-9. 订单详情、订单列表、交易链路查询
-10. 面向用户的美食拼团 Agent 前端
-```
+| 方向 | 技术 |
+| --- | --- |
+| 后端 | Java 17、Spring Boot 3、Spring Cloud、Spring Cloud Alibaba |
+| 架构 | 微服务、DDD、OpenFeign、Gateway、Nacos |
+| 数据 | MySQL、Redis、MyBatis-Plus |
+| 高并发治理 | Sentinel、Redis 预扣、幂等、补偿 |
+| 消息 | RabbitMQ、本地消息表、最终一致性 |
+| 分布式事务 | Seata AT，仅用于适合强一致展示的退款确认链路 |
+| 可观测性 | Actuator、Micrometer、Prometheus、Grafana、traceId 日志 |
+| 前端 | Vue 3、TypeScript、Vite、Pinia、Vue Router、Axios、Element Plus |
 
-后续开发：
+## 本地基础设施
 
-```text
-food-gateway-service
-python-agent-service
-```
+| 组件 | 地址 |
+| --- | --- |
+| MySQL | `127.0.0.1:3306` |
+| Redis | `127.0.0.1:6379` |
+| Nacos | `http://127.0.0.1:8848/nacos` |
+| RabbitMQ | `127.0.0.1:5672` |
+| RabbitMQ Management | `http://127.0.0.1:15672` |
+| Seata Server | `127.0.0.1:8091` |
+| Sentinel Dashboard | `http://127.0.0.1:8858` |
 
-## Local Databases
+默认账号见 [数据记录-本地微服务运行组件.md](docs/数据记录-本地微服务运行组件.md)。
 
-本地开发默认使用：
+## 快速启动
 
-```text
-MySQL localhost:3306 root/root
-Redis localhost:6379
-```
-
-SQL 脚本：
-
-```text
-docs/sql/food_user_db.sql
-docs/sql/food_business_db.sql
-docs/sql/food_trade_db.sql
-```
-
-## Local Services
-
-本地端口：
-
-```text
-food-user-service      http://localhost:8101
-food-business-service  http://localhost:8201
-food-trade-service     http://localhost:8301
-```
-
-启动三服务：
+首次准备并启动基础设施：
 
 ```powershell
-.\scripts\start-local-services.ps1
+.\scripts\start-infra-all.ps1
 ```
 
-重新打包并重启三服务：
+启动后端服务和网关：
 
 ```powershell
-.\scripts\start-local-services.ps1 -Rebuild
+.\scripts\start-local-services.ps1 -IncludeGateway -Restart
 ```
 
-停止三服务：
+运行本地业务验收：
 
 ```powershell
-.\scripts\stop-local-services.ps1
+.\scripts\smoke-test-local-microservices.ps1
 ```
 
-网关前冒烟检查：
-
-```powershell
-.\scripts\smoke-before-gateway.ps1
-```
-
-带登录 Token 的冒烟检查：
-
-```powershell
-.\scripts\smoke-before-gateway.ps1 -Token "{token}"
-```
-
-## Local Frontend
-
-前端工程：
-
-```text
-food-life-agent-web
-```
-
-启动：
+启动前端：
 
 ```powershell
 cd food-life-agent-web
@@ -117,16 +79,79 @@ npm run dev
 http://localhost:5173
 ```
 
-前端通过 Vite 代理联调本地后端：
+## 常用验证
 
-```text
-/user-api      -> http://localhost:8101/api/user
-/business-api  -> http://localhost:8201/api
-/trade-api     -> http://localhost:8301/api/trade
+```powershell
+.\scripts\verify-company-readiness.ps1
 ```
 
-## Before Gateway
+该脚本会统一执行：
 
-当前还没有实现 `food-gateway-service`。
+- Java 17+ 环境切换
+- 微服务边界检查
+- Nacos 配置检查
+- Maven 测试
+- 前端构建
+- 基础设施和本地 smoke test，前提是本地服务已经启动
 
-网关开始前，三服务已经可以独立启动和验证。后续网关只负责统一入口、路由、鉴权透传、跨域和限流，业务逻辑继续留在各自微服务内。
+## 服务端口
+
+| 服务 | 业务端口 | Actuator 端口 |
+| --- | --- | --- |
+| Gateway | `8080` | `8081` |
+| user-service | `8101` | `8102` |
+| business-service | `8201` | `8202` |
+| trade-service | `8301` | `8302` |
+
+接口统一从 Gateway 进入：
+
+```text
+/api/user/**
+/api/shop-category/**
+/api/shop/**
+/api/package/**
+/api/shop-homepage/**
+/api/reviews/**
+/api/favorites/shops/**
+/api/trade/**
+```
+
+## 数据库
+
+本地默认：
+
+```text
+MySQL localhost:3306 root/root
+Redis localhost:6379
+```
+
+SQL：
+
+```text
+docs/sql/food_user_db.sql
+docs/sql/food_business_db.sql
+docs/sql/food_trade_db.sql
+```
+
+## 当前业务能力
+
+- 黑马点评风格手机验证码登录
+- Redis Token 与登录态刷新
+- Gateway 鉴权、Token 透传、内部接口保护
+- 店铺分类、店铺列表、套餐详情、套餐交易快照
+- 普通购买订单：下单、支付、取消、超时取消、退款、核销
+- 拼团订单：锁单、成团判断、超时补偿、退款回滚、查询
+- 秒杀订单：活动查询、Redis 库存预扣、异步请求单、恢复、对账
+- 优惠券：领取、适用范围、限领、过期扫描、退回
+- 评价：创建、列表、摘要、异步更新统计、幂等消费
+- 收藏、关注、用户资料、个人主页、店铺主页聚合
+- RabbitMQ 事件发布、延迟关单、本地消息表补偿
+- Sentinel Gateway/API/热点参数/用户维度限流
+- Seata AT 退款确认链路
+- Actuator、Prometheus、Grafana 看板配置、traceId 全链路日志
+
+## Agent 前置清单
+
+Agent 之前还需要完成的事项见：
+
+- [Agent前置完成清单.md](docs/Agent前置完成清单.md)

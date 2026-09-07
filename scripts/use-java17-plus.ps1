@@ -35,6 +35,9 @@ $candidates = @()
 if (-not [string]::IsNullOrWhiteSpace($PreferredJavaHome)) {
     $candidates += $PreferredJavaHome
 }
+if (-not [string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
+    $candidates += $env:JAVA_HOME
+}
 $candidates += @(
     "C:\Users\zhr\.vscode\extensions\redhat.java-1.56.0-win32-x64\jre\21.0.12.1-win32-x86_64",
     "D:\Program Files\Java\jdk-25.0.2",
