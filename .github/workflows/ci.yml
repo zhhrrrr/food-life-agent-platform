@@ -10,8 +10,8 @@ on:
       - main
 
 jobs:
-  backend:
-    name: Backend
+  project-readiness:
+    name: Project Readiness
     runs-on: windows-latest
 
     steps:
@@ -25,25 +25,6 @@ jobs:
           java-version: '17'
           cache: maven
 
-      - name: Verify microservice boundaries
-        shell: pwsh
-        run: ./scripts/verify-microservice-boundaries.ps1
-
-      - name: Maven test
-        run: mvn -B test
-
-  frontend:
-    name: Frontend
-    runs-on: windows-latest
-
-    defaults:
-      run:
-        working-directory: food-life-agent-web
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -51,8 +32,10 @@ jobs:
           cache: npm
           cache-dependency-path: food-life-agent-web/package-lock.json
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
+        working-directory: food-life-agent-web
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      - name: Verify project readiness
+        shell: pwsh
+        run: ./scripts/verify-company-readiness.ps1 -SkipRuntimeSmoke
