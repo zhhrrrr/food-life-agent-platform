@@ -8,7 +8,7 @@ public class ObservabilityProperties {
     private boolean enabled = true;
     private String traceHeader = "X-Trace-Id";
     private boolean requestLogEnabled = true;
-    private boolean logNormalRequest = false;
+    private boolean logNormalRequest = true;
     private long slowApiThresholdMs = 1000;
     private long slowFeignThresholdMs = 1000;
 

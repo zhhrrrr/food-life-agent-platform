@@ -84,7 +84,7 @@ food:
           - /api/package/*/sold/confirm
           - /api/package/*/sold/rollback
       rate-limit:
-        enabled: false
+        enabled: true
         ip:
           enabled: true
           capacity: 120

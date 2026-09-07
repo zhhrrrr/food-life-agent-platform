@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "food.mq")
 public class TradeRabbitMqProperties {
 
-    private Boolean enabled = false;
+    private Boolean enabled = true;
     private Integer retryDelaySeconds = 30;
     private Integer retryLimit = 50;
     private Long orderTimeoutDelayMillis = 30 * 60 * 1000L;
