@@ -12,6 +12,9 @@ $endpoints = @(
     @{ Name = "Nacos Console"; Url = "http://127.0.0.1:8848/nacos" },
     @{ Name = "RabbitMQ Management"; Url = "http://127.0.0.1:15672" },
     @{ Name = "Sentinel Dashboard"; Url = "http://127.0.0.1:8858" },
+    @{ Name = "Prometheus"; Url = "http://127.0.0.1:9090" },
+    @{ Name = "Grafana"; Url = "http://127.0.0.1:4000" },
+    @{ Name = "Grafana Dashboard"; Url = "http://127.0.0.1:4000/d/food-life-agent-overview/food-life-agent-overview" },
     @{ Name = "Frontend"; Url = "http://127.0.0.1:5173" }
 )
 
