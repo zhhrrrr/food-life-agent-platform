@@ -6,6 +6,7 @@ import com.foodlife.trade.domain.order.model.OrderRefundCommandEntity;
 import com.foodlife.trade.domain.order.refund.factory.OrderRefundRuleFilterFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderRefundService {
@@ -17,6 +18,7 @@ public class OrderRefundService {
         this.orderRefundRuleFilter = orderRefundRuleFilter;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public OrderRefundBehaviorEntity refundOrder(OrderRefundCommandEntity command) {
         try {
             return orderRefundRuleFilter.apply(command, new OrderRefundRuleFilterFactory.DynamicContext());

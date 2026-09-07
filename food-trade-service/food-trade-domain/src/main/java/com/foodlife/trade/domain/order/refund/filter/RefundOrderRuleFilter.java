@@ -9,7 +9,10 @@ import com.foodlife.trade.domain.order.groupbuy.refund.GroupBuyRefundStrategyRou
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.OrderRefundBehaviorEntity;
 import com.foodlife.trade.domain.order.model.OrderRefundCommandEntity;
-import com.foodlife.trade.domain.order.normal.service.NormalPackageStockMessageService;
+import com.foodlife.trade.domain.order.payment.constant.PaymentOrderStatusConstants;
+import com.foodlife.trade.domain.order.payment.model.PaymentOrderEntity;
+import com.foodlife.trade.domain.order.payment.repository.IPaymentOrderRepository;
+import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
 import com.foodlife.trade.domain.order.refund.factory.OrderRefundRuleFilterFactory;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import com.foodlife.trade.domain.order.seckill.refund.SeckillRefundStrategyRouter;
@@ -21,19 +24,22 @@ public class RefundOrderRuleFilter implements ILogicHandler<OrderRefundCommandEn
     private final IOrderRepository orderRepository;
     private final GroupBuyRefundStrategyRouter groupBuyRefundStrategyRouter;
     private final SeckillRefundStrategyRouter seckillRefundStrategyRouter;
-    private final NormalPackageStockMessageService normalPackageStockMessageService;
     private final CouponService couponService;
+    private final IPaymentOrderRepository paymentOrderRepository;
+    private final IBusinessPackagePort businessPackagePort;
 
     public RefundOrderRuleFilter(IOrderRepository orderRepository,
                                  GroupBuyRefundStrategyRouter groupBuyRefundStrategyRouter,
                                  SeckillRefundStrategyRouter seckillRefundStrategyRouter,
-                                 NormalPackageStockMessageService normalPackageStockMessageService,
-                                 CouponService couponService) {
+                                 CouponService couponService,
+                                 IPaymentOrderRepository paymentOrderRepository,
+                                 IBusinessPackagePort businessPackagePort) {
         this.orderRepository = orderRepository;
         this.groupBuyRefundStrategyRouter = groupBuyRefundStrategyRouter;
         this.seckillRefundStrategyRouter = seckillRefundStrategyRouter;
-        this.normalPackageStockMessageService = normalPackageStockMessageService;
         this.couponService = couponService;
+        this.paymentOrderRepository = paymentOrderRepository;
+        this.businessPackagePort = businessPackagePort;
     }
 
     @Override
@@ -43,24 +49,63 @@ public class RefundOrderRuleFilter implements ILogicHandler<OrderRefundCommandEn
         if (!OrderStatusConstants.PAID.equals(order.getOrderStatus())) {
             throw new IllegalArgumentException("order status can not refund");
         }
+        OrderRefundBehaviorEntity behavior;
         if (TradeTypeConstants.GROUP_BUY.equals(order.getTradeType())) {
-            return groupBuyRefundStrategyRouter.refundOrder(requestParameter, order);
+            behavior = groupBuyRefundStrategyRouter.refundOrder(requestParameter, order);
+            return finishTradeSideRefund(order, behavior, false);
         }
         if (TradeTypeConstants.SECKILL.equals(order.getTradeType())) {
-            return seckillRefundStrategyRouter.refundOrder(requestParameter, order);
+            behavior = seckillRefundStrategyRouter.refundOrder(requestParameter, order);
+            return finishTradeSideRefund(order, behavior, false);
         }
 
         boolean success = orderRepository.updateOrderStatus(order.getId(), OrderStatusConstants.PAID, OrderStatusConstants.REFUNDED);
         if (!success) {
             throw new IllegalArgumentException("order status can not refund");
         }
+        behavior = buildRefundBehavior(requestParameter, order, null);
         if (TradeTypeConstants.NORMAL.equals(order.getTradeType())) {
-            normalPackageStockMessageService.rollbackSoldAndReleaseStock(order);
-            CouponReleaseResult couponReleaseResult = couponService.releaseCouponWithResult(order.getUserCouponId(), order.getUserId(), order.getId());
-            return buildRefundBehavior(requestParameter, order, couponReleaseResult);
+            return finishTradeSideRefund(order, behavior, true);
         }
 
-        return buildRefundBehavior(requestParameter, order, null);
+        return finishTradeSideRefund(order, behavior, false);
+    }
+
+    private OrderRefundBehaviorEntity finishTradeSideRefund(DiningOrderEntity order,
+                                                            OrderRefundBehaviorEntity behavior,
+                                                            boolean rollbackPackageStock) {
+        behavior.setPaymentRefunded(markPaymentRefundedIfPresent(order));
+        CouponReleaseResult couponReleaseResult = couponService.releaseCouponWithResult(order.getUserCouponId(), order.getUserId(), order.getId());
+        behavior.setCouponReturned(couponReleaseResult != null
+                && couponReleaseResult.getUserCouponId() != null
+                && Boolean.TRUE.equals(couponReleaseResult.getReleased()));
+        behavior.setCouponReturnStatus(couponReleaseResult == null ? null : couponReleaseResult.getCouponStatus());
+        if (rollbackPackageStock) {
+            rollbackNormalPackageStock(order, behavior);
+        }
+        return behavior;
+    }
+
+    private boolean markPaymentRefundedIfPresent(DiningOrderEntity order) {
+        PaymentOrderEntity paymentOrder = paymentOrderRepository.findByOrderIdAndUserId(order.getId(), order.getUserId());
+        if (paymentOrder == null) {
+            return false;
+        }
+        if (PaymentOrderStatusConstants.REFUNDED.equals(paymentOrder.getPayStatus())) {
+            return true;
+        }
+        if (!PaymentOrderStatusConstants.SUCCESS.equals(paymentOrder.getPayStatus())) {
+            throw new IllegalArgumentException("payment order status can not refund");
+        }
+        return paymentOrderRepository.markPayRefunded(order.getId(), order.getUserId(), PaymentOrderStatusConstants.SUCCESS);
+    }
+
+    private void rollbackNormalPackageStock(DiningOrderEntity order, OrderRefundBehaviorEntity behavior) {
+        String operationPrefix = "REFUND:" + order.getOrderNo();
+        businessPackagePort.rollbackPackageSold(order.getPackageId(), order.getQuantity(), operationPrefix + ":ROLLBACK_SOLD");
+        behavior.setPackageStockRolledBack(true);
+        businessPackagePort.releasePackageStock(order.getPackageId(), order.getQuantity(), operationPrefix + ":RELEASE_STOCK");
+        behavior.setPackageStockReleased(true);
     }
 
     private OrderRefundBehaviorEntity buildRefundBehavior(OrderRefundCommandEntity requestParameter,
@@ -79,6 +124,9 @@ public class RefundOrderRuleFilter implements ILogicHandler<OrderRefundCommandEn
                 && couponReleaseResult.getUserCouponId() != null
                 && Boolean.TRUE.equals(couponReleaseResult.getReleased()));
         behavior.setCouponReturnStatus(couponReleaseResult == null ? null : couponReleaseResult.getCouponStatus());
+        behavior.setPaymentRefunded(false);
+        behavior.setPackageStockRolledBack(false);
+        behavior.setPackageStockReleased(false);
         return behavior;
     }
 }

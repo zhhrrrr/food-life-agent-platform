@@ -227,7 +227,7 @@ CREATE TABLE IF NOT EXISTS payment_order (
   source VARCHAR(32) NOT NULL COMMENT 'payment source',
   channel VARCHAR(32) NOT NULL COMMENT 'payment channel',
   pay_amount BIGINT NOT NULL COMMENT 'pay amount in cents',
-  pay_status VARCHAR(32) NOT NULL COMMENT 'payment status: PREPARED/SUCCESS/CLOSED',
+  pay_status VARCHAR(32) NOT NULL COMMENT 'payment status: PREPARED/SUCCESS/CLOSED/REFUNDED',
   out_trade_no VARCHAR(128) DEFAULT NULL COMMENT 'external payment trade no',
   pay_time DATETIME DEFAULT NULL COMMENT 'external payment success time',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
