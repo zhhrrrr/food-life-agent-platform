@@ -88,7 +88,7 @@ food:
     enabled: true
     trace-header: X-Trace-Id
     request-log-enabled: true
-    log-normal-request: ${FOOD_OBSERVABILITY_LOG_NORMAL_REQUEST:false}
+    log-normal-request: ${FOOD_OBSERVABILITY_LOG_NORMAL_REQUEST:true}
     slow-api-threshold-ms: ${FOOD_SLOW_API_THRESHOLD_MS:1000}
     slow-feign-threshold-ms: ${FOOD_SLOW_FEIGN_THRESHOLD_MS:1000}
   gateway:
@@ -125,7 +125,7 @@ food:
           - /api/package/*/sold/confirm
           - /api/package/*/sold/rollback
       rate-limit:
-        enabled: false
+        enabled: true
         ip:
           enabled: true
           capacity: 120

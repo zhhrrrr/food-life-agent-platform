@@ -2,12 +2,12 @@ spring:
   application:
     name: food-gateway-service
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:local}
+    active: ${SPRING_PROFILES_ACTIVE:nacos}
   cloud:
     nacos:
       config:
         import-check:
-          enabled: false
+          enabled: true
 
 ---
 spring:
@@ -15,8 +15,8 @@ spring:
     activate:
       on-profile: nacos
     import:
-      - optional:nacos:food-common.yaml?group=${NACOS_CONFIG_GROUP:FOOD_LIFE_AGENT}&refreshEnabled=true
-      - optional:nacos:food-gateway-service.yaml?group=${NACOS_CONFIG_GROUP:FOOD_LIFE_AGENT}&refreshEnabled=true
+      - nacos:food-common.yaml?group=${NACOS_CONFIG_GROUP:FOOD_LIFE_AGENT}&refreshEnabled=true
+      - nacos:food-gateway-service.yaml?group=${NACOS_CONFIG_GROUP:FOOD_LIFE_AGENT}&refreshEnabled=true
   cloud:
     nacos:
       server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}

@@ -29,8 +29,6 @@ spring:
             loggerLevel: basic
 
 feign:
-  sentinel:
-    enabled: false
   client:
     config:
       default:
@@ -50,7 +48,7 @@ management:
       show-details: always
   health:
     rabbit:
-      enabled: ${FOOD_RABBIT_HEALTH_ENABLED:false}
+      enabled: ${FOOD_RABBIT_HEALTH_ENABLED:true}
   metrics:
     tags:
       application: ${spring.application.name}
@@ -63,7 +61,7 @@ management:
       probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
 
 seata:
-  enabled: ${SEATA_ENABLED:false}
+  enabled: ${SEATA_ENABLED:true}
   application-id: ${spring.application.name}
   tx-service-group: ${SEATA_TX_GROUP:food-life-agent-tx-group}
   enable-auto-data-source-proxy: true
@@ -82,12 +80,12 @@ mybatis-plus:
 
 food:
   mq:
-    enabled: ${FOOD_MQ_ENABLED:false}
+    enabled: ${FOOD_MQ_ENABLED:true}
   observability:
     enabled: true
     trace-header: X-Trace-Id
     request-log-enabled: true
-    log-normal-request: ${FOOD_OBSERVABILITY_LOG_NORMAL_REQUEST:false}
+    log-normal-request: ${FOOD_OBSERVABILITY_LOG_NORMAL_REQUEST:true}
     slow-api-threshold-ms: ${FOOD_SLOW_API_THRESHOLD_MS:1000}
     slow-feign-threshold-ms: ${FOOD_SLOW_FEIGN_THRESHOLD_MS:1000}
   auth:

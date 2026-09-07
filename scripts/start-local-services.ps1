@@ -2,7 +2,14 @@ param(
     [switch]$Rebuild,
     [switch]$Restart,
     [switch]$IncludeGateway,
-    [string]$SpringProfilesActive = "local"
+    [string]$SpringProfilesActive = "nacos",
+    [string]$RabbitMqHost = "127.0.0.1",
+    [string]$RabbitMqPort = "5672",
+    [string]$RabbitMqUsername = "guest",
+    [string]$RabbitMqPassword = "guest",
+    [string]$RabbitMqVirtualHost = "/",
+    [string]$SeataServerAddr = "127.0.0.1:8091",
+    [string]$SentinelDashboardAddr = "localhost:8858"
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,11 +21,29 @@ New-Item -ItemType Directory -Force -Path $Logs | Out-Null
 & (Join-Path $PSScriptRoot "use-java17-plus.ps1")
 
 $env:SPRING_PROFILES_ACTIVE = $SpringProfilesActive
-if ($SpringProfilesActive -eq "local") {
-    $env:NACOS_DISCOVERY_ENABLED = "false"
-    $env:NACOS_CONFIG_ENABLED = "false"
-}
+$env:NACOS_DISCOVERY_ENABLED = "true"
+$env:NACOS_CONFIG_ENABLED = "true"
+$env:RABBITMQ_HOST = $RabbitMqHost
+$env:RABBITMQ_PORT = $RabbitMqPort
+$env:RABBITMQ_USERNAME = $RabbitMqUsername
+$env:RABBITMQ_PASSWORD = $RabbitMqPassword
+$env:RABBITMQ_VIRTUAL_HOST = $RabbitMqVirtualHost
+$env:FOOD_RABBIT_HEALTH_ENABLED = "true"
+$env:FOOD_MQ_ENABLED = "true"
+$env:SEATA_ENABLED = "true"
+$env:SEATA_SERVER_ADDR = $SeataServerAddr
+$env:SENTINEL_DASHBOARD_ADDR = $SentinelDashboardAddr
+$env:FOOD_OBSERVABILITY_LOG_NORMAL_REQUEST = "true"
 Write-Host "SPRING_PROFILES_ACTIVE=$env:SPRING_PROFILES_ACTIVE"
+Write-Host "NACOS_DISCOVERY_ENABLED=$env:NACOS_DISCOVERY_ENABLED"
+Write-Host "NACOS_CONFIG_ENABLED=$env:NACOS_CONFIG_ENABLED"
+Write-Host "FOOD_MQ_ENABLED=$env:FOOD_MQ_ENABLED"
+Write-Host "SEATA_ENABLED=$env:SEATA_ENABLED"
+
+& (Join-Path $PSScriptRoot "check-microservice-infra.ps1") `
+    -RabbitMqPort ([int]$RabbitMqPort) `
+    -SeataPort (($SeataServerAddr -split ":")[-1]) `
+    -SentinelDashboardPort (($SentinelDashboardAddr -split ":")[-1])
 
 $CoreServices = @(
     @{

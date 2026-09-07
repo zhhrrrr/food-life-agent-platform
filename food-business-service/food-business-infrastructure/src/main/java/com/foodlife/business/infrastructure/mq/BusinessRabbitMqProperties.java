@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "food.mq")
 public class BusinessRabbitMqProperties {
 
-    private Boolean enabled = false;
+    private Boolean enabled = true;
     private String reviewCreatedQueue = "food.business.review.created.queue";
     private String packageStockEventQueue = "food.business.package.stock.event.queue";
 }
