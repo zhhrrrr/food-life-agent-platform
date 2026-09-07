@@ -1,5 +1,7 @@
 param(
     [string]$GatewayBaseUrl = "http://localhost:8080",
+    [string]$BusinessBaseUrl = "http://localhost:8201",
+    [string]$InternalSecret = "local-internal-secret",
     [string]$Phone = "13800138000"
 )
 
@@ -67,6 +69,10 @@ if ([string]::IsNullOrWhiteSpace($token)) {
 }
 
 $headers = @{ authorization = $token }
+$internalHeaders = @{
+    "x-internal-call" = "food-life-agent"
+    "x-internal-secret" = $InternalSecret
+}
 $invalidOrderBody = @{ packageId = $null; quantity = 1 }
 for ($i = 1; $i -le 5; $i++) {
     Invoke-JsonPost `
@@ -87,13 +93,15 @@ Invoke-JsonPost `
 for ($i = 1; $i -le 20; $i++) {
     Invoke-FormPost `
         -Name "package stock hotspot warmup $i" `
-        -Uri "$GatewayBaseUrl/api/package/1/stock/occupy?quantity=0&operationId=sentinel-smoke-$i" `
+        -Uri "$BusinessBaseUrl/api/internal/package/1/stock/occupy?quantity=0&operationId=sentinel-smoke-$i" `
+        -Headers $internalHeaders `
         -ExpectedCode "400" | Out-Null
 }
 
 Invoke-FormPost `
     -Name "package stock hotspot limited" `
-    -Uri "$GatewayBaseUrl/api/package/1/stock/occupy?quantity=0&operationId=sentinel-smoke-limited" `
+    -Uri "$BusinessBaseUrl/api/internal/package/1/stock/occupy?quantity=0&operationId=sentinel-smoke-limited" `
+    -Headers $internalHeaders `
     -ExpectedCode "429" | Out-Null
 
 Write-Host "Sentinel rule smoke verification completed."
