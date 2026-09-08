@@ -655,6 +655,14 @@ h3 {
   font-size: 20px;
 }
 
+.order-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 2px;
+}
+
 .el-button {
   font-weight: 700;
 }

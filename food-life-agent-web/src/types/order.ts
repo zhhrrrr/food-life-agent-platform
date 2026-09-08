@@ -75,3 +75,95 @@ export interface SeckillActivity {
 export interface SeckillActivityListResponse {
   activities: SeckillActivity[]
 }
+
+export interface PaymentPrepareRequest {
+  source: string
+  channel: string
+}
+
+export interface PaymentOrderResponse {
+  payOrderNo: string
+  orderId: number
+  orderNo: string
+  userId: number
+  source: string
+  channel: string
+  payAmount: number
+  payStatus: string
+  outTradeNo?: string
+  payTime?: string
+  createTime?: string
+  updateTime?: string
+}
+
+export interface PaymentCallbackRequest {
+  payOrderNo: string
+  outTradeNo: string
+  payAmount: number
+  payTime: string
+}
+
+export interface PaySettlementResponse {
+  source: string
+  channel: string
+  userId: number
+  orderId: number
+  orderNo: string
+  orderStatus: OrderStatus
+  outTradeNo: string
+  outTradeTime: string
+  teamId?: string
+  activityId?: number
+  teamStatus?: string
+  targetCount?: number
+  lockCount?: number
+  completeCount?: number
+}
+
+export interface PaymentCallbackResponse {
+  callbackBehavior: string
+  paymentOrder: PaymentOrderResponse
+  settlement: PaySettlementResponse
+}
+
+export interface CancelOrderResponse {
+  orderId: number
+  orderNo: string
+  orderStatus: OrderStatus
+}
+
+export interface RefundOrderResponse {
+  source: string
+  channel: string
+  userId: number
+  orderId: number
+  orderNo: string
+  orderStatus: OrderStatus
+  refundBehavior: string
+  userCouponId?: number
+  couponReturned?: boolean
+  couponReturnStatus?: string
+  paymentRefunded?: boolean
+  packageStockRolledBack?: boolean
+  packageStockReleased?: boolean
+  teamId?: string
+  activityId?: number
+  teamStatus?: string
+  targetCount?: number
+  lockCount?: number
+  completeCount?: number
+}
+
+export interface UseOrderResponse {
+  userId: number
+  orderId: number
+  orderNo: string
+  shopId: number
+  packageId: number
+  tradeType: TradeType
+  orderStatus: OrderStatus
+  useBehavior: string
+  useRecordId?: number
+  useRecordNo?: string
+  useTime?: string
+}

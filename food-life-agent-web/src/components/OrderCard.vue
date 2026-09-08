@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { Calendar, ShoppingBag } from '@element-plus/icons-vue'
+import { Calendar, Check, Close, RefreshLeft, ShoppingBag, Wallet } from '@element-plus/icons-vue'
 import type { OrderInfo } from '../types/order'
 import { money, shortDate } from '../utils/format'
 import { foodImage } from '../utils/images'
 
 defineProps<{
   order: OrderInfo
+  busy?: boolean
+}>()
+
+defineEmits<{
+  pay: [order: OrderInfo]
+  cancel: [order: OrderInfo]
+  refund: [order: OrderInfo]
+  use: [order: OrderInfo]
 }>()
 
 const statusMap: Record<string, string> = {
@@ -47,6 +55,16 @@ const typeMap: Record<string, string> = {
       <div class="order-card__bottom">
         <span>{{ order.orderNo }}</span>
         <strong>{{ money(order.payAmount) }}</strong>
+      </div>
+      <div v-if="order.orderStatus === 'WAIT_PAY' || order.orderStatus === 'PAID'" class="order-card__actions">
+        <template v-if="order.orderStatus === 'WAIT_PAY'">
+          <el-button type="primary" :icon="Wallet" :loading="busy" @click="$emit('pay', order)">立即支付</el-button>
+          <el-button :icon="Close" :disabled="busy" @click="$emit('cancel', order)">取消订单</el-button>
+        </template>
+        <template v-else>
+          <el-button type="success" :icon="Check" :loading="busy" @click="$emit('use', order)">到店核销</el-button>
+          <el-button :icon="RefreshLeft" :disabled="busy" @click="$emit('refund', order)">申请退款</el-button>
+        </template>
       </div>
     </div>
   </article>
