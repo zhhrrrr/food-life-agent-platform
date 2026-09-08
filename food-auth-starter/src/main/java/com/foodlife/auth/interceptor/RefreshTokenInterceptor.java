@@ -41,10 +41,24 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
         user.setId(id == null ? null : Long.valueOf(String.valueOf(id)));
         user.setNickName((String) userMap.get("nickName"));
         user.setIcon((String) userMap.get("icon"));
+        user.setRole(resolveRole(user.getId(), userMap.get("role")));
 
         UserHolder.saveUser(user);
         stringRedisTemplate.expire(tokenKey, authProperties.getTokenTtlMinutes(), TimeUnit.MINUTES);
         return true;
+    }
+
+    private String resolveRole(Long userId, Object role) {
+        if (userId != null
+                && authProperties.getRoleAccess() != null
+                && authProperties.getRoleAccess().getLocalUserRoles() != null
+                && authProperties.getRoleAccess().getLocalUserRoles().containsKey(userId)) {
+            return authProperties.getRoleAccess().getLocalUserRoles().get(userId);
+        }
+        if (role != null && StringUtils.hasText(String.valueOf(role))) {
+            return String.valueOf(role);
+        }
+        return authProperties.getRoleAccess() == null ? "USER" : authProperties.getRoleAccess().getDefaultRole();
     }
 
     @Override

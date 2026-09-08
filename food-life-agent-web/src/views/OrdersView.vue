@@ -2,7 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import OrderCard from '../components/OrderCard.vue'
-import { cancelOrder, confirmRefund, mockPaymentCallback, preparePayment, queryOrders, useOrder } from '../api/trade'
+import { applyRefund, cancelOrder, mockPaymentCallback, preparePayment, queryOrders, useOrder } from '../api/trade'
 import type { OrderInfo, OrderStatus, TradeType } from '../types/order'
 
 const orders = ref<OrderInfo[]>([])
@@ -82,7 +82,7 @@ async function handleRefund(order: OrderInfo) {
     type: 'warning',
   })
   await runOrderAction(order, async () => {
-    await confirmRefund(order.orderId)
+    await applyRefund(order.orderId)
     ElMessage.success('退款完成')
   })
 }

@@ -9,4 +9,5 @@ public class RefundOrderRequestDTO implements Serializable {
 
     private String source;
     private String channel;
+    private Long userId;
 }

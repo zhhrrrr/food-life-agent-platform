@@ -4,6 +4,7 @@ import com.foodlife.auth.feign.FeignAuthRequestInterceptor;
 import com.foodlife.auth.interceptor.InternalCallInterceptor;
 import com.foodlife.auth.interceptor.LoginInterceptor;
 import com.foodlife.auth.interceptor.RefreshTokenInterceptor;
+import com.foodlife.auth.interceptor.RoleAccessInterceptor;
 import com.foodlife.auth.properties.AuthProperties;
 import feign.RequestInterceptor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -51,6 +52,15 @@ public class AuthAutoConfiguration implements WebMvcConfigurer {
                 .addPathPatterns(authProperties.getIncludePaths())
                 .excludePathPatterns(buildLoginExcludePaths())
                 .order(2);
+
+        if (authProperties.getRoleAccess() != null
+                && authProperties.getRoleAccess().isEnabled()
+                && authProperties.getRoleAccess().getPaths() != null
+                && !authProperties.getRoleAccess().getPaths().isEmpty()) {
+            registry.addInterceptor(new RoleAccessInterceptor(authProperties))
+                    .addPathPatterns(buildRoleAccessPathPatterns())
+                    .order(3);
+        }
     }
 
     @Bean
@@ -71,6 +81,16 @@ public class AuthAutoConfiguration implements WebMvcConfigurer {
         ));
         if (authProperties.getExcludePaths() != null) {
             paths.addAll(authProperties.getExcludePaths());
+        }
+        return paths;
+    }
+
+    private List<String> buildRoleAccessPathPatterns() {
+        List<String> paths = new ArrayList<>();
+        for (AuthProperties.PathRole pathRole : authProperties.getRoleAccess().getPaths()) {
+            if (pathRole != null && pathRole.getPattern() != null && !pathRole.getPattern().trim().isEmpty()) {
+                paths.add(pathRole.getPattern());
+            }
         }
         return paths;
     }

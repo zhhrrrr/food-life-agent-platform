@@ -91,9 +91,9 @@ export function cancelOrder(orderId: number) {
   })
 }
 
-export function confirmRefund(orderId: number) {
+export function applyRefund(orderId: number) {
   return request<RefundOrderResponse>({
-    url: `/trade-api/orders/${orderId}/refund/confirm`,
+    url: `/trade-api/orders/${orderId}/refund/apply`,
     method: 'POST',
     data: {
       source: 'FOOD_LIFE_WEB',
