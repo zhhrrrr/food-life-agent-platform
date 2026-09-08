@@ -250,8 +250,13 @@ public class OrderDomainService {
         return buildCancelOrderResult(order);
     }
 
-    public OrderPaySettlementEntity payOrderMock(OrderPaySuccessEntity paySuccessEntity) {
+    public OrderPaySettlementEntity payOrderLocal(OrderPaySuccessEntity paySuccessEntity) {
         return orderPaySettlementService.settlementOrderPaySuccess(paySuccessEntity);
+    }
+
+    @Deprecated
+    public OrderPaySettlementEntity payOrderMock(OrderPaySuccessEntity paySuccessEntity) {
+        return payOrderLocal(paySuccessEntity);
     }
 
     public OrderRefundBehaviorEntity refundOrderMock(OrderRefundCommandEntity command) {

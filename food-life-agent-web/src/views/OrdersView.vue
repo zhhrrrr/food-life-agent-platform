@@ -2,7 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import OrderCard from '../components/OrderCard.vue'
-import { applyRefund, cancelOrder, mockPaymentCallback, preparePayment, queryOrders, useOrder } from '../api/trade'
+import { applyRefund, cancelOrder, localPaymentCallback, preparePayment, queryOrders, useOrder } from '../api/trade'
 import type { OrderInfo, OrderStatus, TradeType } from '../types/order'
 
 const orders = ref<OrderInfo[]>([])
@@ -53,7 +53,7 @@ async function runOrderAction(order: OrderInfo, action: () => Promise<void>) {
 async function handlePay(order: OrderInfo) {
   await runOrderAction(order, async () => {
     const paymentOrder = await preparePayment(order.orderId)
-    await mockPaymentCallback({
+    await localPaymentCallback({
       payOrderNo: paymentOrder.payOrderNo,
       outTradeNo: buildOutTradeNo(order),
       payAmount: paymentOrder.payAmount,

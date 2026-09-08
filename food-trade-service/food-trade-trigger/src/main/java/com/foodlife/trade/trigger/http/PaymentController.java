@@ -16,6 +16,7 @@ import com.foodlife.trade.domain.order.payment.model.PaymentOrderEntity;
 import com.foodlife.trade.domain.order.payment.model.PaymentOrderTimeoutCloseDetail;
 import com.foodlife.trade.domain.order.payment.model.PaymentOrderTimeoutCloseResult;
 import com.foodlife.trade.domain.order.payment.model.PaymentPrepareCommand;
+import com.foodlife.trade.domain.order.payment.constant.PaymentChannelConstants;
 import com.foodlife.trade.domain.order.payment.service.PaymentOrderService;
 import com.foodlife.trade.domain.order.payment.service.PaymentOrderTimeoutCloseService;
 import com.foodlife.trade.types.response.ErrorCode;
@@ -58,17 +59,17 @@ public class PaymentController {
         return Response.success(response);
     }
 
-    @PostMapping("/callback/mock")
-    @SentinelResource(value = TradeSentinelResources.PAYMENT_CALLBACK, blockHandler = "mockPaySuccessCallbackBlock")
-    public Response<PaymentCallbackResponseDTO> mockPaySuccessCallback(@RequestBody PaymentCallbackRequestDTO request) {
+    @PostMapping({"/callback/local", "/callback/mock"})
+    @SentinelResource(value = TradeSentinelResources.PAYMENT_CALLBACK, blockHandler = "localPaySuccessCallbackBlock")
+    public Response<PaymentCallbackResponseDTO> localPaySuccessCallback(@RequestBody PaymentCallbackRequestDTO request) {
         PaymentCallbackResult result = paymentOrderService.handlePaySuccessCallback(toCallbackCommand(request));
         PaymentCallbackResponseDTO response = toCallbackResponse(result);
-        operationAuditApplicationService.recordSuccess("PAYMENT_CALLBACK_MOCK", "PAYMENT_ORDER",
-                request == null ? null : request.getPayOrderNo(), request, response, "local mock payment callback");
+        operationAuditApplicationService.recordSuccess("PAYMENT_CALLBACK_LOCAL", "PAYMENT_ORDER",
+                request == null ? null : request.getPayOrderNo(), request, response, "local payment callback");
         return Response.success(response);
     }
 
-    public Response<PaymentCallbackResponseDTO> mockPaySuccessCallbackBlock(PaymentCallbackRequestDTO request, BlockException e) {
+    public Response<PaymentCallbackResponseDTO> localPaySuccessCallbackBlock(PaymentCallbackRequestDTO request, BlockException e) {
         return Response.fail(ErrorCode.TOO_MANY_REQUESTS, "payment callback service busy, please try again later");
     }
 
@@ -89,7 +90,7 @@ public class PaymentController {
         command.setUserId(UserHolder.getUserId());
         command.setOrderId(orderId);
         command.setSource(readOrDefault(request == null ? null : request.getSource(), "FOOD_LIFE"));
-        command.setChannel(readOrDefault(request == null ? null : request.getChannel(), "MOCK_PAY"));
+        command.setChannel(readOrDefault(request == null ? null : request.getChannel(), PaymentChannelConstants.LOCAL_PAY));
         return command;
     }
 

@@ -56,6 +56,7 @@ public class GatewaySentinelRuleConfiguration {
                 "/api/trade/orders/seckill",
                 "/api/trade/orders/seckill/async"));
         definitions.add(api(API_PAYMENT_CALLBACK,
+                "/api/trade/pay/callback/local",
                 "/api/trade/pay/callback/mock"));
         definitions.add(api(API_SMOKE, "/api/shop-category/list"));
         return definitions;
