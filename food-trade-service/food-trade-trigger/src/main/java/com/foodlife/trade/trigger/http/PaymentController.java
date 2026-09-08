@@ -18,6 +18,7 @@ import com.foodlife.trade.domain.order.payment.model.PaymentOrderTimeoutCloseRes
 import com.foodlife.trade.domain.order.payment.model.PaymentPrepareCommand;
 import com.foodlife.trade.domain.order.payment.service.PaymentOrderService;
 import com.foodlife.trade.domain.order.payment.service.PaymentOrderTimeoutCloseService;
+import com.foodlife.trade.types.response.ErrorCode;
 import com.foodlife.trade.types.response.Response;
 import com.foodlife.trade.trigger.sentinel.TradeSentinelResources;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -46,38 +47,24 @@ public class PaymentController {
     @PostMapping("/orders/{orderId}/prepare")
     public Response<PaymentOrderResponseDTO> preparePayment(@PathVariable Long orderId,
                                                             @RequestBody(required = false) PaymentPrepareRequestDTO request) {
-        try {
-            PaymentOrderEntity result = paymentOrderService.preparePayment(toPrepareCommand(orderId, request));
-            return Response.success(toPaymentOrderResponse(result));
-        } catch (IllegalArgumentException e) {
-            return Response.fail("400", e.getMessage());
-        }
+        PaymentOrderEntity result = paymentOrderService.preparePayment(toPrepareCommand(orderId, request));
+        return Response.success(toPaymentOrderResponse(result));
     }
 
     @PostMapping("/callback/mock")
     @SentinelResource(value = TradeSentinelResources.PAYMENT_CALLBACK, blockHandler = "mockPaySuccessCallbackBlock")
     public Response<PaymentCallbackResponseDTO> mockPaySuccessCallback(@RequestBody PaymentCallbackRequestDTO request) {
-        try {
-            PaymentCallbackResult result = paymentOrderService.handlePaySuccessCallback(toCallbackCommand(request));
-            return Response.success(toCallbackResponse(result));
-        } catch (IllegalArgumentException e) {
-            return Response.fail("400", e.getMessage());
-        } catch (IllegalStateException e) {
-            return Response.fail("503", e.getMessage() == null ? "payment callback service busy" : e.getMessage());
-        }
+        PaymentCallbackResult result = paymentOrderService.handlePaySuccessCallback(toCallbackCommand(request));
+        return Response.success(toCallbackResponse(result));
     }
 
     public Response<PaymentCallbackResponseDTO> mockPaySuccessCallbackBlock(PaymentCallbackRequestDTO request, BlockException e) {
-        return Response.fail("429", "payment callback service busy, please try again later");
+        return Response.fail(ErrorCode.TOO_MANY_REQUESTS, "payment callback service busy, please try again later");
     }
 
     @GetMapping("/orders/{payOrderNo}")
     public Response<PaymentOrderResponseDTO> queryPaymentOrder(@PathVariable String payOrderNo) {
-        try {
-            return Response.success(toPaymentOrderResponse(paymentOrderService.queryPaymentOrder(payOrderNo)));
-        } catch (IllegalArgumentException e) {
-            return Response.fail("404", e.getMessage());
-        }
+        return Response.success(toPaymentOrderResponse(paymentOrderService.queryPaymentOrder(payOrderNo)));
     }
 
     @PostMapping("/orders/timeout/close")

@@ -1,15 +1,14 @@
 package com.foodlife.gateway.filter;
 
+import com.foodlife.gateway.support.GatewayErrorResponse;
 import com.foodlife.gateway.properties.GatewayAuthProperties;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
-import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
@@ -17,13 +16,10 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @Component
 public class GatewayAuthFilter implements GlobalFilter, Ordered {
-
-    private static final byte[] UNAUTHORIZED_BODY = "{\"code\":\"401\",\"message\":\"unauthorized\"}".getBytes(StandardCharsets.UTF_8);
 
     private final GatewayAuthProperties gatewayAuthProperties;
     private final ReactiveStringRedisTemplate redisTemplate;
@@ -127,9 +123,6 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
     }
 
     private Mono<Void> unauthorized(ServerWebExchange exchange) {
-        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-        exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
-        DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(UNAUTHORIZED_BODY);
-        return exchange.getResponse().writeWith(Mono.just(buffer));
+        return GatewayErrorResponse.write(exchange, HttpStatus.UNAUTHORIZED, "401", "unauthorized");
     }
 }

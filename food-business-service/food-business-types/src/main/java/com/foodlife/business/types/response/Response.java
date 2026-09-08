@@ -13,10 +13,18 @@ public class Response<T> implements Serializable {
 
     public static <T> Response<T> success(T data) {
         Response<T> response = new Response<>();
-        response.setCode("0000");
-        response.setMessage("success");
+        response.setCode(ErrorCode.SUCCESS.getCode());
+        response.setMessage(ErrorCode.SUCCESS.getMessage());
         response.setData(data);
         return response;
+    }
+
+    public static <T> Response<T> fail(ErrorCode errorCode) {
+        return fail(errorCode, errorCode.getMessage());
+    }
+
+    public static <T> Response<T> fail(ErrorCode errorCode, String message) {
+        return fail(errorCode.getCode(), message);
     }
 
     public static <T> Response<T> fail(String code, String message) {
