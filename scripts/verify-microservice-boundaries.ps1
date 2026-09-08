@@ -72,6 +72,7 @@ $businessLocalMessageMapper = Join-Path $Root "food-business-service\food-busine
 $businessEventRetryJob = Join-Path $Root "food-business-service\food-business-trigger\src\main\java\com\foodlife\business\trigger\job\BusinessRabbitMqEventRetryJob.java"
 $businessSchema = Join-Path $Root "docs\sql\food_business_db.sql"
 $tradeMqProperties = Join-Path $Root "food-trade-service\food-trade-infrastructure\src\main\java\com\foodlife\trade\infrastructure\mq\TradeRabbitMqProperties.java"
+$tradeEventPublisher = Join-Path $Root "food-trade-service\food-trade-infrastructure\src\main\java\com\foodlife\trade\infrastructure\mq\TradeRabbitMqEventPublisher.java"
 $startLocalServicesScript = Join-Path $Root "scripts\start-local-services.ps1"
 $serviceApplicationConfigs = @(
     (Join-Path $Root "food-user-service\food-user-app\src\main\resources\application.yml"),
@@ -95,6 +96,7 @@ Assert-FileExists $businessLocalMessageMapper "business local message mapper mis
 Assert-FileExists $businessEventRetryJob "business event retry job missing"
 Assert-FileExists $businessSchema "business schema missing"
 Assert-FileExists $tradeMqProperties "trade MQ properties missing"
+Assert-FileExists $tradeEventPublisher "trade event publisher missing"
 Assert-FileExists $startLocalServicesScript "start local services script missing"
 foreach ($config in $serviceApplicationConfigs) {
     Assert-FileExists $config "service application.yml missing"
@@ -269,8 +271,28 @@ Assert-Contains `
 
 Assert-Contains `
     -Path $tradeMqProperties `
-    -Patterns @('private Boolean enabled = true;') `
+    -Patterns @(
+        'private Boolean enabled = true;',
+        'private Integer processingTimeoutSeconds = 120;'
+    ) `
     -Message "trade MQ defaults must be enabled"
+
+Assert-Contains `
+    -Path $tradeEventPublisher `
+    -Patterns @(
+        'TransactionSynchronizationManager.registerSynchronization',
+        'recoverProcessingMessages',
+        'trade RabbitMQ publisher disabled'
+    ) `
+    -Message "trade event publisher must use real RabbitMQ publish and stuck message recovery"
+
+Assert-NotContains `
+    -Path $tradeEventPublisher `
+    -Patterns @(
+        'mock publish',
+        'markSuccess(message.getId());`r`n                return true;'
+    ) `
+    -Message "trade event publisher must not mark disabled RabbitMQ publish as success"
 
 Assert-Contains `
     -Path $startLocalServicesScript `
