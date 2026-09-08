@@ -1,9 +1,7 @@
 package com.foodlife.business.infrastructure.mq;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.foodlife.business.domain.event.BusinessMqTopics;
 import com.foodlife.business.domain.event.IBusinessEventPublisher;
-import com.foodlife.business.domain.review.repository.IShopReviewRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
@@ -23,16 +21,13 @@ public class BusinessRabbitMqEventPublisher implements IBusinessEventPublisher {
 
     private final BusinessRabbitMqProperties properties;
     private final ObjectMapper objectMapper;
-    private final IShopReviewRepository shopReviewRepository;
     private final RabbitTemplate rabbitTemplate;
 
     public BusinessRabbitMqEventPublisher(BusinessRabbitMqProperties properties,
                                           ObjectMapper objectMapper,
-                                          IShopReviewRepository shopReviewRepository,
                                           RabbitTemplate rabbitTemplate) {
         this.properties = properties;
         this.objectMapper = objectMapper;
-        this.shopReviewRepository = shopReviewRepository;
         this.rabbitTemplate = rabbitTemplate;
     }
 
@@ -41,9 +36,7 @@ public class BusinessRabbitMqEventPublisher implements IBusinessEventPublisher {
         validate(topic, tag, key);
         String eventId = buildEventId(topic, tag, key);
         if (!Boolean.TRUE.equals(properties.getEnabled())) {
-            log.info("business RabbitMQ mock publish, eventId={}", eventId);
-            fallbackIfNeeded(topic, tag, key, eventId);
-            return;
+            throw new IllegalStateException("business RabbitMQ publisher disabled");
         }
         try {
             MessageProperties messageProperties = new MessageProperties();
@@ -56,8 +49,7 @@ public class BusinessRabbitMqEventPublisher implements IBusinessEventPublisher {
                     new Message(buildContent(eventId, topic, tag, key, payload).getBytes(StandardCharsets.UTF_8), messageProperties));
             log.info("business RabbitMQ publish success, eventId={}", eventId);
         } catch (Exception e) {
-            log.warn("business RabbitMQ publish failed, eventId={}, reason={}", eventId, e.getMessage());
-            fallbackIfNeeded(topic, tag, key, eventId);
+            throw new IllegalStateException("business RabbitMQ publish failed, eventId=" + eventId, e);
         }
     }
 
@@ -73,12 +65,6 @@ public class BusinessRabbitMqEventPublisher implements IBusinessEventPublisher {
             return objectMapper.writeValueAsString(content);
         } catch (Exception e) {
             throw new IllegalStateException("build business event message failed", e);
-        }
-    }
-
-    private void fallbackIfNeeded(String topic, String tag, String key, String eventId) {
-        if (BusinessMqTopics.SHOP_REVIEW_TOPIC.equals(topic) && BusinessMqTopics.REVIEW_CREATED.equals(tag)) {
-            shopReviewRepository.applyReviewCreatedStats(key, eventId);
         }
     }
 

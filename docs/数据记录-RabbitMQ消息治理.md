@@ -8,15 +8,15 @@
 org.springframework.boot:spring-boot-starter-amqp
 ```
 
-本地默认不开真实 MQ：
+本地默认启用真实 MQ：
 
 ```yaml
 food:
   mq:
-    enabled: false
+    enabled: true
 ```
 
-打开真实 MQ 后，trade-service 和 business-service 才声明 RabbitMQ exchange、queue、binding，并启用 listener。
+RabbitMQ 必须真实启动。trade-service 和 business-service 会声明 RabbitMQ exchange、queue、binding，并启用 listener。
 
 ## RabbitMQ 连接配置
 
@@ -38,7 +38,7 @@ spring:
     virtual-host: ${RABBITMQ_VIRTUAL_HOST:/}
 food:
   mq:
-    enabled: ${FOOD_MQ_ENABLED:false}
+    enabled: ${FOOD_MQ_ENABLED:true}
 ```
 
 本地 profile 对应配置：
