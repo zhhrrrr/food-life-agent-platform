@@ -11,6 +11,7 @@ Set-Location $Root
 
 & (Join-Path $PSScriptRoot "use-java17-plus.ps1")
 & (Join-Path $PSScriptRoot "verify-microservice-boundaries.ps1")
+& (Join-Path $PSScriptRoot "verify-ddd-boundaries.ps1")
 
 if (-not $SkipMaven) {
     mvn -B test
