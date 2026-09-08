@@ -11,6 +11,7 @@ import com.alibaba.csp.sentinel.adapter.gateway.common.rule.GatewayRuleManager;
 import com.alibaba.csp.sentinel.adapter.gateway.sc.callback.BlockRequestHandler;
 import com.alibaba.csp.sentinel.adapter.gateway.sc.callback.GatewayCallbackManager;
 import com.foodlife.gateway.properties.GatewaySentinelProperties;
+import com.foodlife.gateway.support.GatewayErrorResponse;
 import jakarta.annotation.PostConstruct;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -109,13 +110,11 @@ public class GatewaySentinelRuleConfiguration {
 
     private static class JsonBlockRequestHandler implements BlockRequestHandler {
 
-        private static final String BODY = "{\"code\":\"429\",\"message\":\"service busy, please try again later\"}";
-
         @Override
         public Mono<ServerResponse> handleRequest(ServerWebExchange exchange, Throwable throwable) {
             return ServerResponse.status(HttpStatus.TOO_MANY_REQUESTS)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(BODY);
+                    .bodyValue(GatewayErrorResponse.body("429", "service busy, please try again later"));
         }
     }
 }

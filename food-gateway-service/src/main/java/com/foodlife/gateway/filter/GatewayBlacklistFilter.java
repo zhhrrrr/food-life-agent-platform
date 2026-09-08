@@ -1,12 +1,11 @@
 package com.foodlife.gateway.filter;
 
+import com.foodlife.gateway.support.GatewayErrorResponse;
 import com.foodlife.gateway.properties.GatewaySecurityProperties;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.Environment;
-import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.web.server.ServerWebExchange;
@@ -14,13 +13,10 @@ import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @Component
 public class GatewayBlacklistFilter implements WebFilter, Ordered {
-
-    private static final byte[] FORBIDDEN_BODY = "{\"code\":\"403\",\"message\":\"forbidden\"}".getBytes(StandardCharsets.UTF_8);
 
     private final GatewaySecurityProperties securityProperties;
     private final Environment environment;
@@ -83,9 +79,6 @@ public class GatewayBlacklistFilter implements WebFilter, Ordered {
     }
 
     private Mono<Void> forbidden(ServerWebExchange exchange) {
-        exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
-        exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
-        DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(FORBIDDEN_BODY);
-        return exchange.getResponse().writeWith(Mono.just(buffer));
+        return GatewayErrorResponse.write(exchange, HttpStatus.FORBIDDEN, "403", "forbidden");
     }
 }
