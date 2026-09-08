@@ -12,4 +12,7 @@ public class BusinessRabbitMqProperties {
     private Boolean enabled = true;
     private String reviewCreatedQueue = "food.business.review.created.queue";
     private String packageStockEventQueue = "food.business.package.stock.event.queue";
+    private Integer retryDelaySeconds = 30;
+    private Integer retryLimit = 50;
+    private Integer processingTimeoutSeconds = 120;
 }
