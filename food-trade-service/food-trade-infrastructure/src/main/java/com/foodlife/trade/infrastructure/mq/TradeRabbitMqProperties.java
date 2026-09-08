@@ -12,6 +12,7 @@ public class TradeRabbitMqProperties {
     private Boolean enabled = true;
     private Integer retryDelaySeconds = 30;
     private Integer retryLimit = 50;
+    private Integer processingTimeoutSeconds = 120;
     private Long orderTimeoutDelayMillis = 30 * 60 * 1000L;
     private String tradeOrderEventQueue = "food.trade.order.event.queue";
     private String paymentEventQueue = "food.trade.payment.event.queue";

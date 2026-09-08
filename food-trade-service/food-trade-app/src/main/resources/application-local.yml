@@ -119,6 +119,7 @@ food:
     order-timeout-delay-millis: ${ORDER_TIMEOUT_DELAY_MILLIS:1800000}
     retry-delay-seconds: 30
     retry-limit: 50
+    processing-timeout-seconds: 120
   jobs:
     trade-event-retry:
       enabled: true

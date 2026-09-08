@@ -13,7 +13,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -51,7 +54,7 @@ public class TradeRabbitMqEventPublisher implements ITradeEventPublisher {
         if (message == null) {
             message = saveInitMessage(messageId, topic, tag, key, payload, null);
         }
-        publishStoredMessage(message);
+        publishAfterCommit(message.getMessageId());
     }
 
     @Override
@@ -62,11 +65,12 @@ public class TradeRabbitMqEventPublisher implements ITradeEventPublisher {
         if (message == null) {
             message = saveInitMessage(messageId, topic, tag, key, payload, properties.getOrderTimeoutDelayMillis());
         }
-        publishStoredMessage(message);
+        publishAfterCommit(message.getMessageId());
     }
 
     @Override
     public int retryPendingEvents(Integer limit) {
+        recoverProcessingMessages();
         int normalizedLimit = normalizeLimit(limit);
         List<TradeLocalMessagePO> messages = tradeLocalMessageMapper.selectList(new LambdaQueryWrapper<TradeLocalMessagePO>()
                 .eq(TradeLocalMessagePO::getBizType, BIZ_TYPE)
@@ -84,6 +88,19 @@ public class TradeRabbitMqEventPublisher implements ITradeEventPublisher {
         return successCount;
     }
 
+    private void publishAfterCommit(String messageId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            publishStoredMessage(findByMessageId(messageId));
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                publishStoredMessage(findByMessageId(messageId));
+            }
+        });
+    }
+
     private boolean publishStoredMessage(TradeLocalMessagePO message) {
         if (message == null || LocalMessageStatusConstants.SUCCESS.equals(message.getMessageStatus())) {
             return true;
@@ -94,12 +111,11 @@ public class TradeRabbitMqEventPublisher implements ITradeEventPublisher {
         if (!markProcessing(message.getId())) {
             return false;
         }
+        if (!Boolean.TRUE.equals(properties.getEnabled())) {
+            markRetryOrFailed(message, "trade RabbitMQ publisher disabled");
+            return false;
+        }
         try {
-            if (!Boolean.TRUE.equals(properties.getEnabled())) {
-                log.info("trade RabbitMQ mock publish, messageId={}, type={}", message.getMessageId(), message.getMessageType());
-                markSuccess(message.getId());
-                return true;
-            }
             JsonNode content = objectMapper.readTree(message.getContent());
             sendRabbitMessage(message, content);
             markSuccess(message.getId());
@@ -148,8 +164,12 @@ public class TradeRabbitMqEventPublisher implements ITradeEventPublisher {
         po.setContent(buildContent(topic, tag, key, payload, delayMillis));
         po.setCreateTime(now);
         po.setUpdateTime(now);
-        tradeLocalMessageMapper.insert(po);
-        return po;
+        try {
+            tradeLocalMessageMapper.insert(po);
+            return po;
+        } catch (DuplicateKeyException e) {
+            return findByMessageId(messageId);
+        }
     }
 
     private String buildContent(String topic, String tag, String key, Object payload, Long delayMillis) {
@@ -211,6 +231,16 @@ public class TradeRabbitMqEventPublisher implements ITradeEventPublisher {
                 .set(TradeLocalMessagePO::getNextRetryTime, LocalDateTime.now().plusSeconds(properties.getRetryDelaySeconds()))
                 .set(TradeLocalMessagePO::getUpdateTime, LocalDateTime.now())
                 .eq(TradeLocalMessagePO::getId, message.getId()));
+    }
+
+    private void recoverProcessingMessages() {
+        tradeLocalMessageMapper.update(null, new LambdaUpdateWrapper<TradeLocalMessagePO>()
+                .set(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.INIT)
+                .set(TradeLocalMessagePO::getNextRetryTime, LocalDateTime.now())
+                .set(TradeLocalMessagePO::getUpdateTime, LocalDateTime.now())
+                .eq(TradeLocalMessagePO::getBizType, BIZ_TYPE)
+                .eq(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.PROCESSING)
+                .le(TradeLocalMessagePO::getUpdateTime, LocalDateTime.now().minusSeconds(properties.getProcessingTimeoutSeconds())));
     }
 
     private void validate(String topic, String tag, String key) {
