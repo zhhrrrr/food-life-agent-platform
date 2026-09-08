@@ -275,6 +275,17 @@ public class OrderController {
         return confirmRefund(orderId, request);
     }
 
+    @PostMapping("/orders/{orderId}/refund/apply")
+    public Response<RefundOrderResponseDTO> applyRefund(@PathVariable Long orderId,
+                                                        @RequestBody(required = false) RefundOrderRequestDTO request) {
+        try {
+            OrderRefundBehaviorEntity result = orderDomainService.refundOrderMock(toUserRefundCommand(orderId, request));
+            return Response.success(toRefundResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
+    }
+
     @PostMapping("/orders/{orderId}/refund/confirm")
     public Response<RefundOrderResponseDTO> confirmRefund(@PathVariable Long orderId,
                                                           @RequestBody(required = false) RefundOrderRequestDTO request) {
@@ -633,8 +644,14 @@ public class OrderController {
         OrderRefundCommandEntity command = new OrderRefundCommandEntity();
         command.setSource(readOrDefault(request == null ? null : request.getSource(), "FOOD_LIFE"));
         command.setChannel(readOrDefault(request == null ? null : request.getChannel(), "MOCK_REFUND"));
-        command.setUserId(UserHolder.getUserId());
+        command.setUserId(request != null && request.getUserId() != null ? request.getUserId() : UserHolder.getUserId());
         command.setOrderId(orderId);
+        return command;
+    }
+
+    private OrderRefundCommandEntity toUserRefundCommand(Long orderId, RefundOrderRequestDTO request) {
+        OrderRefundCommandEntity command = toRefundCommand(orderId, request);
+        command.setUserId(UserHolder.getUserId());
         return command;
     }
 

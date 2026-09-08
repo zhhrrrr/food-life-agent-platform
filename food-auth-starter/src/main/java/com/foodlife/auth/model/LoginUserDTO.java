@@ -10,4 +10,5 @@ public class LoginUserDTO implements Serializable {
     private Long id;
     private String nickName;
     private String icon;
+    private String role;
 }

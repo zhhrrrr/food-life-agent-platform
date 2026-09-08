@@ -100,6 +100,7 @@ public class UserAuthController implements IUserAuthService {
         userMap.put("id", String.valueOf(user.getId()));
         userMap.put("nickName", user.getNickName());
         userMap.put("icon", user.getIcon() == null ? "" : user.getIcon());
+        userMap.put("role", "USER");
         return userMap;
     }
 }

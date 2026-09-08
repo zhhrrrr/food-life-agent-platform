@@ -90,3 +90,17 @@ food:
       - /v3/api-docs/**
       - /swagger-ui.html
       - /swagger-ui/**
+    role-access:
+      enabled: true
+      default-role: USER
+      local-user-roles:
+        1: ADMIN
+      paths:
+        - pattern: /api/trade/operations/**
+          roles:
+            - ADMIN
+            - OPERATOR
+        - pattern: /api/trade/orders/*/refund/confirm
+          roles:
+            - ADMIN
+            - OPERATOR
