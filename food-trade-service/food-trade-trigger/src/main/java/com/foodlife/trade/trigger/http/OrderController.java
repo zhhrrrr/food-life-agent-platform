@@ -55,6 +55,7 @@ import com.foodlife.trade.domain.order.model.OrderSummaryEntity;
 import com.foodlife.trade.domain.order.model.OrderUseCommandEntity;
 import com.foodlife.trade.domain.order.model.OrderUseResult;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
+import com.foodlife.trade.domain.order.payment.constant.PaymentChannelConstants;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityEntity;
 import com.foodlife.trade.domain.order.service.OrderDomainService;
 import com.foodlife.trade.types.response.Response;
@@ -265,14 +266,14 @@ public class OrderController {
         }
     }
 
-    @PostMapping("/orders/{orderId}/pay/mock")
-    public Response<PayOrderResponseDTO> payOrderMock(@PathVariable Long orderId,
+    @PostMapping({"/orders/{orderId}/pay/local", "/orders/{orderId}/pay/mock"})
+    public Response<PayOrderResponseDTO> payOrderLocal(@PathVariable Long orderId,
                                                       @RequestBody(required = false) PayOrderRequestDTO request) {
         try {
-            OrderPaySettlementEntity result = orderDomainService.payOrderMock(toPaySuccessEntity(orderId, request));
+            OrderPaySettlementEntity result = orderDomainService.payOrderLocal(toPaySuccessEntity(orderId, request));
             PayOrderResponseDTO response = toPayResponse(result);
-            operationAuditApplicationService.recordSuccess("ORDER_PAY_MOCK", "ORDER", String.valueOf(orderId),
-                    request, response, "local mock order pay");
+            operationAuditApplicationService.recordSuccess("ORDER_PAY_LOCAL", "ORDER", String.valueOf(orderId),
+                    request, response, "local order pay");
             return Response.success(response);
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
@@ -313,13 +314,13 @@ public class OrderController {
         }
     }
 
-    @PostMapping("/orders/{orderId}/use/mock")
-    public Response<UseOrderResponseDTO> useOrderMock(@PathVariable Long orderId) {
+    @PostMapping({"/orders/{orderId}/use/local", "/orders/{orderId}/use/mock"})
+    public Response<UseOrderResponseDTO> useOrderLocal(@PathVariable Long orderId) {
         try {
             OrderUseResult result = orderDomainService.useOrderMock(toUseCommand(orderId));
             UseOrderResponseDTO response = toUseResponse(result);
-            operationAuditApplicationService.recordSuccess("ORDER_USE_MOCK", "ORDER", String.valueOf(orderId),
-                    null, response, "local mock order use");
+            operationAuditApplicationService.recordSuccess("ORDER_USE_LOCAL", "ORDER", String.valueOf(orderId),
+                    null, response, "local order use");
             return Response.success(response);
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
@@ -632,10 +633,10 @@ public class OrderController {
     private OrderPaySuccessEntity toPaySuccessEntity(Long orderId, PayOrderRequestDTO request) {
         OrderPaySuccessEntity entity = new OrderPaySuccessEntity();
         entity.setSource(readOrDefault(request == null ? null : request.getSource(), "FOOD_LIFE"));
-        entity.setChannel(readOrDefault(request == null ? null : request.getChannel(), "MOCK_PAY"));
+        entity.setChannel(readOrDefault(request == null ? null : request.getChannel(), PaymentChannelConstants.LOCAL_PAY));
         entity.setUserId(UserHolder.getUserId());
         entity.setOrderId(orderId);
-        entity.setOutTradeNo(readOrDefault(request == null ? null : request.getOutTradeNo(), "MOCK" + System.currentTimeMillis()));
+        entity.setOutTradeNo(readOrDefault(request == null ? null : request.getOutTradeNo(), "LOCAL" + System.currentTimeMillis()));
         entity.setOutTradeTime(LocalDateTime.now());
         return entity;
     }

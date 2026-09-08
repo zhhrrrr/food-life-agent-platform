@@ -6,11 +6,13 @@ import com.foodlife.trade.domain.order.event.TradeMqTopics;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
 import com.foodlife.trade.domain.order.model.OrderPaySuccessEntity;
+import com.foodlife.trade.domain.order.payment.constant.PaymentChannelConstants;
 import com.foodlife.trade.domain.order.payment.constant.PaymentOrderStatusConstants;
 import com.foodlife.trade.domain.order.payment.model.PaymentCallbackCommand;
 import com.foodlife.trade.domain.order.payment.model.PaymentCallbackResult;
 import com.foodlife.trade.domain.order.payment.model.PaymentOrderEntity;
 import com.foodlife.trade.domain.order.payment.model.PaymentPrepareCommand;
+import com.foodlife.trade.domain.order.payment.provider.PaymentProviderRouter;
 import com.foodlife.trade.domain.order.payment.repository.IPaymentOrderRepository;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import com.foodlife.trade.domain.order.service.settlement.OrderPaySettlementService;
@@ -26,15 +28,18 @@ public class PaymentOrderService {
     private final IPaymentOrderRepository paymentOrderRepository;
     private final OrderPaySettlementService orderPaySettlementService;
     private final ITradeEventPublisher tradeEventPublisher;
+    private final PaymentProviderRouter paymentProviderRouter;
 
     public PaymentOrderService(IOrderRepository orderRepository,
                                IPaymentOrderRepository paymentOrderRepository,
                                OrderPaySettlementService orderPaySettlementService,
-                               ITradeEventPublisher tradeEventPublisher) {
+                               ITradeEventPublisher tradeEventPublisher,
+                               PaymentProviderRouter paymentProviderRouter) {
         this.orderRepository = orderRepository;
         this.paymentOrderRepository = paymentOrderRepository;
         this.orderPaySettlementService = orderPaySettlementService;
         this.tradeEventPublisher = tradeEventPublisher;
+        this.paymentProviderRouter = paymentProviderRouter;
     }
 
     public PaymentOrderEntity preparePayment(PaymentPrepareCommand command) {
@@ -52,6 +57,10 @@ public class PaymentOrderService {
             return existed;
         }
 
+        String channel = paymentProviderRouter.normalize(readOrDefault(command.getChannel(), PaymentChannelConstants.LOCAL_PAY));
+        command.setChannel(channel);
+        paymentProviderRouter.route(channel).validatePrepare(command);
+
         LocalDateTime now = LocalDateTime.now();
         PaymentOrderEntity paymentOrder = new PaymentOrderEntity();
         paymentOrder.setPayOrderNo(buildPayOrderNo());
@@ -59,7 +68,7 @@ public class PaymentOrderService {
         paymentOrder.setOrderNo(order.getOrderNo());
         paymentOrder.setUserId(order.getUserId());
         paymentOrder.setSource(readOrDefault(command.getSource(), "FOOD_LIFE"));
-        paymentOrder.setChannel(readOrDefault(command.getChannel(), "MOCK_PAY"));
+        paymentOrder.setChannel(channel);
         paymentOrder.setPayAmount(order.getPayAmount());
         paymentOrder.setPayStatus(PaymentOrderStatusConstants.PREPARED);
         paymentOrder.setCreateTime(now);
@@ -78,9 +87,7 @@ public class PaymentOrderService {
         if (paymentOrder == null) {
             throw new IllegalArgumentException("payment order not found");
         }
-        if (!paymentOrder.getPayAmount().equals(command.getPayAmount())) {
-            throw new IllegalArgumentException("pay amount mismatch");
-        }
+        paymentProviderRouter.route(paymentOrder.getChannel()).verifyPaySuccessCallback(command, paymentOrder);
 
         if (PaymentOrderStatusConstants.SUCCESS.equals(paymentOrder.getPayStatus())) {
             PaymentCallbackResult result = new PaymentCallbackResult();

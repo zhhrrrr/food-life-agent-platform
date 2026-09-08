@@ -86,21 +86,21 @@ $payment = Invoke-JsonPost `
     -Name "prepare payment" `
     -Uri "$GatewayBaseUrl/api/trade/pay/orders/$orderId/prepare" `
     -Headers $headers `
-    -Body @{ source = "FOOD_LIFE"; channel = "MOCK_PAY" } `
+    -Body @{ source = "FOOD_LIFE"; channel = "LOCAL_PAY" } `
     -ExpectedCode "0000"
 
 $payOrderNo = $payment.data.payOrderNo
 $payAmount = $payment.data.payAmount
 
 Invoke-JsonPost `
-    -Name "mock payment callback" `
-    -Uri "$GatewayBaseUrl/api/trade/pay/callback/mock" `
+    -Name "local payment callback" `
+    -Uri "$GatewayBaseUrl/api/trade/pay/callback/local" `
     -Body @{ payOrderNo = $payOrderNo; outTradeNo = "OUT$([DateTimeOffset]::Now.ToUnixTimeMilliseconds())"; payAmount = $payAmount } `
     -ExpectedCode "0000" | Out-Null
 
 Invoke-FormPost `
     -Name "use order" `
-    -Uri "$GatewayBaseUrl/api/trade/orders/$orderId/use/mock" `
+    -Uri "$GatewayBaseUrl/api/trade/orders/$orderId/use/local" `
     -Headers $headers `
     -ExpectedCode "0000" | Out-Null
 

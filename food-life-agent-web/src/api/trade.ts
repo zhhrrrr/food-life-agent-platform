@@ -66,7 +66,7 @@ export function preparePayment(
   orderId: number,
   data: PaymentPrepareRequest = {
     source: 'FOOD_LIFE_WEB',
-    channel: 'LOCAL_MOCK_PAY',
+    channel: 'LOCAL_PAY',
   },
 ) {
   return request<PaymentOrderResponse>({
@@ -76,9 +76,9 @@ export function preparePayment(
   })
 }
 
-export function mockPaymentCallback(data: PaymentCallbackRequest) {
+export function localPaymentCallback(data: PaymentCallbackRequest) {
   return request<PaymentCallbackResponse>({
-    url: '/trade-api/pay/callback/mock',
+    url: '/trade-api/pay/callback/local',
     method: 'POST',
     data,
   })
@@ -97,14 +97,14 @@ export function applyRefund(orderId: number) {
     method: 'POST',
     data: {
       source: 'FOOD_LIFE_WEB',
-      channel: 'LOCAL_MOCK_REFUND',
+      channel: 'LOCAL_PAY',
     },
   })
 }
 
 export function useOrder(orderId: number) {
   return request<UseOrderResponse>({
-    url: `/trade-api/orders/${orderId}/use/mock`,
+    url: `/trade-api/orders/${orderId}/use/local`,
     method: 'POST',
   })
 }
