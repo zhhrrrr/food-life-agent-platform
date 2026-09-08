@@ -20,6 +20,7 @@ import com.foodlife.trade.domain.order.payment.service.PaymentOrderService;
 import com.foodlife.trade.domain.order.payment.service.PaymentOrderTimeoutCloseService;
 import com.foodlife.trade.types.response.ErrorCode;
 import com.foodlife.trade.types.response.Response;
+import com.foodlife.trade.trigger.app.OperationAuditApplicationService;
 import com.foodlife.trade.trigger.sentinel.TradeSentinelResources;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,25 +38,34 @@ public class PaymentController {
 
     private final PaymentOrderService paymentOrderService;
     private final PaymentOrderTimeoutCloseService paymentOrderTimeoutCloseService;
+    private final OperationAuditApplicationService operationAuditApplicationService;
 
     public PaymentController(PaymentOrderService paymentOrderService,
-                             PaymentOrderTimeoutCloseService paymentOrderTimeoutCloseService) {
+                             PaymentOrderTimeoutCloseService paymentOrderTimeoutCloseService,
+                             OperationAuditApplicationService operationAuditApplicationService) {
         this.paymentOrderService = paymentOrderService;
         this.paymentOrderTimeoutCloseService = paymentOrderTimeoutCloseService;
+        this.operationAuditApplicationService = operationAuditApplicationService;
     }
 
     @PostMapping("/orders/{orderId}/prepare")
     public Response<PaymentOrderResponseDTO> preparePayment(@PathVariable Long orderId,
                                                             @RequestBody(required = false) PaymentPrepareRequestDTO request) {
         PaymentOrderEntity result = paymentOrderService.preparePayment(toPrepareCommand(orderId, request));
-        return Response.success(toPaymentOrderResponse(result));
+        PaymentOrderResponseDTO response = toPaymentOrderResponse(result);
+        operationAuditApplicationService.recordSuccess("PAYMENT_PREPARE", "ORDER", String.valueOf(orderId),
+                request, response, "prepare local payment order");
+        return Response.success(response);
     }
 
     @PostMapping("/callback/mock")
     @SentinelResource(value = TradeSentinelResources.PAYMENT_CALLBACK, blockHandler = "mockPaySuccessCallbackBlock")
     public Response<PaymentCallbackResponseDTO> mockPaySuccessCallback(@RequestBody PaymentCallbackRequestDTO request) {
         PaymentCallbackResult result = paymentOrderService.handlePaySuccessCallback(toCallbackCommand(request));
-        return Response.success(toCallbackResponse(result));
+        PaymentCallbackResponseDTO response = toCallbackResponse(result);
+        operationAuditApplicationService.recordSuccess("PAYMENT_CALLBACK_MOCK", "PAYMENT_ORDER",
+                request == null ? null : request.getPayOrderNo(), request, response, "local mock payment callback");
+        return Response.success(response);
     }
 
     public Response<PaymentCallbackResponseDTO> mockPaySuccessCallbackBlock(PaymentCallbackRequestDTO request, BlockException e) {

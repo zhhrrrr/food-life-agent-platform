@@ -58,6 +58,7 @@ import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import com.foodlife.trade.domain.order.seckill.model.SeckillActivityEntity;
 import com.foodlife.trade.domain.order.service.OrderDomainService;
 import com.foodlife.trade.types.response.Response;
+import com.foodlife.trade.trigger.app.OperationAuditApplicationService;
 import com.foodlife.trade.trigger.app.RefundConfirmApplicationService;
 import com.foodlife.trade.trigger.sentinel.TradeSentinelResources;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -79,11 +80,14 @@ public class OrderController {
 
     private final OrderDomainService orderDomainService;
     private final RefundConfirmApplicationService refundConfirmApplicationService;
+    private final OperationAuditApplicationService operationAuditApplicationService;
 
     public OrderController(OrderDomainService orderDomainService,
-                           RefundConfirmApplicationService refundConfirmApplicationService) {
+                           RefundConfirmApplicationService refundConfirmApplicationService,
+                           OperationAuditApplicationService operationAuditApplicationService) {
         this.orderDomainService = orderDomainService;
         this.refundConfirmApplicationService = refundConfirmApplicationService;
+        this.operationAuditApplicationService = operationAuditApplicationService;
     }
 
     @PostMapping("/orders/normal")
@@ -252,7 +256,10 @@ public class OrderController {
     public Response<CancelOrderResponseDTO> cancelOrder(@PathVariable Long orderId) {
         try {
             CancelOrderResult result = orderDomainService.cancelOrder(orderId, UserHolder.getUserId());
-            return Response.success(toCancelResponse(result));
+            CancelOrderResponseDTO response = toCancelResponse(result);
+            operationAuditApplicationService.recordSuccess("ORDER_CANCEL", "ORDER", String.valueOf(orderId),
+                    null, response, "user cancel order");
+            return Response.success(response);
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
@@ -263,7 +270,10 @@ public class OrderController {
                                                       @RequestBody(required = false) PayOrderRequestDTO request) {
         try {
             OrderPaySettlementEntity result = orderDomainService.payOrderMock(toPaySuccessEntity(orderId, request));
-            return Response.success(toPayResponse(result));
+            PayOrderResponseDTO response = toPayResponse(result);
+            operationAuditApplicationService.recordSuccess("ORDER_PAY_MOCK", "ORDER", String.valueOf(orderId),
+                    request, response, "local mock order pay");
+            return Response.success(response);
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
@@ -272,7 +282,7 @@ public class OrderController {
     @PostMapping("/orders/{orderId}/refund/mock")
     public Response<RefundOrderResponseDTO> refundOrderMock(@PathVariable Long orderId,
                                                             @RequestBody(required = false) RefundOrderRequestDTO request) {
-        return confirmRefund(orderId, request);
+        return applyRefund(orderId, request);
     }
 
     @PostMapping("/orders/{orderId}/refund/apply")
@@ -280,7 +290,10 @@ public class OrderController {
                                                         @RequestBody(required = false) RefundOrderRequestDTO request) {
         try {
             OrderRefundBehaviorEntity result = orderDomainService.refundOrderMock(toUserRefundCommand(orderId, request));
-            return Response.success(toRefundResponse(result));
+            RefundOrderResponseDTO response = toRefundResponse(result);
+            operationAuditApplicationService.recordSuccess("USER_REFUND_APPLY", "ORDER", String.valueOf(orderId),
+                    request, response, "user apply refund");
+            return Response.success(response);
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
@@ -291,7 +304,10 @@ public class OrderController {
                                                           @RequestBody(required = false) RefundOrderRequestDTO request) {
         try {
             OrderRefundBehaviorEntity result = refundConfirmApplicationService.confirmRefund(toRefundCommand(orderId, request));
-            return Response.success(toRefundResponse(result));
+            RefundOrderResponseDTO response = toRefundResponse(result);
+            operationAuditApplicationService.recordSuccess("OPERATION_REFUND_CONFIRM", "ORDER", String.valueOf(orderId),
+                    request, response, "operation confirm refund");
+            return Response.success(response);
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
@@ -301,7 +317,10 @@ public class OrderController {
     public Response<UseOrderResponseDTO> useOrderMock(@PathVariable Long orderId) {
         try {
             OrderUseResult result = orderDomainService.useOrderMock(toUseCommand(orderId));
-            return Response.success(toUseResponse(result));
+            UseOrderResponseDTO response = toUseResponse(result);
+            operationAuditApplicationService.recordSuccess("ORDER_USE_MOCK", "ORDER", String.valueOf(orderId),
+                    null, response, "local mock order use");
+            return Response.success(response);
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
