@@ -66,6 +66,11 @@ $gatewayOldLogFilter = Join-Path $Root "food-gateway-service\src\main\java\com\f
 $observabilityStarter = Join-Path $Root "food-observability-starter\src\main\resources\META-INF\spring\org.springframework.boot.autoconfigure.AutoConfiguration.imports"
 $observabilityProperties = Join-Path $Root "food-observability-starter\src\main\java\com\foodlife\observability\properties\ObservabilityProperties.java"
 $businessMqProperties = Join-Path $Root "food-business-service\food-business-infrastructure\src\main\java\com\foodlife\business\infrastructure\mq\BusinessRabbitMqProperties.java"
+$businessEventPublisher = Join-Path $Root "food-business-service\food-business-infrastructure\src\main\java\com\foodlife\business\infrastructure\mq\BusinessRabbitMqEventPublisher.java"
+$businessLocalMessagePO = Join-Path $Root "food-business-service\food-business-infrastructure\src\main\java\com\foodlife\business\infrastructure\dao\po\BusinessLocalMessagePO.java"
+$businessLocalMessageMapper = Join-Path $Root "food-business-service\food-business-infrastructure\src\main\java\com\foodlife\business\infrastructure\dao\IBusinessLocalMessageMapper.java"
+$businessEventRetryJob = Join-Path $Root "food-business-service\food-business-trigger\src\main\java\com\foodlife\business\trigger\job\BusinessRabbitMqEventRetryJob.java"
+$businessSchema = Join-Path $Root "docs\sql\food_business_db.sql"
 $tradeMqProperties = Join-Path $Root "food-trade-service\food-trade-infrastructure\src\main\java\com\foodlife\trade\infrastructure\mq\TradeRabbitMqProperties.java"
 $startLocalServicesScript = Join-Path $Root "scripts\start-local-services.ps1"
 $serviceApplicationConfigs = @(
@@ -84,6 +89,11 @@ Assert-FileExists $commonNacosConfig "food-common Nacos config missing"
 Assert-FileExists $observabilityStarter "observability auto configuration imports missing"
 Assert-FileExists $observabilityProperties "observability properties missing"
 Assert-FileExists $businessMqProperties "business MQ properties missing"
+Assert-FileExists $businessEventPublisher "business event publisher missing"
+Assert-FileExists $businessLocalMessagePO "business local message PO missing"
+Assert-FileExists $businessLocalMessageMapper "business local message mapper missing"
+Assert-FileExists $businessEventRetryJob "business event retry job missing"
+Assert-FileExists $businessSchema "business schema missing"
 Assert-FileExists $tradeMqProperties "trade MQ properties missing"
 Assert-FileExists $startLocalServicesScript "start local services script missing"
 foreach ($config in $serviceApplicationConfigs) {
@@ -204,8 +214,58 @@ Assert-Contains `
 
 Assert-Contains `
     -Path $businessMqProperties `
-    -Patterns @('private Boolean enabled = true;') `
+    -Patterns @(
+        'private Boolean enabled = true;',
+        'private Integer retryDelaySeconds = 30;',
+        'private Integer retryLimit = 50;',
+        'private Integer processingTimeoutSeconds = 120;'
+    ) `
     -Message "business MQ defaults must be enabled"
+
+Assert-Contains `
+    -Path $businessEventPublisher `
+    -Patterns @(
+        'TransactionSynchronizationManager.registerSynchronization',
+        'retryPendingEvents',
+        'recoverProcessingMessages'
+    ) `
+    -Message "business event publisher must use reliable local message table"
+
+Assert-NotContains `
+    -Path $businessEventPublisher `
+    -Patterns @(
+        'mock publish',
+        'applyReviewCreatedStats(key',
+        'fallbackIfNeeded'
+    ) `
+    -Message "business event publisher must not use local mock fallback"
+
+Assert-Contains `
+    -Path $businessLocalMessagePO `
+    -Patterns @(
+        '@TableName("business_local_message")',
+        'private String messageStatus;',
+        'private LocalDateTime nextRetryTime;'
+    ) `
+    -Message "business local message PO must map reliable message table"
+
+Assert-Contains `
+    -Path $businessEventRetryJob `
+    -Patterns @(
+        'food.jobs.business-event-retry.enabled',
+        'food.jobs.business-event-retry.fixed-delay-ms',
+        'retryPendingEvents'
+    ) `
+    -Message "business event retry job must scan local messages"
+
+Assert-Contains `
+    -Path $businessSchema `
+    -Patterns @(
+        'CREATE TABLE IF NOT EXISTS business_local_message',
+        'UNIQUE KEY uk_message_id (message_id)',
+        'KEY idx_status_retry_time (message_status, next_retry_time)'
+    ) `
+    -Message "business schema must include local reliable message table"
 
 Assert-Contains `
     -Path $tradeMqProperties `

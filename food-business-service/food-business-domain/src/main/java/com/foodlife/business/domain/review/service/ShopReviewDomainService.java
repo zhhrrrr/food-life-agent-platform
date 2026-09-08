@@ -9,6 +9,7 @@ import com.foodlife.business.domain.review.model.TradeOrderForReviewEntity;
 import com.foodlife.business.domain.review.port.ITradeOrderPort;
 import com.foodlife.business.domain.review.repository.IShopReviewRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
@@ -33,6 +34,7 @@ public class ShopReviewDomainService {
         this.businessEventPublisher = businessEventPublisher;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public ShopReviewEntity createReview(CreateShopReviewCommand command) {
         checkCreateCommand(command);
         TradeOrderForReviewEntity order = tradeOrderPort.queryCurrentUserOrder(command.getOrderId());

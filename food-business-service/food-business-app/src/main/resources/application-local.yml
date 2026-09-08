@@ -113,6 +113,14 @@ food:
     enabled: ${FOOD_MQ_ENABLED:true}
     review-created-queue: food.business.review.created.queue
     package-stock-event-queue: food.business.package.stock.event.queue
+    retry-delay-seconds: 30
+    retry-limit: 50
+    processing-timeout-seconds: 120
+  jobs:
+    business-event-retry:
+      enabled: true
+      fixed-delay-ms: 30000
+      limit: 50
   auth:
     enabled: true
     token-header: authorization
