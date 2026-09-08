@@ -19,15 +19,16 @@
 
 ### P0 必做
 
-1. 接口契约治理
-   - 接入 OpenAPI 或独立接口契约文档。
-   - 明确前端、Agent、服务间接口哪些可公开、哪些只允许内部调用。
-   - 为核心 DTO 增加字段说明、错误码说明、典型请求响应。
+1. 接口契约治理（基础版已完成）
+   - 已接入 OpenAPI，user、business、trade 可各自暴露 `/v3/api-docs`。
+   - Gateway 已聚合 user、business、trade 三个服务的 OpenAPI 文档入口。
+   - 后续增强：继续为核心 DTO 增加字段说明、错误码说明、典型请求响应，并按公网/内部/运营/Agent 工具分组。
 
-2. 统一错误码和异常治理
-   - 把 `400`、`401`、`403`、`429`、`503` 等业务错误码集中管理。
-   - Controller 不继续散落 `try/catch`，逐步迁移到统一异常处理。
-   - Agent 后续需要稳定错误语义，否则工具调用很难判断失败原因。
+2. 统一错误码和异常治理（基础版已完成）
+   - 已为 user、business、trade 增加统一 `ErrorCode`。
+   - 已为 user、business、trade 增加 `GlobalExceptionHandler`。
+   - Gateway 鉴权、黑名单、Sentinel 限流错误响应已收敛。
+   - 后续增强：继续把低频 Controller 中散落的 `try/catch` 迁移到统一异常处理。
 
 3. 真实支付边界
    - 当前支付、退款、核销仍是 mock 或本地骨架。

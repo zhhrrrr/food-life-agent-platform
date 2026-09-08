@@ -27,6 +27,12 @@ management:
     sampling:
       probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
 
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
 spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -131,3 +137,7 @@ food:
       - /api/package/of/shop
       - /api/package/trade-snapshot/*
       - /api/internal/**
+      - /v3/api-docs
+      - /v3/api-docs/**
+      - /swagger-ui.html
+      - /swagger-ui/**

@@ -5,6 +5,12 @@ management:
   server:
     port: 8302
 
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
 spring:
   application:
     name: food-trade-service
@@ -80,3 +86,7 @@ food:
       - /error
       - /api/trade/pay/callback/**
       - /api/internal/**
+      - /v3/api-docs
+      - /v3/api-docs/**
+      - /swagger-ui.html
+      - /swagger-ui/**
