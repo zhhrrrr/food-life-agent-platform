@@ -5,6 +5,12 @@ management:
   server:
     port: 8102
 
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
 spring:
   application:
     name: food-user-service
@@ -36,3 +42,7 @@ food:
       - /api/user/login
       - /api/user/logout
       - /api/internal/**
+      - /v3/api-docs
+      - /v3/api-docs/**
+      - /swagger-ui.html
+      - /swagger-ui/**

@@ -5,6 +5,19 @@ management:
   server:
     port: 8081
 
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: user-service
+        url: /v3/api-docs/user
+      - name: business-service
+        url: /v3/api-docs/business
+      - name: trade-service
+        url: /v3/api-docs/trade
+
 spring:
   cloud:
     sentinel:
@@ -37,14 +50,32 @@ spring:
           uri: lb://food-user-service
           predicates:
             - Path=/api/user/**
+        - id: food-user-openapi-route
+          uri: lb://food-user-service
+          predicates:
+            - Path=/v3/api-docs/user
+          filters:
+            - RewritePath=/v3/api-docs/user,/v3/api-docs
         - id: food-business-route
           uri: lb://food-business-service
           predicates:
             - Path=/api/shop-category/**,/api/shop/**,/api/package/**,/api/shop-homepage/**,/api/reviews/**,/api/favorites/shops/**
+        - id: food-business-openapi-route
+          uri: lb://food-business-service
+          predicates:
+            - Path=/v3/api-docs/business
+          filters:
+            - RewritePath=/v3/api-docs/business,/v3/api-docs
         - id: food-trade-route
           uri: lb://food-trade-service
           predicates:
             - Path=/api/trade/**
+        - id: food-trade-openapi-route
+          uri: lb://food-trade-service
+          predicates:
+            - Path=/v3/api-docs/trade
+          filters:
+            - RewritePath=/v3/api-docs/trade,/v3/api-docs
 
 logging:
   level:
@@ -73,6 +104,9 @@ food:
         - /api/package/of/shop
         - /api/package/trade-snapshot/*
         - /api/trade/pay/callback/**
+        - /v3/api-docs/**
+        - /swagger-ui.html
+        - /swagger-ui/**
     security:
       blacklist:
         enabled: true
