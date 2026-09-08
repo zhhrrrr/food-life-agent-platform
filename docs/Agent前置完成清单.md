@@ -53,9 +53,10 @@
    - 把现有 smoke script 拆成登录、交易、库存、MQ、网关安全几组。
    - 增加测试数据准备与清理脚本。
 
-2. 审计日志
-   - 库存调整、退款确认、核销、Agent 写操作都应有审计。
-   - 审计字段至少包含 traceId、operatorId、operatorType、source、bizType、bizId、before/after。
+2. 审计日志（基础版已完成）
+   - trade-service 已新增 `trade_operation_audit_log`。
+   - 支付准备、支付回调、取消、退款申请、退款确认、核销、运营库存调整已接入审计。
+   - 后续增强：补审计查询接口、管理端审计列表、敏感字段脱敏、Agent 写操作字段。
 
 3. 配置分环境治理
    - 当前 local 已可跑。
