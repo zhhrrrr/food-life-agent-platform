@@ -15,6 +15,7 @@ import com.foodlife.business.infrastructure.dao.IShopMapper;
 import com.foodlife.business.infrastructure.dao.po.MealPackagePO;
 import com.foodlife.business.infrastructure.dao.po.PackageStockChangeRecordPO;
 import com.foodlife.business.infrastructure.dao.po.ShopPO;
+import com.foodlife.business.infrastructure.cache.BusinessCacheSupport;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,33 +29,54 @@ public class PackageRepository implements IPackageRepository {
     private final IMealPackageMapper mealPackageMapper;
     private final IShopMapper shopMapper;
     private final IPackageStockChangeRecordMapper packageStockChangeRecordMapper;
+    private final BusinessCacheSupport cacheSupport;
 
     public PackageRepository(IMealPackageMapper mealPackageMapper,
                              IShopMapper shopMapper,
-                             IPackageStockChangeRecordMapper packageStockChangeRecordMapper) {
+                             IPackageStockChangeRecordMapper packageStockChangeRecordMapper,
+                             BusinessCacheSupport cacheSupport) {
         this.mealPackageMapper = mealPackageMapper;
         this.shopMapper = shopMapper;
         this.packageStockChangeRecordMapper = packageStockChangeRecordMapper;
+        this.cacheSupport = cacheSupport;
     }
 
     @Override
     public MealPackageEntity findById(Long id) {
-        return toEntity(mealPackageMapper.selectById(id));
+        MealPackageEntity cached = cacheSupport.getObject(cacheSupport.packageKey(id), MealPackageEntity.class);
+        if (cached != null) {
+            return cached;
+        }
+        MealPackageEntity entity = toEntity(mealPackageMapper.selectById(id));
+        if (entity != null) {
+            cacheSupport.putPackage(id, entity);
+        }
+        return entity;
     }
 
     @Override
     public List<MealPackageEntity> listByShopId(Long shopId) {
-        return mealPackageMapper.selectList(new LambdaQueryWrapper<MealPackagePO>()
+        List<MealPackageEntity> cached = cacheSupport.getList(cacheSupport.packageListKey(shopId), MealPackageEntity.class);
+        if (cached != null) {
+            return cached;
+        }
+        List<MealPackageEntity> packages = mealPackageMapper.selectList(new LambdaQueryWrapper<MealPackagePO>()
                         .eq(MealPackagePO::getShopId, shopId)
                         .eq(MealPackagePO::getStatus, 1)
                         .orderByDesc(MealPackagePO::getSold))
                 .stream()
                 .map(this::toEntity)
                 .collect(Collectors.toList());
+        cacheSupport.putPackageList(shopId, packages);
+        return packages;
     }
 
     @Override
     public PackageTradeSnapshotEntity queryTradeSnapshot(Long packageId) {
+        PackageTradeSnapshotEntity cached = cacheSupport.getObject(cacheSupport.packageTradeSnapshotKey(packageId), PackageTradeSnapshotEntity.class);
+        if (cached != null) {
+            return cached;
+        }
         MealPackagePO packagePO = mealPackageMapper.selectById(packageId);
         if (packagePO == null) {
             return null;
@@ -75,6 +97,7 @@ public class PackageRepository implements IPackageRepository {
         snapshot.setStock(packagePO.getStock());
         snapshot.setPackageStatus(packagePO.getStatus());
         snapshot.setUseRule(packagePO.getUseRule());
+        cacheSupport.putTradeSnapshot(packageId, snapshot);
         return snapshot;
     }
 
@@ -100,6 +123,7 @@ public class PackageRepository implements IPackageRepository {
             throw new IllegalArgumentException("package stock not enough");
         }
         saveHandledOperation(operationId, packageId, quantity, "OCCUPY");
+        evictPackageCache(packageId);
         return buildStockChangeResult(packageId, quantity, "OCCUPY");
     }
 
@@ -123,6 +147,7 @@ public class PackageRepository implements IPackageRepository {
             throw new IllegalArgumentException("package not found");
         }
         saveHandledOperation(operationId, packageId, quantity, "RELEASE");
+        evictPackageCache(packageId);
         return buildStockChangeResult(packageId, quantity, "RELEASE");
     }
 
@@ -147,6 +172,7 @@ public class PackageRepository implements IPackageRepository {
         }
         updateShopSold(packageId, quantity);
         saveHandledOperation(operationId, packageId, quantity, "CONFIRM_SOLD");
+        evictPackageCache(packageId);
         return buildStockChangeResult(packageId, quantity, "CONFIRM_SOLD");
     }
 
@@ -172,6 +198,7 @@ public class PackageRepository implements IPackageRepository {
         }
         updateShopSold(packageId, -quantity);
         saveHandledOperation(operationId, packageId, quantity, "ROLLBACK_SOLD");
+        evictPackageCache(packageId);
         return buildStockChangeResult(packageId, quantity, "ROLLBACK_SOLD");
     }
 
@@ -196,6 +223,7 @@ public class PackageRepository implements IPackageRepository {
             throw new IllegalArgumentException(adjustQuantity < 0 ? "package stock not enough" : "package not found");
         }
         saveHandledOperation(command.getOperationId(), command.getPackageId(), adjustQuantity, changeType);
+        evictPackageCache(command.getPackageId());
         return buildAdjustPackageStockResult(command, changeType);
     }
 
@@ -289,6 +317,18 @@ public class PackageRepository implements IPackageRepository {
         int updated = shopMapper.update(null, wrapper);
         if (updated <= 0) {
             throw new IllegalArgumentException("shop sold can not update");
+        }
+        cacheSupport.evictShop(packagePO.getShopId());
+        cacheSupport.delayedEvictShop(packagePO.getShopId());
+    }
+
+    private void evictPackageCache(Long packageId) {
+        MealPackagePO packagePO = mealPackageMapper.selectById(packageId);
+        cacheSupport.evictPackage(packageId);
+        cacheSupport.delayedEvictPackage(packageId);
+        if (packagePO != null) {
+            cacheSupport.evictPackageList(packagePO.getShopId());
+            cacheSupport.delayedEvictPackageList(packagePO.getShopId());
         }
     }
 

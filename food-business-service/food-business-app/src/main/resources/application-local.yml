@@ -23,6 +23,7 @@ management:
       percentiles-histogram:
         http.server.requests: true
         food_http_server_request_duration: true
+        food_mq_consume_duration: true
   tracing:
     sampling:
       probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
@@ -54,6 +55,11 @@ spring:
     username: ${RABBITMQ_USERNAME:guest}
     password: ${RABBITMQ_PASSWORD:guest}
     virtual-host: ${RABBITMQ_VIRTUAL_HOST:/}
+    listener:
+      simple:
+        default-requeue-rejected: false
+      direct:
+        default-requeue-rejected: false
   cloud:
     alibaba:
       seata:
@@ -118,6 +124,10 @@ food:
     enabled: ${FOOD_MQ_ENABLED:true}
     review-created-queue: food.business.review.created.queue
     package-stock-event-queue: food.business.package.stock.event.queue
+    dead-letter-exchange: food.business.dlx
+    review-created-dead-letter-queue: food.business.review.created.dlq
+    package-stock-event-dead-letter-queue: food.business.package.stock.event.dlq
+    backlog-alert-threshold: ${BUSINESS_MQ_BACKLOG_ALERT_THRESHOLD:1000}
     retry-delay-seconds: 30
     retry-limit: 50
     processing-timeout-seconds: 120
@@ -154,3 +164,13 @@ food:
       - /v3/api-docs/**
       - /swagger-ui.html
       - /swagger-ui/**
+    role-access:
+      enabled: true
+      default-role: USER
+      local-user-roles:
+        1: ADMIN
+      paths:
+        - pattern: /api/business/operations/**
+          roles:
+            - ADMIN
+            - OPERATOR

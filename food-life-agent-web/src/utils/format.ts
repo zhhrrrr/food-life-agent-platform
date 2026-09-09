@@ -1,6 +1,6 @@
 export function money(value?: number | null) {
   if (value === undefined || value === null) {
-    return '¥0'
+    return '¥0.00'
   }
   return `¥${(value / 100).toFixed(2)}`
 }

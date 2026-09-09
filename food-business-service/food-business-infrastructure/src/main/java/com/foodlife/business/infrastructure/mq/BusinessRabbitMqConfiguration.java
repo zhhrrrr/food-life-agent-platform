@@ -28,13 +28,34 @@ public class BusinessRabbitMqConfiguration {
     }
 
     @Bean
+    public DirectExchange businessDeadLetterExchange(BusinessRabbitMqProperties properties) {
+        return new DirectExchange(properties.getDeadLetterExchange(), true, false);
+    }
+
+    @Bean
     public Queue reviewCreatedQueue(BusinessRabbitMqProperties properties) {
-        return QueueBuilder.durable(properties.getReviewCreatedQueue()).build();
+        return QueueBuilder.durable(properties.getReviewCreatedQueue())
+                .deadLetterExchange(properties.getDeadLetterExchange())
+                .deadLetterRoutingKey(properties.getReviewCreatedDeadLetterQueue())
+                .build();
     }
 
     @Bean
     public Queue packageStockEventQueue(BusinessRabbitMqProperties properties) {
-        return QueueBuilder.durable(properties.getPackageStockEventQueue()).build();
+        return QueueBuilder.durable(properties.getPackageStockEventQueue())
+                .deadLetterExchange(properties.getDeadLetterExchange())
+                .deadLetterRoutingKey(properties.getPackageStockEventDeadLetterQueue())
+                .build();
+    }
+
+    @Bean
+    public Queue reviewCreatedDeadLetterQueue(BusinessRabbitMqProperties properties) {
+        return QueueBuilder.durable(properties.getReviewCreatedDeadLetterQueue()).build();
+    }
+
+    @Bean
+    public Queue packageStockEventDeadLetterQueue(BusinessRabbitMqProperties properties) {
+        return QueueBuilder.durable(properties.getPackageStockEventDeadLetterQueue()).build();
     }
 
     @Bean
@@ -43,6 +64,20 @@ public class BusinessRabbitMqConfiguration {
         return BindingBuilder.bind(reviewCreatedQueue)
                 .to(shopReviewExchange)
                 .with(BusinessMqTopics.REVIEW_CREATED);
+    }
+
+    @Bean
+    public Binding reviewCreatedDeadLetterBinding(@Qualifier("reviewCreatedDeadLetterQueue") Queue queue,
+                                                  @Qualifier("businessDeadLetterExchange") DirectExchange exchange,
+                                                  BusinessRabbitMqProperties properties) {
+        return BindingBuilder.bind(queue).to(exchange).with(properties.getReviewCreatedDeadLetterQueue());
+    }
+
+    @Bean
+    public Binding packageStockEventDeadLetterBinding(@Qualifier("packageStockEventDeadLetterQueue") Queue queue,
+                                                      @Qualifier("businessDeadLetterExchange") DirectExchange exchange,
+                                                      BusinessRabbitMqProperties properties) {
+        return BindingBuilder.bind(queue).to(exchange).with(properties.getPackageStockEventDeadLetterQueue());
     }
 
     @Bean

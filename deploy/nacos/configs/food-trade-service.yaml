@@ -37,6 +37,11 @@ food:
     order-timeout-close-queue: food.trade.order.timeout.close.queue
     order-timeout-delay-queue: food.trade.order.timeout.delay.queue
     order-timeout-delay-routing-key: order.cancel.timeout.delay
+    dead-letter-exchange: food.trade.dlx
+    trade-order-event-dead-letter-queue: food.trade.order.event.dlq
+    payment-event-dead-letter-queue: food.trade.payment.event.dlq
+    order-timeout-close-dead-letter-queue: food.trade.order.timeout.close.dlq
+    backlog-alert-threshold: ${TRADE_MQ_BACKLOG_ALERT_THRESHOLD:1000}
     order-timeout-delay-millis: ${ORDER_TIMEOUT_DELAY_MILLIS:1800000}
     retry-delay-seconds: 30
     retry-limit: 50

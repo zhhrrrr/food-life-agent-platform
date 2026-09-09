@@ -7,5 +7,7 @@ public interface ITradeEventPublisher {
     void publishDelay(String topic, String tag, String key, Object payload);
 
     int retryPendingEvents(Integer limit);
+
+    boolean republishMessage(String messageId);
 }
 

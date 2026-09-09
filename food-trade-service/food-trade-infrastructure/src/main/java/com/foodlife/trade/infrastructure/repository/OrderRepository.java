@@ -7,6 +7,7 @@ import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyStatusConstants;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
+import com.foodlife.trade.domain.order.model.OperationOrderQuery;
 import com.foodlife.trade.domain.order.model.OrderUseRecordEntity;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import com.foodlife.trade.infrastructure.dao.IDiningOrderItemMapper;
@@ -96,6 +97,22 @@ public class OrderRepository implements IOrderRepository {
         if (orderStatus != null) {
             queryWrapper.eq(DiningOrderPO::getOrderStatus, orderStatus);
         }
+        return diningOrderMapper.selectList(queryWrapper)
+                .stream()
+                .map(this::toOrderEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<DiningOrderEntity> listOperationOrders(OperationOrderQuery query) {
+        LambdaQueryWrapper<DiningOrderPO> queryWrapper = new LambdaQueryWrapper<DiningOrderPO>()
+                .eq(query.getUserId() != null, DiningOrderPO::getUserId, query.getUserId())
+                .eq(query.getOrderId() != null, DiningOrderPO::getId, query.getOrderId())
+                .eq(query.getOrderNo() != null && !query.getOrderNo().trim().isEmpty(), DiningOrderPO::getOrderNo, trim(query.getOrderNo()))
+                .eq(query.getTradeType() != null, DiningOrderPO::getTradeType, query.getTradeType())
+                .eq(query.getOrderStatus() != null, DiningOrderPO::getOrderStatus, query.getOrderStatus())
+                .orderByDesc(DiningOrderPO::getId)
+                .last("limit " + query.getPageSize());
         return diningOrderMapper.selectList(queryWrapper)
                 .stream()
                 .map(this::toOrderEntity)
@@ -230,6 +247,10 @@ public class OrderRepository implements IOrderRepository {
         po.setCreateTime(entity.getCreateTime());
         po.setUpdateTime(entity.getUpdateTime());
         return po;
+    }
+
+    private String trim(String value) {
+        return value == null ? null : value.trim();
     }
 
     private DiningOrderEntity toOrderEntity(DiningOrderPO po) {

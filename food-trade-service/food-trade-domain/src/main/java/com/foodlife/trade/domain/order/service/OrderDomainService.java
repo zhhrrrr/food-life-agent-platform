@@ -23,6 +23,7 @@ import com.foodlife.trade.domain.order.model.OrderDetailEntity;
 import com.foodlife.trade.domain.order.model.OrderListResult;
 import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
 import com.foodlife.trade.domain.order.model.OrderPaySuccessEntity;
+import com.foodlife.trade.domain.order.model.OperationOrderQuery;
 import com.foodlife.trade.domain.order.model.OrderPricingResult;
 import com.foodlife.trade.domain.order.model.OrderRefundBehaviorEntity;
 import com.foodlife.trade.domain.order.model.OrderRefundCommandEntity;
@@ -212,6 +213,27 @@ public class OrderDomainService {
         result.setLastId(summaries.isEmpty() ? null : summaries.get(summaries.size() - 1).getOrderId());
         result.setTradeType(normalizedTradeType);
         result.setOrderStatus(normalizedOrderStatus);
+        return result;
+    }
+
+    public OrderListResult queryOperationOrderList(OperationOrderQuery query) {
+        if (query == null) {
+            query = new OperationOrderQuery();
+        }
+        query.setPageSize(normalizePageSize(query.getPageSize()));
+        query.setTradeType(normalizeTradeType(query.getTradeType()));
+        query.setOrderStatus(normalizeOrderStatus(query.getOrderStatus()));
+        java.util.List<DiningOrderEntity> orders = orderRepository.listOperationOrders(query);
+        java.util.List<OrderSummaryEntity> summaries = orders.stream()
+                .map(this::toOrderSummary)
+                .collect(java.util.stream.Collectors.toList());
+
+        OrderListResult result = new OrderListResult();
+        result.setOrders(summaries);
+        result.setHasMore(false);
+        result.setLastId(summaries.isEmpty() ? null : summaries.get(summaries.size() - 1).getOrderId());
+        result.setTradeType(query.getTradeType());
+        result.setOrderStatus(query.getOrderStatus());
         return result;
     }
 

@@ -37,6 +37,38 @@ const router = createRouter({
             requiresOperator: true,
           },
         },
+        {
+          path: 'operations/orders',
+          name: 'operation-orders',
+          component: () => import('../views/OperationOrdersView.vue'),
+          meta: {
+            requiresOperator: true,
+          },
+        },
+        {
+          path: 'operations/stock',
+          name: 'operation-stock',
+          component: () => import('../views/OperationStockAdjustmentView.vue'),
+          meta: {
+            requiresOperator: true,
+          },
+        },
+        {
+          path: 'operations/refunds',
+          name: 'operation-refunds',
+          component: () => import('../views/OperationRefundView.vue'),
+          meta: {
+            requiresOperator: true,
+          },
+        },
+        {
+          path: 'operations/messages',
+          name: 'operation-messages',
+          component: () => import('../views/OperationMessagesView.vue'),
+          meta: {
+            requiresOperator: true,
+          },
+        },
       ],
     },
   ],

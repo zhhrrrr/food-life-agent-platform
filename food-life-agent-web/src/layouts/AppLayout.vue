@@ -1,7 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Bowl, DocumentChecked, HomeFilled, SwitchButton, Tickets, UserFilled } from '@element-plus/icons-vue'
+import {
+  Bowl,
+  Box,
+  ChatLineSquare,
+  DocumentChecked,
+  HomeFilled,
+  MessageBox,
+  Search,
+  SwitchButton,
+  Tickets,
+  UserFilled,
+  Wallet,
+} from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
@@ -42,10 +54,36 @@ function logout() {
           <el-icon><Tickets /></el-icon>
           订单
         </router-link>
-        <router-link v-if="canViewOperations" to="/operations/audit">
-          <el-icon><DocumentChecked /></el-icon>
-          审计
-        </router-link>
+        <el-dropdown v-if="canViewOperations" trigger="click">
+          <button class="nav-menu-button" type="button">
+            <el-icon><DocumentChecked /></el-icon>
+            运营
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item @click="router.push('/operations/audit')">
+                <el-icon><ChatLineSquare /></el-icon>
+                审计日志
+              </el-dropdown-item>
+              <el-dropdown-item @click="router.push('/operations/orders')">
+                <el-icon><Search /></el-icon>
+                订单检索
+              </el-dropdown-item>
+              <el-dropdown-item @click="router.push('/operations/stock')">
+                <el-icon><Box /></el-icon>
+                库存调整
+              </el-dropdown-item>
+              <el-dropdown-item @click="router.push('/operations/refunds')">
+                <el-icon><Wallet /></el-icon>
+                退款确认
+              </el-dropdown-item>
+              <el-dropdown-item @click="router.push('/operations/messages')">
+                <el-icon><MessageBox /></el-icon>
+                异常消息
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </nav>
       <div class="topbar__user">
         <el-avatar :size="36" :src="auth.user?.icon">

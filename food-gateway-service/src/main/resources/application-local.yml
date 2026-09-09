@@ -92,7 +92,7 @@ spring:
         - id: food-business-route
           uri: lb://food-business-service
           predicates:
-            - Path=/api/shop-category/**,/api/shop/**,/api/package/**,/api/shop-homepage/**,/api/reviews/**,/api/favorites/shops/**
+            - Path=/api/shop-category/**,/api/shop/**,/api/package/**,/api/shop-homepage/**,/api/reviews/**,/api/favorites/shops/**,/api/business/operations/**
         - id: food-business-openapi-route
           uri: lb://food-business-service
           predicates:

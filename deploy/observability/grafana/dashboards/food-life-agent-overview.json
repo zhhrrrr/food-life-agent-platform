@@ -75,6 +75,17 @@
           "legendFormat": "{{application}}"
         }
       ]
+    },
+    {
+      "type": "timeseries",
+      "title": "RabbitMQ Consume P95 Latency",
+      "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, application, service, queue, event) (rate(food_mq_consume_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{service}} {{event}}"
+        }
+      ]
     }
   ]
 }

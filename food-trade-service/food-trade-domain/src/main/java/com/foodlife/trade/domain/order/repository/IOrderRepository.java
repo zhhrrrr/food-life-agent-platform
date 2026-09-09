@@ -2,6 +2,7 @@ package com.foodlife.trade.domain.order.repository;
 
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
+import com.foodlife.trade.domain.order.model.OperationOrderQuery;
 import com.foodlife.trade.domain.order.model.OrderUseRecordEntity;
 
 public interface IOrderRepository {
@@ -16,6 +17,8 @@ public interface IOrderRepository {
 
     java.util.List<DiningOrderEntity> listUserOrders(Long userId, Long lastId, Integer pageSize,
                                                      String tradeType, String orderStatus);
+
+    java.util.List<DiningOrderEntity> listOperationOrders(OperationOrderQuery query);
 
     java.util.List<DiningOrderEntity> listTimeoutNormalWaitPayOrders(java.time.LocalDateTime timeoutBefore, Integer limit);
 

@@ -5,6 +5,11 @@ spring:
     username: ${RABBITMQ_USERNAME:guest}
     password: ${RABBITMQ_PASSWORD:guest}
     virtual-host: ${RABBITMQ_VIRTUAL_HOST:/}
+    listener:
+      simple:
+        default-requeue-rejected: false
+      direct:
+        default-requeue-rejected: false
   redis:
     host: localhost
     port: 6379
@@ -56,6 +61,7 @@ management:
       percentiles-histogram:
         http.server.requests: true
         food_http_server_request_duration: true
+        food_mq_consume_duration: true
   tracing:
     sampling:
       probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}

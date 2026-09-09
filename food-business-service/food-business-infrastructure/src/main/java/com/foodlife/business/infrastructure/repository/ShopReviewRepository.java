@@ -12,6 +12,7 @@ import com.foodlife.business.infrastructure.dao.IShopReviewMapper;
 import com.foodlife.business.infrastructure.dao.po.BusinessConsumedMessagePO;
 import com.foodlife.business.infrastructure.dao.po.ShopPO;
 import com.foodlife.business.infrastructure.dao.po.ShopReviewPO;
+import com.foodlife.business.infrastructure.cache.BusinessCacheSupport;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,13 +26,16 @@ public class ShopReviewRepository implements IShopReviewRepository {
     private final IShopReviewMapper shopReviewMapper;
     private final IShopMapper shopMapper;
     private final IBusinessConsumedMessageMapper consumedMessageMapper;
+    private final BusinessCacheSupport cacheSupport;
 
     public ShopReviewRepository(IShopReviewMapper shopReviewMapper,
                                 IShopMapper shopMapper,
-                                IBusinessConsumedMessageMapper consumedMessageMapper) {
+                                IBusinessConsumedMessageMapper consumedMessageMapper,
+                                BusinessCacheSupport cacheSupport) {
         this.shopReviewMapper = shopReviewMapper;
         this.shopMapper = shopMapper;
         this.consumedMessageMapper = consumedMessageMapper;
+        this.cacheSupport = cacheSupport;
     }
 
     @Override
@@ -97,6 +101,7 @@ public class ShopReviewRepository implements IShopReviewRepository {
             markConsumedFailed(idempotentMessageId, "shop not found");
             throw new IllegalArgumentException("shop not found");
         }
+        evictShopCache(review.getShopId());
         markConsumedSuccess(idempotentMessageId);
         return true;
     }
@@ -136,7 +141,13 @@ public class ShopReviewRepository implements IShopReviewRepository {
         if (updated != 1) {
             throw new IllegalArgumentException("shop not found");
         }
+        evictShopCache(review.getShopId());
         return toEntity(shopReviewMapper.selectById(reviewId));
+    }
+
+    private void evictShopCache(Long shopId) {
+        cacheSupport.evictShop(shopId);
+        cacheSupport.delayedEvictShop(shopId);
     }
 
     @Override
