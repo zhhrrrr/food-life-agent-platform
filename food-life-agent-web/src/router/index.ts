@@ -29,18 +29,35 @@ const router = createRouter({
           name: 'orders',
           component: () => import('../views/OrdersView.vue'),
         },
+        {
+          path: 'operations/audit',
+          name: 'operation-audit',
+          component: () => import('../views/OperationAuditView.vue'),
+          meta: {
+            requiresOperator: true,
+          },
+        },
       ],
     },
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
   if (to.name !== 'login' && !auth.token) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   if (to.name === 'login' && auth.token) {
     return { name: 'home' }
+  }
+  if (to.meta.requiresOperator) {
+    if (!auth.user) {
+      await auth.fetchMe().catch(() => auth.logout())
+    }
+    const role = auth.user?.role?.toUpperCase()
+    if (role !== 'ADMIN' && role !== 'OPERATOR') {
+      return { name: 'home' }
+    }
   }
   return true
 })

@@ -90,3 +90,7 @@ food:
       - /v3/api-docs/**
       - /swagger-ui.html
       - /swagger-ui/**
+    role-access:
+      default-role: USER
+      local-user-roles:
+        1: ADMIN

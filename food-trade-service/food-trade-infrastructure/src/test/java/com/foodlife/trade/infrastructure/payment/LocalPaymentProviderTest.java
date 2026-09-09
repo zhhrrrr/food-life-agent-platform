@@ -7,7 +7,6 @@ import com.foodlife.trade.domain.order.payment.provider.PaymentProviderRouter;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -18,7 +17,7 @@ class LocalPaymentProviderTest {
 
     @Test
     void routeLocalPaymentProviderIgnoringCaseAndWhitespace() {
-        PaymentProviderRouter router = new PaymentProviderRouter(List.of(localPaymentProvider));
+        PaymentProviderRouter router = new PaymentProviderRouter(Collections.singletonList(localPaymentProvider));
 
         assertThat(router.route(" local_pay ").channel()).isEqualTo(PaymentChannelConstants.LOCAL_PAY);
     }
