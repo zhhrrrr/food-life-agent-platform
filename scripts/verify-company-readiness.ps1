@@ -9,19 +9,34 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
+function Invoke-CheckedNative {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Command,
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$Arguments
+    )
+
+    & $Command @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed with exit code ${LASTEXITCODE}: $Command $($Arguments -join ' ')"
+    }
+}
+
 & (Join-Path $PSScriptRoot "use-java17-plus.ps1")
 & (Join-Path $PSScriptRoot "verify-microservice-boundaries.ps1")
 & (Join-Path $PSScriptRoot "verify-ddd-boundaries.ps1")
 & (Join-Path $PSScriptRoot "verify-database-migrations.ps1")
+& (Join-Path $PSScriptRoot "verify-operation-audit-ui.ps1")
 
 if (-not $SkipMaven) {
-    mvn -B test
+    Invoke-CheckedNative mvn -B test
 }
 
 if (-not $SkipFrontend) {
     Push-Location (Join-Path $Root "food-life-agent-web")
     try {
-        npm run build
+        Invoke-CheckedNative npm run build
     } finally {
         Pop-Location
     }

@@ -167,3 +167,31 @@ export interface UseOrderResponse {
   useRecordNo?: string
   useTime?: string
 }
+
+export interface OperationAuditLog {
+  id: number
+  traceId?: string
+  operatorId?: number
+  operatorRole?: string
+  operationType: string
+  bizType: string
+  bizId: string
+  operationStatus: string
+  requestContent?: string
+  responseContent?: string
+  remark?: string
+  createTime: string
+}
+
+export interface OperationAuditLogListResponse {
+  logs: OperationAuditLog[]
+}
+
+export interface OperationAuditQuery {
+  traceId?: string
+  operatorId?: number
+  operationType?: string
+  bizType?: string
+  bizId?: string
+  limit?: number
+}

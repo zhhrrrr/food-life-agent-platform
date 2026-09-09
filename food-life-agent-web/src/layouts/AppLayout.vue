@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Bowl, HomeFilled, SwitchButton, Tickets, UserFilled } from '@element-plus/icons-vue'
+import { Bowl, DocumentChecked, HomeFilled, SwitchButton, Tickets, UserFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
 const router = useRouter()
+const canViewOperations = computed(() => {
+  const role = auth.user?.role?.toUpperCase()
+  return role === 'ADMIN' || role === 'OPERATOR'
+})
 
 onMounted(() => {
   auth.fetchMe().catch(() => auth.logout())
@@ -37,6 +41,10 @@ function logout() {
         <router-link to="/orders">
           <el-icon><Tickets /></el-icon>
           订单
+        </router-link>
+        <router-link v-if="canViewOperations" to="/operations/audit">
+          <el-icon><DocumentChecked /></el-icon>
+          审计
         </router-link>
       </nav>
       <div class="topbar__user">

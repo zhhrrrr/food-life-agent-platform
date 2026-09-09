@@ -11,4 +11,5 @@ export interface CurrentUser {
   id: number
   nickName: string
   icon: string
+  role?: 'USER' | 'ADMIN' | 'OPERATOR'
 }

@@ -7,6 +7,8 @@ import type {
   CreateSeckillOrderRequest,
   OrderListResponse,
   OrderStatus,
+  OperationAuditLogListResponse,
+  OperationAuditQuery,
   PaymentCallbackRequest,
   PaymentCallbackResponse,
   PaymentOrderResponse,
@@ -106,5 +108,13 @@ export function useOrder(orderId: number) {
   return request<UseOrderResponse>({
     url: `/trade-api/orders/${orderId}/use/local`,
     method: 'POST',
+  })
+}
+
+export function queryOperationAuditLogs(params: OperationAuditQuery) {
+  return request<OperationAuditLogListResponse>({
+    url: '/trade-api/operations/audit-logs',
+    method: 'GET',
+    params,
   })
 }
