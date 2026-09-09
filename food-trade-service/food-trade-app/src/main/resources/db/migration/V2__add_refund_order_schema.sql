@@ -1,0 +1,25 @@
+CREATE TABLE IF NOT EXISTS refund_order (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'refund order id',
+  refund_order_no VARCHAR(64) NOT NULL COMMENT 'refund order no',
+  pay_order_no VARCHAR(64) NOT NULL COMMENT 'pay order no',
+  order_id BIGINT NOT NULL COMMENT 'order id',
+  order_no VARCHAR(64) NOT NULL COMMENT 'order no',
+  user_id BIGINT NOT NULL COMMENT 'user id',
+  source VARCHAR(32) NOT NULL COMMENT 'source',
+  channel VARCHAR(32) NOT NULL COMMENT 'payment channel',
+  refund_amount BIGINT NOT NULL COMMENT 'refund amount in cents',
+  refund_status VARCHAR(32) NOT NULL COMMENT 'PREPARED/SUCCESS/FAILED',
+  refund_reason VARCHAR(255) DEFAULT '' COMMENT 'refund reason',
+  out_trade_no VARCHAR(64) DEFAULT NULL COMMENT 'provider trade no',
+  out_refund_no VARCHAR(64) DEFAULT NULL COMMENT 'provider refund no',
+  fail_reason VARCHAR(255) DEFAULT NULL COMMENT 'fail reason',
+  refund_time DATETIME DEFAULT NULL COMMENT 'refund success time',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'create time',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'update time',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_refund_order_no (refund_order_no),
+  UNIQUE KEY uk_pay_order_no (pay_order_no),
+  KEY idx_order_user (order_id, user_id),
+  KEY idx_status_time (refund_status, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='refund order';
+

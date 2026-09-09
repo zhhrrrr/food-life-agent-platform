@@ -79,6 +79,9 @@ mybatis-plus:
       id-type: auto
 
 food:
+  payment:
+    local:
+      callback-secret: ${LOCAL_PAYMENT_CALLBACK_SECRET:local-payment-secret}
   mq:
     enabled: ${FOOD_MQ_ENABLED:true}
   observability:

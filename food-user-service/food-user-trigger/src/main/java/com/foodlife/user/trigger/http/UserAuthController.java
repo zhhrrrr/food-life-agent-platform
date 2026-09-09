@@ -8,6 +8,7 @@ import com.foodlife.user.api.dto.LoginResponseDTO;
 import com.foodlife.user.domain.auth.service.AuthDomainService;
 import com.foodlife.user.domain.user.model.UserEntity;
 import com.foodlife.user.domain.user.repository.IUserRepository;
+import com.foodlife.user.domain.user.repository.IUserRoleRepository;
 import com.foodlife.user.types.constants.UserRedisConstants;
 import com.foodlife.user.types.response.Response;
 import lombok.extern.slf4j.Slf4j;
@@ -31,13 +32,16 @@ public class UserAuthController implements IUserAuthService {
     private final StringRedisTemplate stringRedisTemplate;
     private final AuthDomainService authDomainService;
     private final IUserRepository userRepository;
+    private final IUserRoleRepository userRoleRepository;
 
     public UserAuthController(StringRedisTemplate stringRedisTemplate,
                               AuthDomainService authDomainService,
-                              IUserRepository userRepository) {
+                              IUserRepository userRepository,
+                              IUserRoleRepository userRoleRepository) {
         this.stringRedisTemplate = stringRedisTemplate;
         this.authDomainService = authDomainService;
         this.userRepository = userRepository;
+        this.userRoleRepository = userRoleRepository;
     }
 
     @Override
@@ -100,7 +104,7 @@ public class UserAuthController implements IUserAuthService {
         userMap.put("id", String.valueOf(user.getId()));
         userMap.put("nickName", user.getNickName());
         userMap.put("icon", user.getIcon() == null ? "" : user.getIcon());
-        userMap.put("role", "USER");
+        userMap.put("role", userRoleRepository.findHighestRoleCodeByUserId(user.getId()));
         return userMap;
     }
 }

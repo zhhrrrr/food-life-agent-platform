@@ -11,4 +11,5 @@ public class OrderRefundCommandEntity implements Serializable {
     private String channel;
     private Long userId;
     private Long orderId;
+    private String refundReason;
 }

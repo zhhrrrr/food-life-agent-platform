@@ -1,6 +1,7 @@
 param(
     [string]$GatewayBaseUrl = "http://localhost:8080",
     [string]$Phone = "13800138063",
+    [string]$LocalPaymentSecret = "local-payment-secret",
     [string]$Mysql = "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe"
 )
 
@@ -52,6 +53,23 @@ function Invoke-MysqlScalar {
     return (($result | Select-Object -Last 1) -as [string]).Trim()
 }
 
+function Build-LocalPaymentSignature {
+    param(
+        [string]$PayOrderNo,
+        [string]$OutTradeNo,
+        [long]$PayAmount
+    )
+    $plainText = "$PayOrderNo|$OutTradeNo|$PayAmount|LOCAL_PAY|$LocalPaymentSecret"
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($plainText)
+        $hash = $sha256.ComputeHash($bytes)
+        return (($hash | ForEach-Object { $_.ToString("x2") }) -join "")
+    } finally {
+        $sha256.Dispose()
+    }
+}
+
 Invoke-FormPost `
     -Name "send login code" `
     -Uri "$GatewayBaseUrl/api/user/code?phone=$Phone" `
@@ -90,12 +108,20 @@ $payment = Invoke-JsonPost `
     -ExpectedCode "0000"
 
 $payOrderNo = $payment.data.payOrderNo
-$payAmount = $payment.data.payAmount
+$payAmount = [long]$payment.data.payAmount
+$outTradeNo = "OUT$([DateTimeOffset]::Now.ToUnixTimeMilliseconds())"
+$signature = Build-LocalPaymentSignature -PayOrderNo $payOrderNo -OutTradeNo $outTradeNo -PayAmount $payAmount
 
 Invoke-JsonPost `
     -Name "local payment callback" `
     -Uri "$GatewayBaseUrl/api/trade/pay/callback/local" `
-    -Body @{ payOrderNo = $payOrderNo; outTradeNo = "OUT$([DateTimeOffset]::Now.ToUnixTimeMilliseconds())"; payAmount = $payAmount } `
+    -Body @{
+        payOrderNo = $payOrderNo
+        outTradeNo = $outTradeNo
+        payAmount = $payAmount
+        signType = "SHA256"
+        signature = $signature
+    } `
     -ExpectedCode "0000" | Out-Null
 
 Invoke-FormPost `

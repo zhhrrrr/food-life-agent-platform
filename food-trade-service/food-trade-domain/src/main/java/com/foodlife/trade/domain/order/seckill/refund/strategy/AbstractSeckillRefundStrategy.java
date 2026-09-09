@@ -26,6 +26,7 @@ public abstract class AbstractSeckillRefundStrategy implements ISeckillRefundStr
         behavior.setOrderNo(order.getOrderNo());
         behavior.setOrderStatus(OrderStatusConstants.REFUNDED);
         behavior.setRefundBehavior(OrderRefundBehaviorEntity.RefundBehaviorEnum.SUCCESS);
+        behavior.setRefundReason(command.getRefundReason());
         behavior.setActivityId(seckillOrder.getActivityId());
         return behavior;
     }

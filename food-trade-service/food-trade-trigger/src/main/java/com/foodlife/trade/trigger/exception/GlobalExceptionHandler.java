@@ -67,6 +67,15 @@ public class GlobalExceptionHandler {
         if (normalizedMessage.contains("not login") || normalizedMessage.contains("not logged in")) {
             return ErrorCode.UNAUTHORIZED;
         }
+        if (normalizedMessage.contains("signature")) {
+            return ErrorCode.PAYMENT_CALLBACK_SIGNATURE_INVALID;
+        }
+        if (normalizedMessage.contains("payment refund failed")) {
+            return ErrorCode.PAYMENT_REFUND_FAILED;
+        }
+        if (normalizedMessage.contains("order status can not") || normalizedMessage.contains("status can not")) {
+            return ErrorCode.ORDER_STATUS_INVALID;
+        }
         if (normalizedMessage.contains("not found")) {
             return ErrorCode.NOT_FOUND;
         }

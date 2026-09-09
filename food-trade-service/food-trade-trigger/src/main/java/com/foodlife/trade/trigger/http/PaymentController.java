@@ -100,6 +100,8 @@ public class PaymentController {
         command.setOutTradeNo(request == null ? null : request.getOutTradeNo());
         command.setPayAmount(request == null ? null : request.getPayAmount());
         command.setPayTime(request == null ? null : request.getPayTime());
+        command.setSignType(readOrDefault(request == null ? null : request.getSignType(), "SHA256"));
+        command.setSignature(request == null ? null : request.getSignature());
         return command;
     }
 

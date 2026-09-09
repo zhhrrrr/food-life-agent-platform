@@ -9,6 +9,9 @@ public enum ErrorCode {
     NOT_FOUND("404", "not found"),
     TOO_MANY_REQUESTS("429", "too many requests"),
     SERVICE_UNAVAILABLE("503", "service unavailable"),
+    ORDER_STATUS_INVALID("ORDER_409", "order status invalid"),
+    PAYMENT_CALLBACK_SIGNATURE_INVALID("PAYMENT_401", "payment callback signature invalid"),
+    PAYMENT_REFUND_FAILED("PAYMENT_502", "payment refund failed"),
     INTERNAL_ERROR("500", "internal server error");
 
     private final String code;

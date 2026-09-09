@@ -663,9 +663,10 @@ public class OrderController {
     private OrderRefundCommandEntity toRefundCommand(Long orderId, RefundOrderRequestDTO request) {
         OrderRefundCommandEntity command = new OrderRefundCommandEntity();
         command.setSource(readOrDefault(request == null ? null : request.getSource(), "FOOD_LIFE"));
-        command.setChannel(readOrDefault(request == null ? null : request.getChannel(), "MOCK_REFUND"));
+        command.setChannel(readOrDefault(request == null ? null : request.getChannel(), PaymentChannelConstants.LOCAL_PAY));
         command.setUserId(request != null && request.getUserId() != null ? request.getUserId() : UserHolder.getUserId());
         command.setOrderId(orderId);
+        command.setRefundReason(readOrDefault(request == null ? null : request.getRefundReason(), "order refund"));
         return command;
     }
 
@@ -684,6 +685,8 @@ public class OrderController {
         response.setOrderNo(result.getOrderNo());
         response.setOrderStatus(result.getOrderStatus());
         response.setRefundBehavior(result.getRefundBehavior().getCode());
+        response.setRefundOrderNo(result.getRefundOrderNo());
+        response.setOutRefundNo(result.getOutRefundNo());
         response.setUserCouponId(result.getUserCouponId());
         response.setCouponReturned(result.getCouponReturned());
         response.setCouponReturnStatus(result.getCouponReturnStatus());

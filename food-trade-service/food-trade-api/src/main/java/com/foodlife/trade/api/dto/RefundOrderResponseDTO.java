@@ -14,6 +14,8 @@ public class RefundOrderResponseDTO implements Serializable {
     private String orderNo;
     private String orderStatus;
     private String refundBehavior;
+    private String refundOrderNo;
+    private String outRefundNo;
     private Long userCouponId;
     private Boolean couponReturned;
     private String couponReturnStatus;

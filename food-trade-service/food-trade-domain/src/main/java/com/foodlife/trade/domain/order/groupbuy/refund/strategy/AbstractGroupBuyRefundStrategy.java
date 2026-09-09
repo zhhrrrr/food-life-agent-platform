@@ -26,6 +26,7 @@ public abstract class AbstractGroupBuyRefundStrategy implements IGroupBuyRefundS
         behavior.setOrderNo(order.getOrderNo());
         behavior.setOrderStatus(OrderStatusConstants.REFUNDED);
         behavior.setRefundBehavior(OrderRefundBehaviorEntity.RefundBehaviorEnum.SUCCESS);
+        behavior.setRefundReason(command.getRefundReason());
         behavior.setTeamId(team.getTeamId());
         behavior.setActivityId(team.getActivityId());
         behavior.setTeamStatus(team.getTeamStatus());

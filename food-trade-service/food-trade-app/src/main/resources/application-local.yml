@@ -107,6 +107,9 @@ mybatis-plus:
       id-type: auto
 
 food:
+  payment:
+    local:
+      callback-secret: ${LOCAL_PAYMENT_CALLBACK_SECRET:local-payment-secret}
   observability:
     enabled: true
     trace-header: X-Trace-Id
