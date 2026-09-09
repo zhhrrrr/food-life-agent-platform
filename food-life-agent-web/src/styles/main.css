@@ -167,6 +167,27 @@ h3 {
   font-weight: 680;
 }
 
+.nav-menu-button {
+  display: inline-flex;
+  min-width: 86px;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.nav-menu-button:hover {
+  color: var(--brand-dark);
+  background: #fff;
+}
+
 .topbar__nav a.router-link-active {
   color: var(--brand-dark);
   background: #fff;
@@ -281,7 +302,8 @@ h3 {
 .home-view,
 .detail-view,
 .orders-view,
-.operation-audit-view {
+.operation-audit-view,
+.operation-view {
   padding-top: 26px;
 }
 
@@ -640,6 +662,12 @@ h3 {
   padding-top: 18px;
 }
 
+.operation-view {
+  display: grid;
+  gap: 18px;
+  padding-top: 18px;
+}
+
 .audit-head {
   align-items: center;
   padding: 28px;
@@ -647,6 +675,172 @@ h3 {
   border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--shadow);
+}
+
+.operation-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.operation-workbench {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.7fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.operation-panel,
+.operation-result,
+.message-card,
+.queue-pill {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 12px 28px rgba(87, 43, 24, 0.08);
+}
+
+.operation-panel,
+.operation-result {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.panel-title .el-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--brand);
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric-grid span {
+  min-height: 42px;
+  padding: 11px 12px;
+  border-radius: 8px;
+  color: var(--text);
+  background: #fff4ea;
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.muted-grid {
+  margin-top: 8px;
+}
+
+.operation-filter-panel {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(160px, 1fr) minmax(160px, 1fr) 120px auto;
+  gap: 10px;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 12px 30px rgba(87, 43, 24, 0.08);
+}
+
+.order-search-panel {
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+}
+
+.queue-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.queue-pill {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 58px;
+  padding: 12px;
+}
+
+.queue-pill .el-icon {
+  color: var(--green);
+}
+
+.queue-pill strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-pill span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.queue-pill.alert .el-icon,
+.queue-pill.alert span {
+  color: var(--brand-dark);
+}
+
+.message-list,
+.operation-order-list {
+  display: grid;
+  min-height: 320px;
+  gap: 14px;
+}
+
+.message-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.message-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.message-card__top p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.message-card pre {
+  max-height: 120px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 8px;
+  color: #3f312b;
+  background: #fff8f2;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .audit-filter-panel {
@@ -897,8 +1091,17 @@ h3 {
   .search-box,
   .inline-controls,
   .order-filters,
-  .audit-filter-panel {
+  .audit-filter-panel,
+  .operation-filter-panel,
+  .order-search-panel,
+  .operation-workbench,
+  .queue-strip {
     grid-template-columns: 1fr;
+  }
+
+  .operation-hero {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .audit-filter-panel__actions {

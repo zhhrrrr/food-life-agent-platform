@@ -11,11 +11,18 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.amqp.rabbit.annotation.EnableRabbit;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
 
 @Configuration
 @EnableRabbit
 @ConditionalOnProperty(prefix = "food.mq", name = "enabled", havingValue = "true")
 public class TradeRabbitMqConfiguration {
+
+    @Bean
+    public RabbitAdmin rabbitAdmin(ConnectionFactory connectionFactory) {
+        return new RabbitAdmin(connectionFactory);
+    }
 
     @Bean
     public DirectExchange tradeOrderExchange() {
@@ -28,6 +35,11 @@ public class TradeRabbitMqConfiguration {
     }
 
     @Bean
+    public DirectExchange tradeDeadLetterExchange(TradeRabbitMqProperties properties) {
+        return new DirectExchange(properties.getDeadLetterExchange(), true, false);
+    }
+
+    @Bean
     public Queue orderTimeoutDelayQueue(TradeRabbitMqProperties properties) {
         return QueueBuilder.durable(properties.getOrderTimeoutDelayQueue())
                 .deadLetterExchange(TradeMqTopics.TRADE_ORDER_TOPIC)
@@ -37,17 +49,41 @@ public class TradeRabbitMqConfiguration {
 
     @Bean
     public Queue orderTimeoutCloseQueue(TradeRabbitMqProperties properties) {
-        return QueueBuilder.durable(properties.getOrderTimeoutCloseQueue()).build();
+        return QueueBuilder.durable(properties.getOrderTimeoutCloseQueue())
+                .deadLetterExchange(properties.getDeadLetterExchange())
+                .deadLetterRoutingKey(properties.getOrderTimeoutCloseDeadLetterQueue())
+                .build();
     }
 
     @Bean
     public Queue tradeOrderEventQueue(TradeRabbitMqProperties properties) {
-        return QueueBuilder.durable(properties.getTradeOrderEventQueue()).build();
+        return QueueBuilder.durable(properties.getTradeOrderEventQueue())
+                .deadLetterExchange(properties.getDeadLetterExchange())
+                .deadLetterRoutingKey(properties.getTradeOrderEventDeadLetterQueue())
+                .build();
     }
 
     @Bean
     public Queue paymentEventQueue(TradeRabbitMqProperties properties) {
-        return QueueBuilder.durable(properties.getPaymentEventQueue()).build();
+        return QueueBuilder.durable(properties.getPaymentEventQueue())
+                .deadLetterExchange(properties.getDeadLetterExchange())
+                .deadLetterRoutingKey(properties.getPaymentEventDeadLetterQueue())
+                .build();
+    }
+
+    @Bean
+    public Queue orderTimeoutCloseDeadLetterQueue(TradeRabbitMqProperties properties) {
+        return QueueBuilder.durable(properties.getOrderTimeoutCloseDeadLetterQueue()).build();
+    }
+
+    @Bean
+    public Queue tradeOrderEventDeadLetterQueue(TradeRabbitMqProperties properties) {
+        return QueueBuilder.durable(properties.getTradeOrderEventDeadLetterQueue()).build();
+    }
+
+    @Bean
+    public Queue paymentEventDeadLetterQueue(TradeRabbitMqProperties properties) {
+        return QueueBuilder.durable(properties.getPaymentEventDeadLetterQueue()).build();
     }
 
     @Bean
@@ -65,6 +101,27 @@ public class TradeRabbitMqConfiguration {
         return BindingBuilder.bind(orderTimeoutCloseQueue)
                 .to(tradeOrderExchange)
                 .with(TradeMqTopics.ORDER_CANCEL_TIMEOUT);
+    }
+
+    @Bean
+    public Binding orderTimeoutCloseDeadLetterBinding(@Qualifier("orderTimeoutCloseDeadLetterQueue") Queue queue,
+                                                      @Qualifier("tradeDeadLetterExchange") DirectExchange exchange,
+                                                      TradeRabbitMqProperties properties) {
+        return BindingBuilder.bind(queue).to(exchange).with(properties.getOrderTimeoutCloseDeadLetterQueue());
+    }
+
+    @Bean
+    public Binding tradeOrderEventDeadLetterBinding(@Qualifier("tradeOrderEventDeadLetterQueue") Queue queue,
+                                                    @Qualifier("tradeDeadLetterExchange") DirectExchange exchange,
+                                                    TradeRabbitMqProperties properties) {
+        return BindingBuilder.bind(queue).to(exchange).with(properties.getTradeOrderEventDeadLetterQueue());
+    }
+
+    @Bean
+    public Binding paymentEventDeadLetterBinding(@Qualifier("paymentEventDeadLetterQueue") Queue queue,
+                                                 @Qualifier("tradeDeadLetterExchange") DirectExchange exchange,
+                                                 TradeRabbitMqProperties properties) {
+        return BindingBuilder.bind(queue).to(exchange).with(properties.getPaymentEventDeadLetterQueue());
     }
 
     @Bean

@@ -199,3 +199,81 @@ export interface OperationAuditQuery {
   bizId?: string
   limit?: number
 }
+
+export interface OperationPackageStockAdjustRequest {
+  packageId: number
+  adjustQuantity: number
+  reason: string
+  operationId: string
+}
+
+export interface OperationPackageStockAdjustResponse {
+  operationId: string
+  operatorId: number
+  packageId: number
+  adjustQuantity: number
+  stock: number
+  sold: number
+  txStatus: string
+}
+
+export interface OperationOrderQuery {
+  userId?: number
+  orderId?: number
+  orderNo?: string
+  tradeType?: TradeType | ''
+  orderStatus?: OrderStatus | ''
+  pageSize?: number
+}
+
+export interface OperationMqMessage {
+  id: number
+  messageId: string
+  messageType: string
+  bizType: string
+  bizId: string
+  messageStatus: string
+  retryCount: number
+  maxRetryCount: number
+  nextRetryTime?: string
+  content?: string
+  failReason?: string
+  createTime: string
+  updateTime: string
+}
+
+export interface OperationMqMessageListResponse {
+  messages: OperationMqMessage[]
+}
+
+export interface OperationMqRepublishResponse {
+  messageId: string
+  accepted: boolean
+  messageStatus: string
+  remark: string
+}
+
+export interface OperationMqQueue {
+  queueName: string
+  messageCount: number
+  consumerCount: number
+  backlogThreshold: number
+  backlogAlarm: boolean
+}
+
+export interface OperationMqQueueListResponse {
+  queues: OperationMqQueue[]
+}
+
+export interface PaymentReconcileResponse {
+  scannedPaymentCount: number
+  preparedPaymentCount: number
+  successPaymentCount: number
+  closedPaymentCount: number
+  refundedPaymentCount: number
+  scannedRefundCount: number
+  preparedRefundCount: number
+  successRefundCount: number
+  failedRefundCount: number
+  inconsistentPayOrderNos: string[]
+}

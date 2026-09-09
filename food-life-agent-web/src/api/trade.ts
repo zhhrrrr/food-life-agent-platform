@@ -9,10 +9,17 @@ import type {
   OrderStatus,
   OperationAuditLogListResponse,
   OperationAuditQuery,
+  OperationMqMessageListResponse,
+  OperationMqQueueListResponse,
+  OperationMqRepublishResponse,
+  OperationOrderQuery,
+  OperationPackageStockAdjustRequest,
+  OperationPackageStockAdjustResponse,
   PaymentCallbackRequest,
   PaymentCallbackResponse,
   PaymentOrderResponse,
   PaymentPrepareRequest,
+  PaymentReconcileResponse,
   RefundOrderResponse,
   SeckillActivityListResponse,
   TradeType,
@@ -117,5 +124,69 @@ export function queryOperationAuditLogs(params: OperationAuditQuery) {
     url: '/trade-api/operations/audit-logs',
     method: 'GET',
     params,
+  })
+}
+
+export function operationAdjustPackageStock(data: OperationPackageStockAdjustRequest) {
+  return request<OperationPackageStockAdjustResponse>({
+    url: '/trade-api/operations/package-stock-adjustments',
+    method: 'POST',
+    data,
+  })
+}
+
+export function operationConfirmRefund(orderId: number, userId?: number, refundReason = 'operation refund confirm') {
+  return request<RefundOrderResponse>({
+    url: `/trade-api/orders/${orderId}/refund/confirm`,
+    method: 'POST',
+    data: {
+      source: 'FOOD_LIFE_OPERATION',
+      channel: 'LOCAL_PAY',
+      userId,
+      refundReason,
+    },
+  })
+}
+
+export function queryOperationOrders(params: OperationOrderQuery) {
+  return request<OrderListResponse>({
+    url: '/trade-api/operations/orders',
+    method: 'GET',
+    params,
+  })
+}
+
+export function queryOperationMqMessages(params: {
+  messageStatus?: string
+  messageType?: string
+  bizId?: string
+  limit?: number
+}) {
+  return request<OperationMqMessageListResponse>({
+    url: '/trade-api/operations/mq/messages',
+    method: 'GET',
+    params,
+  })
+}
+
+export function republishOperationMqMessage(messageId: string) {
+  return request<OperationMqRepublishResponse>({
+    url: `/trade-api/operations/mq/messages/${encodeURIComponent(messageId)}/republish`,
+    method: 'POST',
+  })
+}
+
+export function queryOperationMqQueues() {
+  return request<OperationMqQueueListResponse>({
+    url: '/trade-api/operations/mq/queues',
+    method: 'GET',
+  })
+}
+
+export function reconcileOperationPayments(limit = 50) {
+  return request<PaymentReconcileResponse>({
+    url: '/trade-api/operations/payments/reconcile',
+    method: 'POST',
+    params: { limit },
   })
 }

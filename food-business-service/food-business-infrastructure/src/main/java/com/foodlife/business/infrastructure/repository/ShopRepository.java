@@ -9,6 +9,7 @@ import com.foodlife.business.infrastructure.dao.IShopCategoryMapper;
 import com.foodlife.business.infrastructure.dao.IShopMapper;
 import com.foodlife.business.infrastructure.dao.po.ShopCategoryPO;
 import com.foodlife.business.infrastructure.dao.po.ShopPO;
+import com.foodlife.business.infrastructure.cache.BusinessCacheSupport;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
 
@@ -20,10 +21,14 @@ public class ShopRepository implements IShopRepository {
 
     private final IShopCategoryMapper shopCategoryMapper;
     private final IShopMapper shopMapper;
+    private final BusinessCacheSupport cacheSupport;
 
-    public ShopRepository(IShopCategoryMapper shopCategoryMapper, IShopMapper shopMapper) {
+    public ShopRepository(IShopCategoryMapper shopCategoryMapper,
+                          IShopMapper shopMapper,
+                          BusinessCacheSupport cacheSupport) {
         this.shopCategoryMapper = shopCategoryMapper;
         this.shopMapper = shopMapper;
+        this.cacheSupport = cacheSupport;
     }
 
     @Override
@@ -37,7 +42,15 @@ public class ShopRepository implements IShopRepository {
 
     @Override
     public ShopEntity findShopById(Long id) {
-        return toShopEntity(shopMapper.selectById(id));
+        ShopEntity cached = cacheSupport.getObject(cacheSupport.shopKey(id), ShopEntity.class);
+        if (cached != null) {
+            return cached;
+        }
+        ShopEntity shop = toShopEntity(shopMapper.selectById(id));
+        if (shop != null) {
+            cacheSupport.putShop(id, shop);
+        }
+        return shop;
     }
 
     @Override

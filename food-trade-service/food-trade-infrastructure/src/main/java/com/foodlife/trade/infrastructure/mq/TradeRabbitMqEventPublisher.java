@@ -88,6 +88,21 @@ public class TradeRabbitMqEventPublisher implements ITradeEventPublisher {
         return successCount;
     }
 
+    @Override
+    public boolean republishMessage(String messageId) {
+        TradeLocalMessagePO message = findByMessageId(messageId);
+        if (message == null) {
+            return false;
+        }
+        if (LocalMessageStatusConstants.SUCCESS.equals(message.getMessageStatus())) {
+            return true;
+        }
+        if (!resetForRepublish(message.getId())) {
+            return false;
+        }
+        return publishStoredMessage(findByMessageId(messageId));
+    }
+
     private void publishAfterCommit(String messageId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             publishStoredMessage(findByMessageId(messageId));
@@ -211,6 +226,18 @@ public class TradeRabbitMqEventPublisher implements ITradeEventPublisher {
                 .set(TradeLocalMessagePO::getFailReason, null)
                 .set(TradeLocalMessagePO::getUpdateTime, LocalDateTime.now())
                 .eq(TradeLocalMessagePO::getId, id));
+    }
+
+    private boolean resetForRepublish(Long id) {
+        int updated = tradeLocalMessageMapper.update(null, new LambdaUpdateWrapper<TradeLocalMessagePO>()
+                .set(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.INIT)
+                .set(TradeLocalMessagePO::getRetryCount, 0)
+                .set(TradeLocalMessagePO::getNextRetryTime, LocalDateTime.now())
+                .set(TradeLocalMessagePO::getFailReason, "operation republish")
+                .set(TradeLocalMessagePO::getUpdateTime, LocalDateTime.now())
+                .eq(TradeLocalMessagePO::getId, id)
+                .ne(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.SUCCESS));
+        return updated > 0;
     }
 
     private void markRetryOrFailed(TradeLocalMessagePO message, String failReason) {

@@ -52,3 +52,17 @@ export function unfavoriteShop(shopId: number) {
     method: 'DELETE',
   })
 }
+
+export function preheatBusinessCache(params: { shopId?: number; packageId?: number }) {
+  return request<{
+    shopId?: number
+    packageId?: number
+    shopPreheated?: boolean
+    packageCount?: number
+    packageSnapshotPreheated?: boolean
+  }>({
+    url: '/business-api/business/operations/cache/preheat',
+    method: 'POST',
+    params,
+  })
+}

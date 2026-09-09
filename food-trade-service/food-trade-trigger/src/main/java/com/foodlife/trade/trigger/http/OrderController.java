@@ -49,6 +49,7 @@ import com.foodlife.trade.domain.order.model.OrderDetailEntity;
 import com.foodlife.trade.domain.order.model.OrderListResult;
 import com.foodlife.trade.domain.order.model.OrderPaySettlementEntity;
 import com.foodlife.trade.domain.order.model.OrderPaySuccessEntity;
+import com.foodlife.trade.domain.order.model.OperationOrderQuery;
 import com.foodlife.trade.domain.order.model.OrderRefundBehaviorEntity;
 import com.foodlife.trade.domain.order.model.OrderRefundCommandEntity;
 import com.foodlife.trade.domain.order.model.OrderSummaryEntity;
@@ -248,6 +249,27 @@ public class OrderController {
         try {
             OrderListResult result = orderDomainService.queryUserOrderList(UserHolder.getUserId(), lastId, pageSize, tradeType, orderStatus);
             return Response.success(toOrderListResponse(result));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
+    }
+
+    @GetMapping("/operations/orders")
+    public Response<OrderListResponseDTO> queryOperationOrderList(@RequestParam(required = false) Long userId,
+                                                                  @RequestParam(required = false) Long orderId,
+                                                                  @RequestParam(required = false) String orderNo,
+                                                                  @RequestParam(required = false) Integer pageSize,
+                                                                  @RequestParam(required = false) String tradeType,
+                                                                  @RequestParam(required = false) String orderStatus) {
+        try {
+            OperationOrderQuery query = new OperationOrderQuery();
+            query.setUserId(userId);
+            query.setOrderId(orderId);
+            query.setOrderNo(orderNo);
+            query.setPageSize(pageSize);
+            query.setTradeType(tradeType);
+            query.setOrderStatus(orderStatus);
+            return Response.success(toOrderListResponse(orderDomainService.queryOperationOrderList(query)));
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
