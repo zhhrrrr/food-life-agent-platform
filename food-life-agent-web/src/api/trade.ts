@@ -100,6 +100,7 @@ export function applyRefund(orderId: number) {
     data: {
       source: 'FOOD_LIFE_WEB',
       channel: 'LOCAL_PAY',
+      refundReason: 'web user refund',
     },
   })
 }

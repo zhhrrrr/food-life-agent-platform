@@ -101,6 +101,8 @@ export interface PaymentCallbackRequest {
   outTradeNo: string
   payAmount: number
   payTime: string
+  signType: 'SHA256'
+  signature: string
 }
 
 export interface PaySettlementResponse {
@@ -140,6 +142,8 @@ export interface RefundOrderResponse {
   orderNo: string
   orderStatus: OrderStatus
   refundBehavior: string
+  refundOrderNo?: string
+  outRefundNo?: string
   userCouponId?: number
   couponReturned?: boolean
   couponReturnStatus?: string

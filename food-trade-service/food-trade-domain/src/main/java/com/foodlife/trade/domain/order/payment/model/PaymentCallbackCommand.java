@@ -12,4 +12,6 @@ public class PaymentCallbackCommand implements Serializable {
     private String outTradeNo;
     private Long payAmount;
     private LocalDateTime payTime;
+    private String signType;
+    private String signature;
 }

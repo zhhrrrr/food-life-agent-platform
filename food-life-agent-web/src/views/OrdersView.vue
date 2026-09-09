@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import OrderCard from '../components/OrderCard.vue'
 import { applyRefund, cancelOrder, localPaymentCallback, preparePayment, queryOrders, useOrder } from '../api/trade'
 import type { OrderInfo, OrderStatus, TradeType } from '../types/order'
+import { buildLocalPaymentSignature } from '../utils/localPayment'
 
 const orders = ref<OrderInfo[]>([])
 const loading = ref(false)
@@ -53,11 +54,19 @@ async function runOrderAction(order: OrderInfo, action: () => Promise<void>) {
 async function handlePay(order: OrderInfo) {
   await runOrderAction(order, async () => {
     const paymentOrder = await preparePayment(order.orderId)
+    const outTradeNo = buildOutTradeNo(order)
+    const signature = await buildLocalPaymentSignature({
+      payOrderNo: paymentOrder.payOrderNo,
+      outTradeNo,
+      payAmount: paymentOrder.payAmount,
+    })
     await localPaymentCallback({
       payOrderNo: paymentOrder.payOrderNo,
-      outTradeNo: buildOutTradeNo(order),
+      outTradeNo,
       payAmount: paymentOrder.payAmount,
       payTime: localDateTimeNow(),
+      signType: 'SHA256',
+      signature,
     })
     ElMessage.success('支付成功')
   })

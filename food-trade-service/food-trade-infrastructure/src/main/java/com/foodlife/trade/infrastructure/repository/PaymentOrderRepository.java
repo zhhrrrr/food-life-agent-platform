@@ -73,6 +73,17 @@ public class PaymentOrderRepository implements IPaymentOrderRepository {
     }
 
     @Override
+    public List<PaymentOrderEntity> listRecentPaymentOrders(Integer limit) {
+        int safeLimit = limit == null || limit <= 0 || limit > 500 ? 100 : limit;
+        return paymentOrderMapper.selectList(new LambdaQueryWrapper<PaymentOrderPO>()
+                        .orderByDesc(PaymentOrderPO::getId)
+                        .last("limit " + safeLimit))
+                .stream()
+                .map(this::toEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public boolean markPayClosed(String payOrderNo, String fromStatus) {
         PaymentOrderPO updatePO = new PaymentOrderPO();
         updatePO.setPayStatus(PaymentOrderStatusConstants.CLOSED);
