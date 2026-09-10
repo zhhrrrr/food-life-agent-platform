@@ -1,15 +1,17 @@
 import http from 'k6/http'
 import { check, sleep } from 'k6'
 
+const smoke = __ENV.K6_PROFILE === 'smoke'
+
 export const options = {
   scenarios: {
     seckill_order: {
       executor: 'constant-arrival-rate',
-      rate: Number(__ENV.RATE || 80),
+      rate: Number(__ENV.RATE || (smoke ? 3 : 80)),
       timeUnit: '1s',
-      duration: __ENV.DURATION || '1m',
-      preAllocatedVUs: 100,
-      maxVUs: 500,
+      duration: __ENV.DURATION || (smoke ? '15s' : '1m'),
+      preAllocatedVUs: Number(__ENV.SECKILL_PRE_ALLOCATED_VUS || (smoke ? 10 : 100)),
+      maxVUs: Number(__ENV.SECKILL_MAX_VUS || (smoke ? 30 : 500)),
     },
   },
   thresholds: {

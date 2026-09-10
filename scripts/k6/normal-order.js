@@ -1,18 +1,20 @@
 import http from 'k6/http'
 import { check, sleep } from 'k6'
 
+const smoke = __ENV.K6_PROFILE === 'smoke'
+
 export const options = {
   scenarios: {
     normal_order: {
       executor: 'ramping-arrival-rate',
-      startRate: 5,
+      startRate: Number(__ENV.NORMAL_START_RATE || (smoke ? 1 : 5)),
       timeUnit: '1s',
-      preAllocatedVUs: 50,
-      maxVUs: 200,
+      preAllocatedVUs: Number(__ENV.NORMAL_PRE_ALLOCATED_VUS || (smoke ? 5 : 50)),
+      maxVUs: Number(__ENV.NORMAL_MAX_VUS || (smoke ? 20 : 200)),
       stages: [
-        { duration: '30s', target: 20 },
-        { duration: '1m', target: 60 },
-        { duration: '30s', target: 0 },
+        { duration: __ENV.NORMAL_WARMUP_DURATION || (smoke ? '5s' : '30s'), target: Number(__ENV.NORMAL_WARMUP_TARGET || (smoke ? 2 : 20)) },
+        { duration: __ENV.NORMAL_RUN_DURATION || (smoke ? '10s' : '1m'), target: Number(__ENV.NORMAL_RUN_TARGET || (smoke ? 3 : 60)) },
+        { duration: __ENV.NORMAL_RAMPDOWN_DURATION || (smoke ? '5s' : '30s'), target: 0 },
       ],
     },
   },
