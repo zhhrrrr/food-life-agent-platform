@@ -121,8 +121,16 @@ function Wait-Health {
         try {
             $response = Invoke-RestMethod -Method Get -Uri $Service.Health -TimeoutSec 2
             if ($response.code -eq "0000") {
-                Write-Host "$($Service.Name) healthy on port $($Service.Port)"
-                return
+                Start-Sleep -Seconds 3
+                $processId = Get-PortProcessId -Port $Service.Port
+                if ($null -eq $processId) {
+                    throw "$($Service.Name) health was transient but process exited."
+                }
+                $confirm = Invoke-RestMethod -Method Get -Uri $Service.Health -TimeoutSec 2
+                if ($confirm.code -eq "0000") {
+                    Write-Host "$($Service.Name) healthy on port $($Service.Port)"
+                    return
+                }
             }
         } catch {
             Start-Sleep -Seconds 2
@@ -148,6 +156,7 @@ foreach ($service in $Services) {
     $processId = Get-PortProcessId -Port $service.Port
     if ($null -ne $processId) {
         Write-Host "$($service.Name) already running on port $($service.Port), pid=$processId"
+        Wait-Health -Service $service
         continue
     }
 
@@ -172,9 +181,7 @@ foreach ($service in $Services) {
         -RedirectStandardOutput (Join-Path $Root $service.OutLog) `
         -RedirectStandardError (Join-Path $Root $service.ErrLog) `
         -WindowStyle Hidden
-}
 
-foreach ($service in $Services) {
     Wait-Health -Service $service
 }
 

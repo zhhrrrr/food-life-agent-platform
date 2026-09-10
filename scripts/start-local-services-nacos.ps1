@@ -3,8 +3,8 @@ param(
     [switch]$Restart,
     [switch]$WithoutGateway,
     [string]$NacosServerAddr = "127.0.0.1:8848",
-    [string]$NacosUsername = "",
-    [string]$NacosPassword = "",
+    [string]$NacosUsername = "nacos",
+    [string]$NacosPassword = "nacos",
     [string]$NacosNamespace = "",
     [string]$NacosDiscoveryGroup = "FOOD_LIFE_AGENT",
     [string]$NacosConfigGroup = "FOOD_LIFE_AGENT"

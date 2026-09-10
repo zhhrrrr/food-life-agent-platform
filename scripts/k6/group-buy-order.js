@@ -1,14 +1,16 @@
 import http from 'k6/http'
 import { check, sleep } from 'k6'
 
+const smoke = __ENV.K6_PROFILE === 'smoke'
+
 export const options = {
   scenarios: {
     group_buy_order: {
       executor: 'ramping-vus',
       stages: [
-        { duration: '30s', target: 30 },
-        { duration: '1m', target: 80 },
-        { duration: '30s', target: 0 },
+        { duration: __ENV.GROUP_WARMUP_DURATION || (smoke ? '5s' : '30s'), target: Number(__ENV.GROUP_WARMUP_TARGET || (smoke ? 2 : 30)) },
+        { duration: __ENV.GROUP_RUN_DURATION || (smoke ? '10s' : '1m'), target: Number(__ENV.GROUP_RUN_TARGET || (smoke ? 5 : 80)) },
+        { duration: __ENV.GROUP_RAMPDOWN_DURATION || (smoke ? '5s' : '30s'), target: 0 },
       ],
     },
   },
