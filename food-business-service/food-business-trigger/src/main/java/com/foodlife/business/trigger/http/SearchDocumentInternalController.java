@@ -33,6 +33,11 @@ public class SearchDocumentInternalController {
         return Response.success(toResponse(searchDocumentDomainService.listPackageDocuments(limit)));
     }
 
+    @GetMapping("/reviews")
+    public Response<SearchDocumentListResponseDTO> listReviewDocuments(@RequestParam(required = false) Integer limit) {
+        return Response.success(toResponse(searchDocumentDomainService.listReviewDocuments(limit)));
+    }
+
     private SearchDocumentListResponseDTO toResponse(List<SearchDocumentEntity> documents) {
         List<SearchDocumentResponseDTO> items = documents.stream()
                 .map(this::toDocumentResponse)

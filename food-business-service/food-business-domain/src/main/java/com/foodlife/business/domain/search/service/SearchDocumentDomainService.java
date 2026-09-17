@@ -26,6 +26,10 @@ public class SearchDocumentDomainService {
         return searchDocumentRepository.listPackageDocuments(normalizeLimit(limit));
     }
 
+    public List<SearchDocumentEntity> listReviewDocuments(Integer limit) {
+        return searchDocumentRepository.listReviewDocuments(normalizeLimit(limit));
+    }
+
     private Integer normalizeLimit(Integer limit) {
         if (limit == null || limit <= 0) {
             return DEFAULT_LIMIT;

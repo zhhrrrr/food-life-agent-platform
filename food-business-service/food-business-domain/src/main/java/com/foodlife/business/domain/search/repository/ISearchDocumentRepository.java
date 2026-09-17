@@ -9,4 +9,6 @@ public interface ISearchDocumentRepository {
     List<SearchDocumentEntity> listShopDocuments(Integer limit);
 
     List<SearchDocumentEntity> listPackageDocuments(Integer limit);
+
+    List<SearchDocumentEntity> listReviewDocuments(Integer limit);
 }

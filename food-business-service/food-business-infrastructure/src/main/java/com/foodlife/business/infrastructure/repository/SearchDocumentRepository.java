@@ -6,9 +6,11 @@ import com.foodlife.business.domain.search.repository.ISearchDocumentRepository;
 import com.foodlife.business.infrastructure.dao.IMealPackageMapper;
 import com.foodlife.business.infrastructure.dao.IShopCategoryMapper;
 import com.foodlife.business.infrastructure.dao.IShopMapper;
+import com.foodlife.business.infrastructure.dao.IShopReviewMapper;
 import com.foodlife.business.infrastructure.dao.po.MealPackagePO;
 import com.foodlife.business.infrastructure.dao.po.ShopCategoryPO;
 import com.foodlife.business.infrastructure.dao.po.ShopPO;
+import com.foodlife.business.infrastructure.dao.po.ShopReviewPO;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
 
@@ -24,17 +26,21 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
 
     private static final String SHOP_SOURCE = "food_shop_index";
     private static final String PACKAGE_SOURCE = "food_package_index";
+    private static final String REVIEW_SOURCE = "food_review_index";
 
     private final IShopMapper shopMapper;
     private final IShopCategoryMapper shopCategoryMapper;
     private final IMealPackageMapper mealPackageMapper;
+    private final IShopReviewMapper shopReviewMapper;
 
     public SearchDocumentRepository(IShopMapper shopMapper,
                                     IShopCategoryMapper shopCategoryMapper,
-                                    IMealPackageMapper mealPackageMapper) {
+                                    IMealPackageMapper mealPackageMapper,
+                                    IShopReviewMapper shopReviewMapper) {
         this.shopMapper = shopMapper;
         this.shopCategoryMapper = shopCategoryMapper;
         this.mealPackageMapper = mealPackageMapper;
+        this.shopReviewMapper = shopReviewMapper;
     }
 
     @Override
@@ -61,6 +67,23 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public List<SearchDocumentEntity> listReviewDocuments(Integer limit) {
+        Map<Long, ShopPO> shopMap = listShopMap();
+        Map<Long, MealPackagePO> packageMap = listPackageMap();
+        return shopReviewMapper.selectList(new LambdaQueryWrapper<ShopReviewPO>()
+                        .eq(ShopReviewPO::getReviewStatus, 1)
+                        .orderByDesc(ShopReviewPO::getId)
+                        .last("limit " + limit))
+                .stream()
+                .map(review -> toReviewDocument(
+                        review,
+                        shopMap.get(review.getShopId()),
+                        packageMap.get(review.getPackageId())
+                ))
+                .collect(Collectors.toList());
+    }
+
     private Map<Long, ShopCategoryPO> listCategoryMap() {
         return shopCategoryMapper.selectList(new LambdaQueryWrapper<ShopCategoryPO>())
                 .stream()
@@ -75,6 +98,16 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
         }
         return shops.stream()
                 .collect(Collectors.toMap(ShopPO::getId, Function.identity(), (left, right) -> left));
+    }
+
+    private Map<Long, MealPackagePO> listPackageMap() {
+        List<MealPackagePO> packages = mealPackageMapper.selectList(new LambdaQueryWrapper<MealPackagePO>()
+                .eq(MealPackagePO::getStatus, 1));
+        if (packages == null || packages.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return packages.stream()
+                .collect(Collectors.toMap(MealPackagePO::getId, Function.identity(), (left, right) -> left));
     }
 
     private SearchDocumentEntity toShopDocument(ShopPO shop, ShopCategoryPO category) {
@@ -131,6 +164,36 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
         ));
         document.setSource(PACKAGE_SOURCE);
         document.setCategory("meal_package");
+        document.setMetadata(metadata);
+        return document;
+    }
+
+    private SearchDocumentEntity toReviewDocument(ShopReviewPO review, ShopPO shop, MealPackagePO mealPackage) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("reviewId", review.getId());
+        metadata.put("reviewNo", review.getReviewNo());
+        metadata.put("shopId", review.getShopId());
+        metadata.put("shopName", shop == null ? null : shop.getName());
+        metadata.put("packageId", review.getPackageId());
+        metadata.put("packageName", mealPackage == null ? null : mealPackage.getName());
+        metadata.put("score", review.getScore());
+        metadata.put("images", review.getImages());
+        metadata.put("createTime", review.getCreateTime());
+
+        SearchDocumentEntity document = new SearchDocumentEntity();
+        document.setId("review-" + review.getId());
+        document.setTitle(joinText(
+                shop == null ? null : shop.getName(),
+                mealPackage == null ? null : mealPackage.getName(),
+                "review"
+        ));
+        document.setContent(joinText(
+                review.getContent(),
+                shop == null ? null : shop.getName(),
+                mealPackage == null ? null : mealPackage.getName()
+        ));
+        document.setSource(REVIEW_SOURCE);
+        document.setCategory("shop_review");
         document.setMetadata(metadata);
         return document;
     }

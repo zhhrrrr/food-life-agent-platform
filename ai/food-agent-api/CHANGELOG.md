@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Added Java export client support for business and trade search documents.
+- Added index rebuild API for shops, meal packages, shop reviews, activities, and coupons.
+- Added ES index configuration for review, activity, and coupon documents.
+- Kept platform rules and FAQ documents out of the MySQL export path; they should come from formal Markdown or configuration documents later.
+
 ## 0.3.0
 
 - Moved `food-agent-api` into the Spring application Git repository.
