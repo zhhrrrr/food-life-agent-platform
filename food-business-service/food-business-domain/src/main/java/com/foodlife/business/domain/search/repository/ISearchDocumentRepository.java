@@ -9,6 +9,4 @@ public interface ISearchDocumentRepository {
     List<SearchDocumentEntity> listShopDocuments(Integer limit);
 
     List<SearchDocumentEntity> listPackageDocuments(Integer limit);
-
-    List<SearchDocumentEntity> listRuleDocuments(Integer limit);
 }

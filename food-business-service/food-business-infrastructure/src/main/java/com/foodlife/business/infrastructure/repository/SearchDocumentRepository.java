@@ -24,7 +24,6 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
 
     private static final String SHOP_SOURCE = "food_shop_index";
     private static final String PACKAGE_SOURCE = "food_package_index";
-    private static final String RULE_SOURCE = "food_rule_index";
 
     private final IShopMapper shopMapper;
     private final IShopCategoryMapper shopCategoryMapper;
@@ -59,20 +58,6 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
                         .last("limit " + limit))
                 .stream()
                 .map(mealPackage -> toPackageDocument(mealPackage, shopMap.get(mealPackage.getShopId())))
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    public List<SearchDocumentEntity> listRuleDocuments(Integer limit) {
-        Map<Long, ShopPO> shopMap = listShopMap();
-        return mealPackageMapper.selectList(new LambdaQueryWrapper<MealPackagePO>()
-                        .eq(MealPackagePO::getStatus, 1)
-                        .isNotNull(MealPackagePO::getUseRule)
-                        .orderByDesc(MealPackagePO::getSold)
-                        .last("limit " + limit))
-                .stream()
-                .filter(mealPackage -> StringUtils.hasText(mealPackage.getUseRule()))
-                .map(mealPackage -> toRuleDocument(mealPackage, shopMap.get(mealPackage.getShopId())))
                 .collect(Collectors.toList());
     }
 
@@ -146,28 +131,6 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
         ));
         document.setSource(PACKAGE_SOURCE);
         document.setCategory("meal_package");
-        document.setMetadata(metadata);
-        return document;
-    }
-
-    private SearchDocumentEntity toRuleDocument(MealPackagePO mealPackage, ShopPO shop) {
-        Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("packageId", mealPackage.getId());
-        metadata.put("packageName", mealPackage.getName());
-        metadata.put("shopId", mealPackage.getShopId());
-        metadata.put("shopName", shop == null ? null : shop.getName());
-        metadata.put("ruleType", "package_use_rule");
-
-        SearchDocumentEntity document = new SearchDocumentEntity();
-        document.setId("package-rule-" + mealPackage.getId());
-        document.setTitle(mealPackage.getName() + " use rule");
-        document.setContent(joinText(
-                mealPackage.getUseRule(),
-                mealPackage.getName(),
-                shop == null ? null : shop.getName()
-        ));
-        document.setSource(RULE_SOURCE);
-        document.setCategory("package_use_rule");
         document.setMetadata(metadata);
         return document;
     }
