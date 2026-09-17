@@ -1,0 +1,180 @@
+package com.foodlife.business.infrastructure.repository;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.foodlife.business.domain.search.model.SearchDocumentEntity;
+import com.foodlife.business.domain.search.repository.ISearchDocumentRepository;
+import com.foodlife.business.infrastructure.dao.IMealPackageMapper;
+import com.foodlife.business.infrastructure.dao.IShopCategoryMapper;
+import com.foodlife.business.infrastructure.dao.IShopMapper;
+import com.foodlife.business.infrastructure.dao.po.MealPackagePO;
+import com.foodlife.business.infrastructure.dao.po.ShopCategoryPO;
+import com.foodlife.business.infrastructure.dao.po.ShopPO;
+import org.springframework.stereotype.Repository;
+import org.springframework.util.StringUtils;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+@Repository
+public class SearchDocumentRepository implements ISearchDocumentRepository {
+
+    private static final String SHOP_SOURCE = "food_shop_index";
+    private static final String PACKAGE_SOURCE = "food_package_index";
+    private static final String RULE_SOURCE = "food_rule_index";
+
+    private final IShopMapper shopMapper;
+    private final IShopCategoryMapper shopCategoryMapper;
+    private final IMealPackageMapper mealPackageMapper;
+
+    public SearchDocumentRepository(IShopMapper shopMapper,
+                                    IShopCategoryMapper shopCategoryMapper,
+                                    IMealPackageMapper mealPackageMapper) {
+        this.shopMapper = shopMapper;
+        this.shopCategoryMapper = shopCategoryMapper;
+        this.mealPackageMapper = mealPackageMapper;
+    }
+
+    @Override
+    public List<SearchDocumentEntity> listShopDocuments(Integer limit) {
+        Map<Long, ShopCategoryPO> categoryMap = listCategoryMap();
+        return shopMapper.selectList(new LambdaQueryWrapper<ShopPO>()
+                        .eq(ShopPO::getStatus, 1)
+                        .orderByDesc(ShopPO::getSold)
+                        .last("limit " + limit))
+                .stream()
+                .map(shop -> toShopDocument(shop, categoryMap.get(shop.getCategoryId())))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<SearchDocumentEntity> listPackageDocuments(Integer limit) {
+        Map<Long, ShopPO> shopMap = listShopMap();
+        return mealPackageMapper.selectList(new LambdaQueryWrapper<MealPackagePO>()
+                        .eq(MealPackagePO::getStatus, 1)
+                        .orderByDesc(MealPackagePO::getSold)
+                        .last("limit " + limit))
+                .stream()
+                .map(mealPackage -> toPackageDocument(mealPackage, shopMap.get(mealPackage.getShopId())))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<SearchDocumentEntity> listRuleDocuments(Integer limit) {
+        Map<Long, ShopPO> shopMap = listShopMap();
+        return mealPackageMapper.selectList(new LambdaQueryWrapper<MealPackagePO>()
+                        .eq(MealPackagePO::getStatus, 1)
+                        .isNotNull(MealPackagePO::getUseRule)
+                        .orderByDesc(MealPackagePO::getSold)
+                        .last("limit " + limit))
+                .stream()
+                .filter(mealPackage -> StringUtils.hasText(mealPackage.getUseRule()))
+                .map(mealPackage -> toRuleDocument(mealPackage, shopMap.get(mealPackage.getShopId())))
+                .collect(Collectors.toList());
+    }
+
+    private Map<Long, ShopCategoryPO> listCategoryMap() {
+        return shopCategoryMapper.selectList(new LambdaQueryWrapper<ShopCategoryPO>())
+                .stream()
+                .collect(Collectors.toMap(ShopCategoryPO::getId, Function.identity(), (left, right) -> left));
+    }
+
+    private Map<Long, ShopPO> listShopMap() {
+        List<ShopPO> shops = shopMapper.selectList(new LambdaQueryWrapper<ShopPO>()
+                .eq(ShopPO::getStatus, 1));
+        if (shops == null || shops.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return shops.stream()
+                .collect(Collectors.toMap(ShopPO::getId, Function.identity(), (left, right) -> left));
+    }
+
+    private SearchDocumentEntity toShopDocument(ShopPO shop, ShopCategoryPO category) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("shopId", shop.getId());
+        metadata.put("shopName", shop.getName());
+        metadata.put("categoryId", shop.getCategoryId());
+        metadata.put("categoryName", category == null ? null : category.getName());
+        metadata.put("area", shop.getArea());
+        metadata.put("address", shop.getAddress());
+        metadata.put("avgPrice", shop.getAvgPrice());
+        metadata.put("sold", shop.getSold());
+        metadata.put("comments", shop.getComments());
+        metadata.put("score", shop.getScore());
+        metadata.put("openHours", shop.getOpenHours());
+
+        SearchDocumentEntity document = new SearchDocumentEntity();
+        document.setId("shop-" + shop.getId());
+        document.setTitle(shop.getName());
+        document.setContent(joinText(
+                shop.getName(),
+                category == null ? null : category.getName(),
+                shop.getArea(),
+                shop.getAddress(),
+                shop.getOpenHours()
+        ));
+        document.setSource(SHOP_SOURCE);
+        document.setCategory(category == null ? null : category.getName());
+        document.setMetadata(metadata);
+        return document;
+    }
+
+    private SearchDocumentEntity toPackageDocument(MealPackagePO mealPackage, ShopPO shop) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("packageId", mealPackage.getId());
+        metadata.put("packageName", mealPackage.getName());
+        metadata.put("shopId", mealPackage.getShopId());
+        metadata.put("shopName", shop == null ? null : shop.getName());
+        metadata.put("price", mealPackage.getPrice());
+        metadata.put("originalPrice", mealPackage.getOriginalPrice());
+        metadata.put("stock", mealPackage.getStock());
+        metadata.put("sold", mealPackage.getSold());
+        metadata.put("status", mealPackage.getStatus());
+        metadata.put("useRule", mealPackage.getUseRule());
+
+        SearchDocumentEntity document = new SearchDocumentEntity();
+        document.setId("package-" + mealPackage.getId());
+        document.setTitle(mealPackage.getName());
+        document.setContent(joinText(
+                mealPackage.getName(),
+                mealPackage.getDescription(),
+                mealPackage.getUseRule(),
+                shop == null ? null : shop.getName()
+        ));
+        document.setSource(PACKAGE_SOURCE);
+        document.setCategory("meal_package");
+        document.setMetadata(metadata);
+        return document;
+    }
+
+    private SearchDocumentEntity toRuleDocument(MealPackagePO mealPackage, ShopPO shop) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("packageId", mealPackage.getId());
+        metadata.put("packageName", mealPackage.getName());
+        metadata.put("shopId", mealPackage.getShopId());
+        metadata.put("shopName", shop == null ? null : shop.getName());
+        metadata.put("ruleType", "package_use_rule");
+
+        SearchDocumentEntity document = new SearchDocumentEntity();
+        document.setId("package-rule-" + mealPackage.getId());
+        document.setTitle(mealPackage.getName() + " use rule");
+        document.setContent(joinText(
+                mealPackage.getUseRule(),
+                mealPackage.getName(),
+                shop == null ? null : shop.getName()
+        ));
+        document.setSource(RULE_SOURCE);
+        document.setCategory("package_use_rule");
+        document.setMetadata(metadata);
+        return document;
+    }
+
+    private String joinText(String... values) {
+        return java.util.Arrays.stream(values)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.joining(" "));
+    }
+}
