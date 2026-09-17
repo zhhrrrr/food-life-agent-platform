@@ -104,6 +104,22 @@ class SearchService:
                 failed += 1
         return indexed, failed
 
+    def delete_document(self, index: str, document_id: str) -> bool:
+        if not self.settings.es_enabled:
+            return False
+
+        client = get_es_client()
+        if client is None:
+            return False
+
+        try:
+            client.delete(index=index, id=document_id, ignore=[404])
+        except Exception:
+            logger.exception("es_delete_document_failed index=%s id=%s", index, document_id)
+            return False
+
+        return True
+
     @staticmethod
     def _to_search_hit(raw_hit: dict[str, Any]) -> SearchHit:
         source = raw_hit.get("_source", {})

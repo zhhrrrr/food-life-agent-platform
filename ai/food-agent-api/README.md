@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.4.0`
+Current version: `0.5.0`
 
 Current route chain:
 
@@ -22,6 +22,7 @@ Added by version:
 0.2.0: settings, request_id, logging, stable error response
 0.3.0: optional Elasticsearch search layer + lightweight RAG retrieval path
 0.4.0: Java search export client + manual ES rebuild endpoint
+0.5.0: RabbitMQ incremental ES sync consumer + single-document upsert/delete
 ```
 
 This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. LLM, Tool Calling, MCP, Redis Memory, SSE, and Human Confirmation are still future stages.
@@ -76,6 +77,10 @@ ES_INDEX_RULE=food_rule_index
 ES_INDEX_REVIEW=food_review_index
 ES_INDEX_ACTIVITY=food_activity_index
 ES_INDEX_COUPON=food_coupon_index
+RABBITMQ_URL=amqp://guest:guest@127.0.0.1:5672/%2F
+ES_SYNC_CONSUMER_ENABLED=false
+ES_SYNC_BUSINESS_QUEUE=food.business.search.sync.queue
+ES_SYNC_TRADE_QUEUE=food.trade.search.sync.queue
 ```
 
 ## Start Service
@@ -122,6 +127,13 @@ Rebuild ES indexes from Java exports:
 curl -X POST http://127.0.0.1:8500/api/agent/indexes/rebuild \
   -H "Content-Type: application/json" \
   -d "{\"scopes\":[\"shops\",\"packages\",\"reviews\",\"activities\",\"coupons\"],\"limit\":200}"
+```
+
+Incremental ES sync is disabled by default. Enable it only after RabbitMQ, Elasticsearch, and Java services are available:
+
+```text
+ES_ENABLED=true
+ES_SYNC_CONSUMER_ENABLED=true
 ```
 
 When ES returns matches, `POST /api/agent/chat` also includes:

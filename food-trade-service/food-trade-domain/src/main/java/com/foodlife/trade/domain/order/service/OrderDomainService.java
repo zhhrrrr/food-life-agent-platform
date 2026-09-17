@@ -51,7 +51,10 @@ import com.foodlife.trade.domain.order.service.refund.OrderRefundService;
 import com.foodlife.trade.domain.order.service.settlement.OrderPaySettlementService;
 import com.foodlife.trade.domain.order.service.use.OrderUseService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -125,10 +128,12 @@ public class OrderDomainService {
         this.tradeEventPublisher = tradeEventPublisher;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public CreateOrderResult createNormalOrder(CreateOrderCommand command) {
         boolean packageStockOccupied = false;
         Long usedCouponId = null;
         Long savedOrderId = null;
+        String stockReleaseOperationId = null;
         try {
             OrderCreateContext context = buildCreateContext(TradeTypeConstants.NORMAL, command);
             orderCreateCheckChain.checkNormalOrder(context);
@@ -138,10 +143,12 @@ public class OrderDomainService {
 
             PackageTradeSnapshot snapshot = context.getPackageSnapshot();
             OrderPricingResult pricingResult = orderPricingService.calculate(context);
-            businessPackagePort.occupyPackageStock(command.getPackageId(), command.getQuantity());
+            DiningOrderEntity order = orderFactory.createOrder(context.getTradeType(), command, snapshot, pricingResult);
+            businessPackagePort.occupyPackageStock(command.getPackageId(), command.getQuantity(),
+                    buildNormalStockOperationId(order.getOrderNo(), "OCCUPY"));
+            stockReleaseOperationId = buildNormalStockOperationId(order.getOrderNo(), "RELEASE");
             packageStockOccupied = true;
 
-            DiningOrderEntity order = orderFactory.createOrder(context.getTradeType(), command, snapshot, pricingResult);
             DiningOrderEntity savedOrder = orderRepository.saveOrder(order);
             savedOrderId = savedOrder.getId();
             usedCouponId = savedOrder.getUserCouponId();
@@ -153,15 +160,15 @@ public class OrderDomainService {
 
             return buildCreateOrderResult(savedOrder);
         } catch (IllegalArgumentException e) {
-            releaseOccupiedPackageStock(packageStockOccupied, command);
+            releaseOccupiedPackageStock(packageStockOccupied, command, stockReleaseOperationId);
             couponService.releaseCoupon(usedCouponId, command == null ? null : command.getUserId(), savedOrderId);
             throw e;
         } catch (IllegalStateException e) {
-            releaseOccupiedPackageStock(packageStockOccupied, command);
+            releaseOccupiedPackageStock(packageStockOccupied, command, stockReleaseOperationId);
             couponService.releaseCoupon(usedCouponId, command == null ? null : command.getUserId(), savedOrderId);
             throw e;
         } catch (Exception e) {
-            releaseOccupiedPackageStock(packageStockOccupied, command);
+            releaseOccupiedPackageStock(packageStockOccupied, command, stockReleaseOperationId);
             couponService.releaseCoupon(usedCouponId, command == null ? null : command.getUserId(), savedOrderId);
             throw new IllegalStateException("normal order create failed", e);
         }
@@ -237,6 +244,7 @@ public class OrderDomainService {
         return result;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public CancelOrderResult cancelOrder(Long orderId, Long userId) {
         if (userId == null) {
             throw new IllegalArgumentException("user not login");
@@ -254,12 +262,15 @@ public class OrderDomainService {
 
         if (TradeTypeConstants.GROUP_BUY.equals(order.getTradeType())) {
             groupBuyRepository.cancelUnpaidGroupBuyOrder(order);
+            publishActivitySearchSync("GROUP_BUY", groupBuyRepository.queryOrderListByOrderIdAndUserId(order.getId(), userId).getActivityId(), "UPSERT");
             return buildCancelOrderResult(order);
         }
 
         if (TradeTypeConstants.SECKILL.equals(order.getTradeType())) {
+            Long activityId = seckillRepository.querySeckillActivityId(order);
             seckillRepository.cancelUnpaidSeckillOrder(order);
-            seckillStockRepository.releaseActivityStock(seckillRepository.querySeckillActivityId(order), userId);
+            seckillStockRepository.releaseActivityStock(activityId, userId);
+            publishActivitySearchSync("SECKILL", activityId, "UPSERT");
             return buildCancelOrderResult(order);
         }
 
@@ -281,8 +292,15 @@ public class OrderDomainService {
         return payOrderLocal(paySuccessEntity);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public OrderRefundBehaviorEntity refundOrderMock(OrderRefundCommandEntity command) {
+        DiningOrderEntity orderBeforeRefund = command == null || command.getOrderId() == null || command.getUserId() == null
+                ? null
+                : orderRepository.findOrderByIdAndUserId(command.getOrderId(), command.getUserId());
         OrderRefundBehaviorEntity refund = orderRefundService.refundOrder(command);
+        if (refund.getActivityId() != null && orderBeforeRefund != null) {
+            publishActivitySearchSync(orderBeforeRefund.getTradeType(), refund.getActivityId(), "UPSERT");
+        }
         tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
                 TradeMqTopics.ORDER_REFUND_REQUESTED,
                 String.valueOf(refund.getOrderId()),
@@ -294,6 +312,7 @@ public class OrderDomainService {
         return refund;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public OrderUseResult useOrderMock(OrderUseCommandEntity command) {
         OrderUseResult result = orderUseService.useOrder(command);
         tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
@@ -303,8 +322,10 @@ public class OrderDomainService {
         return result;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public GroupBuyLockResult createGroupBuyOrder(GroupBuyLockOrderCommand command) {
         GroupBuyLockResult result = groupBuyLockOrderService.lockOrder(command);
+        publishActivitySearchSync("GROUP_BUY", result.getActivityId(), "UPSERT");
         tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
                 TradeMqTopics.ORDER_CREATED,
                 String.valueOf(result.getOrderId()),
@@ -321,8 +342,10 @@ public class OrderDomainService {
         return seckillOrderService.preheatActivityStock(activityId);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public SeckillOrderResult createSeckillOrder(SeckillOrderCommand command) {
         SeckillOrderResult result = seckillOrderService.createSeckillOrder(command);
+        publishActivitySearchSync("SECKILL", result.getActivityId(), "UPSERT");
         tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
                 TradeMqTopics.ORDER_CREATED,
                 String.valueOf(result.getOrderId()),
@@ -331,6 +354,7 @@ public class OrderDomainService {
         return result;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public SeckillOrderRequestResult createSeckillOrderRequest(SeckillOrderCommand command) {
         return seckillOrderService.createSeckillOrderRequest(command);
     }
@@ -457,11 +481,40 @@ public class OrderDomainService {
                 message);
     }
 
-    private void releaseOccupiedPackageStock(boolean stockOccupied, CreateOrderCommand command) {
+    private void releaseOccupiedPackageStock(boolean stockOccupied, CreateOrderCommand command, String operationId) {
         if (!stockOccupied || command == null || command.getPackageId() == null || command.getQuantity() == null) {
             return;
         }
-        businessPackagePort.releasePackageStock(command.getPackageId(), command.getQuantity());
+        businessPackagePort.releasePackageStock(command.getPackageId(), command.getQuantity(), operationId);
+    }
+
+    private String buildNormalStockOperationId(String orderNo, String action) {
+        return "NORMAL_ORDER:" + orderNo + ":" + action;
+    }
+
+    private void publishActivitySearchSync(String activityType, Long activityId, String action) {
+        if (activityId == null) {
+            return;
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("scope", "activities");
+        payload.put("entityId", activityId);
+        payload.put("entityType", normalizeSearchActivityType(activityType));
+        payload.put("action", action);
+        tradeEventPublisher.publish(TradeMqTopics.SEARCH_SYNC_TOPIC,
+                TradeMqTopics.SEARCH_DOCUMENT_CHANGED,
+                "activities:" + normalizeSearchActivityType(activityType) + ":" + activityId + ":" + System.currentTimeMillis(),
+                payload);
+    }
+
+    private String normalizeSearchActivityType(String activityType) {
+        if (TradeTypeConstants.GROUP_BUY.equals(activityType)) {
+            return "GROUP_BUY";
+        }
+        if (TradeTypeConstants.SECKILL.equals(activityType)) {
+            return "SECKILL";
+        }
+        return activityType;
     }
 
     private CancelOrderResult buildCancelOrderResult(DiningOrderEntity order) {

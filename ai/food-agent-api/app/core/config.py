@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.4.0"
+    app_version: str = "0.5.0"
     app_port: int = 8500
     log_level: str = "INFO"
     java_gateway_base_url: str = "http://127.0.0.1:8080"
@@ -21,6 +21,10 @@ class Settings(BaseModel):
     es_index_review: str = "food_review_index"
     es_index_activity: str = "food_activity_index"
     es_index_coupon: str = "food_coupon_index"
+    rabbitmq_url: str = "amqp://guest:guest@127.0.0.1:5672/%2F"
+    es_sync_consumer_enabled: bool = False
+    es_sync_business_queue: str = "food.business.search.sync.queue"
+    es_sync_trade_queue: str = "food.trade.search.sync.queue"
 
 
 def _read_dotenv(path: Path) -> dict[str, str]:
@@ -87,4 +91,21 @@ def get_settings() -> Settings:
             defaults.es_index_activity,
         ),
         es_index_coupon=_get_value(dotenv_values, "ES_INDEX_COUPON", defaults.es_index_coupon),
+        rabbitmq_url=_get_value(dotenv_values, "RABBITMQ_URL", defaults.rabbitmq_url),
+        es_sync_consumer_enabled=_get_value(
+            dotenv_values,
+            "ES_SYNC_CONSUMER_ENABLED",
+            str(defaults.es_sync_consumer_enabled),
+        ).lower()
+        in {"1", "true", "yes", "on"},
+        es_sync_business_queue=_get_value(
+            dotenv_values,
+            "ES_SYNC_BUSINESS_QUEUE",
+            defaults.es_sync_business_queue,
+        ),
+        es_sync_trade_queue=_get_value(
+            dotenv_values,
+            "ES_SYNC_TRADE_QUEUE",
+            defaults.es_sync_trade_queue,
+        ),
     )

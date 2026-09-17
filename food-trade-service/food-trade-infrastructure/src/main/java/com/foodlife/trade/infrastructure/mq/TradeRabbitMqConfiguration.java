@@ -35,6 +35,11 @@ public class TradeRabbitMqConfiguration {
     }
 
     @Bean
+    public DirectExchange searchSyncExchange() {
+        return new DirectExchange(TradeMqTopics.SEARCH_SYNC_TOPIC, true, false);
+    }
+
+    @Bean
     public DirectExchange tradeDeadLetterExchange(TradeRabbitMqProperties properties) {
         return new DirectExchange(properties.getDeadLetterExchange(), true, false);
     }
@@ -72,6 +77,14 @@ public class TradeRabbitMqConfiguration {
     }
 
     @Bean
+    public Queue tradeSearchSyncQueue(TradeRabbitMqProperties properties) {
+        return QueueBuilder.durable(properties.getSearchSyncQueue())
+                .deadLetterExchange(properties.getDeadLetterExchange())
+                .deadLetterRoutingKey(properties.getSearchSyncDeadLetterQueue())
+                .build();
+    }
+
+    @Bean
     public Queue orderTimeoutCloseDeadLetterQueue(TradeRabbitMqProperties properties) {
         return QueueBuilder.durable(properties.getOrderTimeoutCloseDeadLetterQueue()).build();
     }
@@ -84,6 +97,11 @@ public class TradeRabbitMqConfiguration {
     @Bean
     public Queue paymentEventDeadLetterQueue(TradeRabbitMqProperties properties) {
         return QueueBuilder.durable(properties.getPaymentEventDeadLetterQueue()).build();
+    }
+
+    @Bean
+    public Queue tradeSearchSyncDeadLetterQueue(TradeRabbitMqProperties properties) {
+        return QueueBuilder.durable(properties.getSearchSyncDeadLetterQueue()).build();
     }
 
     @Bean
@@ -122,6 +140,19 @@ public class TradeRabbitMqConfiguration {
                                                  @Qualifier("tradeDeadLetterExchange") DirectExchange exchange,
                                                  TradeRabbitMqProperties properties) {
         return BindingBuilder.bind(queue).to(exchange).with(properties.getPaymentEventDeadLetterQueue());
+    }
+
+    @Bean
+    public Binding tradeSearchSyncDeadLetterBinding(@Qualifier("tradeSearchSyncDeadLetterQueue") Queue queue,
+                                                    @Qualifier("tradeDeadLetterExchange") DirectExchange exchange,
+                                                    TradeRabbitMqProperties properties) {
+        return BindingBuilder.bind(queue).to(exchange).with(properties.getSearchSyncDeadLetterQueue());
+    }
+
+    @Bean
+    public Binding tradeSearchDocumentChangedBinding(@Qualifier("tradeSearchSyncQueue") Queue queue,
+                                                     @Qualifier("searchSyncExchange") DirectExchange exchange) {
+        return BindingBuilder.bind(queue).to(exchange).with(TradeMqTopics.SEARCH_DOCUMENT_CHANGED);
     }
 
     @Bean

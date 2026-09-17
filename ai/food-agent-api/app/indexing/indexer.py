@@ -67,6 +67,57 @@ class SearchIndexer:
 
         return IndexRebuildResult(scopes=scope_results)
 
+    def sync_document(
+        self,
+        scope: str,
+        entity_id: int | str,
+        entity_type: str | None = None,
+        action: str = "UPSERT",
+    ) -> IndexScopeResult:
+        self._normalize_scopes([scope])
+        index = index_name_for_scope(self.settings, scope)
+        normalized_action = action.upper()
+
+        if normalized_action == "DELETE":
+            deleted = self.search_service.delete_document(
+                index=index,
+                document_id=self._document_id(scope, entity_id, entity_type),
+            )
+            return IndexScopeResult(
+                scope=scope,
+                index=index,
+                fetched=0,
+                indexed=0,
+                failed=0 if deleted else 1,
+            )
+
+        document = self.export_client.fetch_document(
+            scope=scope,
+            entity_id=entity_id,
+            entity_type=entity_type,
+        )
+        if document is None:
+            deleted = self.search_service.delete_document(
+                index=index,
+                document_id=self._document_id(scope, entity_id, entity_type),
+            )
+            return IndexScopeResult(
+                scope=scope,
+                index=index,
+                fetched=0,
+                indexed=0,
+                failed=0 if deleted else 1,
+            )
+
+        indexed = self.search_service.index_document(index=index, document=document)
+        return IndexScopeResult(
+            scope=scope,
+            index=index,
+            fetched=1,
+            indexed=1 if indexed else 0,
+            failed=0 if indexed else 1,
+        )
+
     @staticmethod
     def _normalize_scopes(scopes: list[str] | None) -> list[str]:
         if not scopes:
@@ -77,3 +128,21 @@ class SearchIndexer:
             raise ValueError(f"unsupported search scopes: {', '.join(unknown_scopes)}")
 
         return list(dict.fromkeys(scopes))
+
+    @staticmethod
+    def _document_id(scope: str, entity_id: int | str, entity_type: str | None = None) -> str:
+        if scope == "shops":
+            return f"shop-{entity_id}"
+        if scope == "packages":
+            return f"package-{entity_id}"
+        if scope == "reviews":
+            return f"review-{entity_id}"
+        if scope == "coupons":
+            return f"coupon-template-{entity_id}"
+        if scope == "activities":
+            normalized_type = (entity_type or "").upper()
+            if normalized_type == "GROUP_BUY":
+                return f"group-buy-activity-{entity_id}"
+            if normalized_type == "SECKILL":
+                return f"seckill-activity-{entity_id}"
+        raise ValueError(f"unsupported document id scope/type: {scope}/{entity_type}")

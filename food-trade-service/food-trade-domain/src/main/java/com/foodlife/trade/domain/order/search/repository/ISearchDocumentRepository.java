@@ -9,4 +9,10 @@ public interface ISearchDocumentRepository {
     List<SearchDocumentEntity> listActivityDocuments(Integer limit);
 
     List<SearchDocumentEntity> listCouponDocuments(Integer limit);
+
+    SearchDocumentEntity findGroupBuyActivityDocument(Long activityId);
+
+    SearchDocumentEntity findSeckillActivityDocument(Long activityId);
+
+    SearchDocumentEntity findCouponDocument(Long couponId);
 }

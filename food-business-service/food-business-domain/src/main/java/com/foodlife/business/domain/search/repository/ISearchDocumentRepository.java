@@ -11,4 +11,10 @@ public interface ISearchDocumentRepository {
     List<SearchDocumentEntity> listPackageDocuments(Integer limit);
 
     List<SearchDocumentEntity> listReviewDocuments(Integer limit);
+
+    SearchDocumentEntity findShopDocument(Long shopId);
+
+    SearchDocumentEntity findPackageDocument(Long packageId);
+
+    SearchDocumentEntity findReviewDocument(Long reviewId);
 }

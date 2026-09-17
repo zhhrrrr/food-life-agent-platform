@@ -70,6 +70,33 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public SearchDocumentEntity findGroupBuyActivityDocument(Long activityId) {
+        GroupBuyActivityPO activity = groupBuyActivityMapper.selectById(activityId);
+        if (activity == null || activity.getActivityStatus() == null || activity.getActivityStatus() != 1) {
+            return null;
+        }
+        return toGroupBuyDocument(activity);
+    }
+
+    @Override
+    public SearchDocumentEntity findSeckillActivityDocument(Long activityId) {
+        SeckillActivityPO activity = seckillActivityMapper.selectById(activityId);
+        if (activity == null || activity.getActivityStatus() == null || activity.getActivityStatus() != 1) {
+            return null;
+        }
+        return toSeckillDocument(activity);
+    }
+
+    @Override
+    public SearchDocumentEntity findCouponDocument(Long couponId) {
+        CouponTemplatePO coupon = couponTemplateMapper.selectById(couponId);
+        if (coupon == null || coupon.getTemplateStatus() == null || coupon.getTemplateStatus() != 1) {
+            return null;
+        }
+        return toCouponDocument(coupon);
+    }
+
     private SearchDocumentEntity toGroupBuyDocument(GroupBuyActivityPO activity) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("activityId", activity.getId());

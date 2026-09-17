@@ -6,3 +6,4 @@ langgraph
 pytest
 httpx
 elasticsearch
+pika

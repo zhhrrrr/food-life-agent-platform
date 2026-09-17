@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+
+- Added reliable incremental ES sync support through RabbitMQ search sync consumers.
+- Added single-document Java export support so ES events update or delete one document instead of rebuilding whole indexes.
+- Added ES delete-on-miss behavior for decremental sync when Java returns no active search document.
+- Added dedicated business/trade search sync queue configuration to avoid competing with business consumers.
+
 ## 0.4.0
 
 - Added Java export client support for business and trade search documents.

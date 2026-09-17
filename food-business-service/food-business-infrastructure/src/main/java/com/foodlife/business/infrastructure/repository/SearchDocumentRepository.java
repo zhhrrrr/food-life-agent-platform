@@ -84,6 +84,40 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public SearchDocumentEntity findShopDocument(Long shopId) {
+        ShopPO shop = shopMapper.selectById(shopId);
+        if (shop == null || shop.getStatus() == null || shop.getStatus() != 1) {
+            return null;
+        }
+        ShopCategoryPO category = shopCategoryMapper.selectById(shop.getCategoryId());
+        return toShopDocument(shop, category);
+    }
+
+    @Override
+    public SearchDocumentEntity findPackageDocument(Long packageId) {
+        MealPackagePO mealPackage = mealPackageMapper.selectById(packageId);
+        if (mealPackage == null || mealPackage.getStatus() == null || mealPackage.getStatus() != 1) {
+            return null;
+        }
+        ShopPO shop = shopMapper.selectById(mealPackage.getShopId());
+        if (shop == null || shop.getStatus() == null || shop.getStatus() != 1) {
+            return null;
+        }
+        return toPackageDocument(mealPackage, shop);
+    }
+
+    @Override
+    public SearchDocumentEntity findReviewDocument(Long reviewId) {
+        ShopReviewPO review = shopReviewMapper.selectById(reviewId);
+        if (review == null || review.getReviewStatus() == null || review.getReviewStatus() != 1) {
+            return null;
+        }
+        ShopPO shop = shopMapper.selectById(review.getShopId());
+        MealPackagePO mealPackage = mealPackageMapper.selectById(review.getPackageId());
+        return toReviewDocument(review, shop, mealPackage);
+    }
+
     private Map<Long, ShopCategoryPO> listCategoryMap() {
         return shopCategoryMapper.selectList(new LambdaQueryWrapper<ShopCategoryPO>())
                 .stream()

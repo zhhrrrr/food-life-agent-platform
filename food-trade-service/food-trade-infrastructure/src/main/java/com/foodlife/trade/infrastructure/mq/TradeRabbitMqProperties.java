@@ -16,12 +16,14 @@ public class TradeRabbitMqProperties {
     private Long orderTimeoutDelayMillis = 30 * 60 * 1000L;
     private String tradeOrderEventQueue = "food.trade.order.event.queue";
     private String paymentEventQueue = "food.trade.payment.event.queue";
+    private String searchSyncQueue = "food.trade.search.sync.queue";
     private String orderTimeoutCloseQueue = "food.trade.order.timeout.close.queue";
     private String orderTimeoutDelayQueue = "food.trade.order.timeout.delay.queue";
     private String orderTimeoutDelayRoutingKey = "order.cancel.timeout.delay";
     private String deadLetterExchange = "food.trade.dlx";
     private String tradeOrderEventDeadLetterQueue = "food.trade.order.event.dlq";
     private String paymentEventDeadLetterQueue = "food.trade.payment.event.dlq";
+    private String searchSyncDeadLetterQueue = "food.trade.search.sync.dlq";
     private String orderTimeoutCloseDeadLetterQueue = "food.trade.order.timeout.close.dlq";
     private Integer backlogAlertThreshold = 1000;
 }

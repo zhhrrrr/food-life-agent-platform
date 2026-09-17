@@ -6,6 +6,7 @@ import com.foodlife.business.domain.search.model.SearchDocumentEntity;
 import com.foodlife.business.domain.search.service.SearchDocumentDomainService;
 import com.foodlife.business.types.response.Response;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,6 +39,21 @@ public class SearchDocumentInternalController {
         return Response.success(toResponse(searchDocumentDomainService.listReviewDocuments(limit)));
     }
 
+    @GetMapping("/shops/{shopId}")
+    public Response<SearchDocumentResponseDTO> getShopDocument(@PathVariable Long shopId) {
+        return Response.success(toDocumentResponse(searchDocumentDomainService.findShopDocument(shopId)));
+    }
+
+    @GetMapping("/packages/{packageId}")
+    public Response<SearchDocumentResponseDTO> getPackageDocument(@PathVariable Long packageId) {
+        return Response.success(toDocumentResponse(searchDocumentDomainService.findPackageDocument(packageId)));
+    }
+
+    @GetMapping("/reviews/{reviewId}")
+    public Response<SearchDocumentResponseDTO> getReviewDocument(@PathVariable Long reviewId) {
+        return Response.success(toDocumentResponse(searchDocumentDomainService.findReviewDocument(reviewId)));
+    }
+
     private SearchDocumentListResponseDTO toResponse(List<SearchDocumentEntity> documents) {
         List<SearchDocumentResponseDTO> items = documents.stream()
                 .map(this::toDocumentResponse)
@@ -50,6 +66,9 @@ public class SearchDocumentInternalController {
     }
 
     private SearchDocumentResponseDTO toDocumentResponse(SearchDocumentEntity source) {
+        if (source == null) {
+            return null;
+        }
         SearchDocumentResponseDTO target = new SearchDocumentResponseDTO();
         target.setId(source.getId());
         target.setTitle(source.getTitle());

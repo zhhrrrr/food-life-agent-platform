@@ -26,6 +26,18 @@ public class SearchDocumentDomainService {
         return searchDocumentRepository.listCouponDocuments(normalizeLimit(limit));
     }
 
+    public SearchDocumentEntity findGroupBuyActivityDocument(Long activityId) {
+        return searchDocumentRepository.findGroupBuyActivityDocument(activityId);
+    }
+
+    public SearchDocumentEntity findSeckillActivityDocument(Long activityId) {
+        return searchDocumentRepository.findSeckillActivityDocument(activityId);
+    }
+
+    public SearchDocumentEntity findCouponDocument(Long couponId) {
+        return searchDocumentRepository.findCouponDocument(couponId);
+    }
+
     private Integer normalizeLimit(Integer limit) {
         if (limit == null || limit <= 0) {
             return DEFAULT_LIMIT;

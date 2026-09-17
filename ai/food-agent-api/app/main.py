@@ -15,6 +15,7 @@ from app.core.errors import (
     unhandled_error_handler,
 )
 from app.core.logging import configure_logging
+from app.sync.es_sync_consumer import start_es_sync_consumer, stop_es_sync_consumer
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -57,3 +58,13 @@ def health() -> dict[str, str]:
 
 app.include_router(chat_router)
 app.include_router(indexing_router)
+
+
+@app.on_event("startup")
+def startup() -> None:
+    start_es_sync_consumer(settings)
+
+
+@app.on_event("shutdown")
+def shutdown() -> None:
+    stop_es_sync_consumer()

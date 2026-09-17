@@ -19,6 +19,12 @@ class JavaSearchExportClient:
         "activities": ("trade", "/api/trade/internal/search/activities"),
         "coupons": ("trade", "/api/trade/internal/search/coupons"),
     }
+    _DOCUMENT_ENDPOINTS = {
+        "shops": ("business", "/api/internal/search/shops/{entity_id}"),
+        "packages": ("business", "/api/internal/search/packages/{entity_id}"),
+        "reviews": ("business", "/api/internal/search/reviews/{entity_id}"),
+        "coupons": ("trade", "/api/trade/internal/search/coupons/{entity_id}"),
+    }
 
     def __init__(
         self,
@@ -53,6 +59,40 @@ class JavaSearchExportClient:
 
         return self._parse_payload(scope=scope, payload=payload)
 
+    def fetch_document(
+        self,
+        scope: str,
+        entity_id: int | str,
+        entity_type: str | None = None,
+    ) -> SearchDocument | None:
+        service_name, path = self._document_endpoint(scope=scope, entity_type=entity_type)
+        base_url = self._base_url(service_name)
+        path = path.format(entity_id=entity_id)
+
+        try:
+            response = httpx.get(
+                self._join_url(base_url, path),
+                timeout=self.timeout_seconds,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except Exception as exc:
+            raise JavaSearchExportError(f"failed to fetch {scope} document {entity_id}") from exc
+
+        return self._parse_document_payload(scope=scope, payload=payload)
+
+    def _document_endpoint(self, scope: str, entity_type: str | None) -> tuple[str, str]:
+        if scope == "activities":
+            normalized_type = (entity_type or "").upper()
+            if normalized_type == "GROUP_BUY":
+                return "trade", "/api/trade/internal/search/activities/group-buy/{entity_id}"
+            if normalized_type == "SECKILL":
+                return "trade", "/api/trade/internal/search/activities/seckill/{entity_id}"
+            raise JavaSearchExportError("activity entity_type must be GROUP_BUY or SECKILL")
+        if scope not in self._DOCUMENT_ENDPOINTS:
+            raise JavaSearchExportError(f"unsupported document scope: {scope}")
+        return self._DOCUMENT_ENDPOINTS[scope]
+
     def _base_url(self, service_name: str) -> str:
         if service_name == "business":
             return self.settings.java_business_base_url
@@ -77,3 +117,17 @@ class JavaSearchExportClient:
             raise JavaSearchExportError(f"{scope} export returned invalid documents")
 
         return [SearchDocument(**document) for document in documents]
+
+    @staticmethod
+    def _parse_document_payload(scope: str, payload: dict[str, Any]) -> SearchDocument | None:
+        code = str(payload.get("code", ""))
+        if code != "0000":
+            message = payload.get("message") or "unknown java export error"
+            raise JavaSearchExportError(f"{scope} document export failed: {code} {message}")
+
+        data = payload.get("data")
+        if data is None:
+            return None
+        if not isinstance(data, dict):
+            raise JavaSearchExportError(f"{scope} document export returned invalid data")
+        return SearchDocument(**data)

@@ -9,8 +9,10 @@ public final class BusinessMqTopics {
     public static final String STOCK_RELEASED = "stock.released";
     public static final String STOCK_SOLD_CONFIRMED = "stock.sold.confirmed";
     public static final String STOCK_ROLLBACK = "stock.rollback";
+    public static final String PACKAGE_CHANGED = "package.changed";
 
     public static final String REVIEW_CREATED = "review.created";
+    public static final String REVIEW_HIDDEN = "review.hidden";
 
     private BusinessMqTopics() {
     }

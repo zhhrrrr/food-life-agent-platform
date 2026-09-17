@@ -6,6 +6,7 @@ import com.foodlife.trade.domain.order.search.model.SearchDocumentEntity;
 import com.foodlife.trade.domain.order.search.service.SearchDocumentDomainService;
 import com.foodlife.trade.types.response.Response;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -33,6 +34,21 @@ public class SearchDocumentInternalController {
         return Response.success(toResponse(searchDocumentDomainService.listCouponDocuments(limit)));
     }
 
+    @GetMapping("/activities/group-buy/{activityId}")
+    public Response<SearchDocumentResponseDTO> getGroupBuyActivityDocument(@PathVariable Long activityId) {
+        return Response.success(toDocumentResponse(searchDocumentDomainService.findGroupBuyActivityDocument(activityId)));
+    }
+
+    @GetMapping("/activities/seckill/{activityId}")
+    public Response<SearchDocumentResponseDTO> getSeckillActivityDocument(@PathVariable Long activityId) {
+        return Response.success(toDocumentResponse(searchDocumentDomainService.findSeckillActivityDocument(activityId)));
+    }
+
+    @GetMapping("/coupons/{couponId}")
+    public Response<SearchDocumentResponseDTO> getCouponDocument(@PathVariable Long couponId) {
+        return Response.success(toDocumentResponse(searchDocumentDomainService.findCouponDocument(couponId)));
+    }
+
     private SearchDocumentListResponseDTO toResponse(List<SearchDocumentEntity> documents) {
         List<SearchDocumentResponseDTO> items = documents.stream()
                 .map(this::toDocumentResponse)
@@ -45,6 +61,9 @@ public class SearchDocumentInternalController {
     }
 
     private SearchDocumentResponseDTO toDocumentResponse(SearchDocumentEntity source) {
+        if (source == null) {
+            return null;
+        }
         SearchDocumentResponseDTO target = new SearchDocumentResponseDTO();
         target.setId(source.getId());
         target.setTitle(source.getTitle());

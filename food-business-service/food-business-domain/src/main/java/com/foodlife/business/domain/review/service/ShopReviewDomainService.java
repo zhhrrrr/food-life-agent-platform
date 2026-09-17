@@ -13,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 
 @Service
 public class ShopReviewDomainService {
@@ -89,6 +91,7 @@ public class ShopReviewDomainService {
                 normalizedPageSize);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public ShopReviewEntity hideMyReview(Long reviewId, Long userId) {
         if (userId == null) {
             throw new IllegalArgumentException("user not login");
@@ -100,7 +103,12 @@ public class ShopReviewDomainService {
         if (review == null) {
             throw new IllegalArgumentException("review not found");
         }
-        return shopReviewRepository.hideReview(reviewId, userId);
+        ShopReviewEntity hiddenReview = shopReviewRepository.hideReview(reviewId, userId);
+        businessEventPublisher.publish(BusinessMqTopics.SHOP_REVIEW_TOPIC,
+                BusinessMqTopics.REVIEW_HIDDEN,
+                String.valueOf(hiddenReview.getId()),
+                hiddenReview);
+        return hiddenReview;
     }
 
     private void checkCreateCommand(CreateShopReviewCommand command) {
@@ -163,6 +171,9 @@ public class ShopReviewDomainService {
     }
 
     private String generateReviewNo(Long userId) {
-        return "RV" + System.currentTimeMillis() + userId;
+        return "RV"
+                + System.currentTimeMillis()
+                + (userId == null ? "0" : userId)
+                + UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
     }
 }

@@ -30,6 +30,18 @@ public class SearchDocumentDomainService {
         return searchDocumentRepository.listReviewDocuments(normalizeLimit(limit));
     }
 
+    public SearchDocumentEntity findShopDocument(Long shopId) {
+        return searchDocumentRepository.findShopDocument(shopId);
+    }
+
+    public SearchDocumentEntity findPackageDocument(Long packageId) {
+        return searchDocumentRepository.findPackageDocument(packageId);
+    }
+
+    public SearchDocumentEntity findReviewDocument(Long reviewId) {
+        return searchDocumentRepository.findReviewDocument(reviewId);
+    }
+
     private Integer normalizeLimit(Integer limit) {
         if (limit == null || limit <= 0) {
             return DEFAULT_LIMIT;

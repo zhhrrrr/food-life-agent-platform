@@ -4,6 +4,7 @@ public final class TradeMqTopics {
 
     public static final String TRADE_ORDER_TOPIC = "trade_order_topic";
     public static final String PAYMENT_TOPIC = "payment_topic";
+    public static final String SEARCH_SYNC_TOPIC = "trade_search_sync_topic";
 
     public static final String ORDER_CREATED = "order.created";
     public static final String ORDER_CANCEL_TIMEOUT = "order.cancel.timeout";
@@ -15,6 +16,8 @@ public final class TradeMqTopics {
     public static final String PAYMENT_SUCCESS = "payment.success";
     public static final String PAYMENT_CLOSED = "payment.closed";
     public static final String PAYMENT_REFUNDED = "payment.refunded";
+
+    public static final String SEARCH_DOCUMENT_CHANGED = "search.document.changed";
 
     private TradeMqTopics() {
     }
