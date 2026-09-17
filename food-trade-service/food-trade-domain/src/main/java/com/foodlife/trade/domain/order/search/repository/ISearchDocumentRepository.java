@@ -6,9 +6,9 @@ import java.util.List;
 
 public interface ISearchDocumentRepository {
 
-    List<SearchDocumentEntity> listActivityDocuments(Integer limit);
+    List<SearchDocumentEntity> listActivityDocuments(Integer limit, Integer offset);
 
-    List<SearchDocumentEntity> listCouponDocuments(Integer limit);
+    List<SearchDocumentEntity> listCouponDocuments(Integer limit, Integer offset);
 
     SearchDocumentEntity findGroupBuyActivityDocument(Long activityId);
 

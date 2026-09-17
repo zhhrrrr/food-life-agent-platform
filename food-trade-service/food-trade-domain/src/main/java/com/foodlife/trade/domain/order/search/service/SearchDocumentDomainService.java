@@ -18,12 +18,12 @@ public class SearchDocumentDomainService {
         this.searchDocumentRepository = searchDocumentRepository;
     }
 
-    public List<SearchDocumentEntity> listActivityDocuments(Integer limit) {
-        return searchDocumentRepository.listActivityDocuments(normalizeLimit(limit));
+    public List<SearchDocumentEntity> listActivityDocuments(Integer limit, Integer offset) {
+        return searchDocumentRepository.listActivityDocuments(normalizeLimit(limit), normalizeOffset(offset));
     }
 
-    public List<SearchDocumentEntity> listCouponDocuments(Integer limit) {
-        return searchDocumentRepository.listCouponDocuments(normalizeLimit(limit));
+    public List<SearchDocumentEntity> listCouponDocuments(Integer limit, Integer offset) {
+        return searchDocumentRepository.listCouponDocuments(normalizeLimit(limit), normalizeOffset(offset));
     }
 
     public SearchDocumentEntity findGroupBuyActivityDocument(Long activityId) {
@@ -43,5 +43,12 @@ public class SearchDocumentDomainService {
             return DEFAULT_LIMIT;
         }
         return Math.min(limit, MAX_LIMIT);
+    }
+
+    private Integer normalizeOffset(Integer offset) {
+        if (offset == null || offset <= 0) {
+            return 0;
+        }
+        return offset;
     }
 }

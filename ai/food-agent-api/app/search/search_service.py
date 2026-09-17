@@ -120,6 +120,50 @@ class SearchService:
 
         return True
 
+    def get_document(self, index: str, document_id: str) -> SearchDocument | None:
+        if not self.settings.es_enabled:
+            return None
+
+        client = get_es_client()
+        if client is None:
+            return None
+
+        try:
+            result = client.get(index=index, id=document_id, ignore=[404])
+        except Exception:
+            logger.exception("es_get_document_failed index=%s id=%s", index, document_id)
+            return None
+
+        if not result or not result.get("found"):
+            return None
+        source = result.get("_source") or {}
+        try:
+            return SearchDocument(**source)
+        except Exception:
+            logger.exception("es_get_document_invalid_source index=%s id=%s", index, document_id)
+            return None
+
+    def list_document_ids(self, index: str, size: int = 10000) -> set[str]:
+        if not self.settings.es_enabled:
+            return set()
+
+        client = get_es_client()
+        if client is None:
+            return set()
+
+        try:
+            result = client.search(
+                index=index,
+                size=size,
+                query={"match_all": {}},
+                _source=False,
+            )
+        except Exception:
+            logger.exception("es_list_document_ids_failed index=%s", index)
+            return set()
+
+        return {str(hit.get("_id", "")) for hit in result.get("hits", {}).get("hits", [])}
+
     @staticmethod
     def _to_search_hit(raw_hit: dict[str, Any]) -> SearchHit:
         source = raw_hit.get("_source", {})

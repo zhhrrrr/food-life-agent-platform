@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0
+
+- Added paged Java search export support for full ES reconciliation snapshots.
+- Added manual and scheduled ES reconciliation to repair missed events and stale documents.
+- Added ES read/ID-scan helpers so reconciliation can skip unchanged documents and prune old ones.
+- Added reconciliation configuration for interval, page size, stale pruning, and scan size.
+
 ## 0.5.0
 
 - Added reliable incremental ES sync support through RabbitMQ search sync consumers.

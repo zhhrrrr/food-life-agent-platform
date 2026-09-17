@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.5.0"
+    app_version: str = "0.6.0"
     app_port: int = 8500
     log_level: str = "INFO"
     java_gateway_base_url: str = "http://127.0.0.1:8080"
@@ -25,6 +25,11 @@ class Settings(BaseModel):
     es_sync_consumer_enabled: bool = False
     es_sync_business_queue: str = "food.business.search.sync.queue"
     es_sync_trade_queue: str = "food.trade.search.sync.queue"
+    es_reconcile_enabled: bool = False
+    es_reconcile_interval_seconds: int = 900
+    es_reconcile_page_size: int = 200
+    es_reconcile_prune_stale: bool = True
+    es_reconcile_scan_size: int = 10000
 
 
 def _read_dotenv(path: Path) -> dict[str, str]:
@@ -107,5 +112,38 @@ def get_settings() -> Settings:
             dotenv_values,
             "ES_SYNC_TRADE_QUEUE",
             defaults.es_sync_trade_queue,
+        ),
+        es_reconcile_enabled=_get_value(
+            dotenv_values,
+            "ES_RECONCILE_ENABLED",
+            str(defaults.es_reconcile_enabled),
+        ).lower()
+        in {"1", "true", "yes", "on"},
+        es_reconcile_interval_seconds=int(
+            _get_value(
+                dotenv_values,
+                "ES_RECONCILE_INTERVAL_SECONDS",
+                str(defaults.es_reconcile_interval_seconds),
+            )
+        ),
+        es_reconcile_page_size=int(
+            _get_value(
+                dotenv_values,
+                "ES_RECONCILE_PAGE_SIZE",
+                str(defaults.es_reconcile_page_size),
+            )
+        ),
+        es_reconcile_prune_stale=_get_value(
+            dotenv_values,
+            "ES_RECONCILE_PRUNE_STALE",
+            str(defaults.es_reconcile_prune_stale),
+        ).lower()
+        in {"1", "true", "yes", "on"},
+        es_reconcile_scan_size=int(
+            _get_value(
+                dotenv_values,
+                "ES_RECONCILE_SCAN_SIZE",
+                str(defaults.es_reconcile_scan_size),
+            )
         ),
     )

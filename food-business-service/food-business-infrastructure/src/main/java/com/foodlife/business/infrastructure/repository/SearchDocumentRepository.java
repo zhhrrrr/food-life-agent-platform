@@ -44,37 +44,37 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
     }
 
     @Override
-    public List<SearchDocumentEntity> listShopDocuments(Integer limit) {
+    public List<SearchDocumentEntity> listShopDocuments(Integer limit, Integer offset) {
         Map<Long, ShopCategoryPO> categoryMap = listCategoryMap();
         return shopMapper.selectList(new LambdaQueryWrapper<ShopPO>()
                         .eq(ShopPO::getStatus, 1)
                         .orderByDesc(ShopPO::getSold)
-                        .last("limit " + limit))
+                        .last(limitClause(limit, offset)))
                 .stream()
                 .map(shop -> toShopDocument(shop, categoryMap.get(shop.getCategoryId())))
                 .collect(Collectors.toList());
     }
 
     @Override
-    public List<SearchDocumentEntity> listPackageDocuments(Integer limit) {
+    public List<SearchDocumentEntity> listPackageDocuments(Integer limit, Integer offset) {
         Map<Long, ShopPO> shopMap = listShopMap();
         return mealPackageMapper.selectList(new LambdaQueryWrapper<MealPackagePO>()
                         .eq(MealPackagePO::getStatus, 1)
                         .orderByDesc(MealPackagePO::getSold)
-                        .last("limit " + limit))
+                        .last(limitClause(limit, offset)))
                 .stream()
                 .map(mealPackage -> toPackageDocument(mealPackage, shopMap.get(mealPackage.getShopId())))
                 .collect(Collectors.toList());
     }
 
     @Override
-    public List<SearchDocumentEntity> listReviewDocuments(Integer limit) {
+    public List<SearchDocumentEntity> listReviewDocuments(Integer limit, Integer offset) {
         Map<Long, ShopPO> shopMap = listShopMap();
         Map<Long, MealPackagePO> packageMap = listPackageMap();
         return shopReviewMapper.selectList(new LambdaQueryWrapper<ShopReviewPO>()
                         .eq(ShopReviewPO::getReviewStatus, 1)
                         .orderByDesc(ShopReviewPO::getId)
-                        .last("limit " + limit))
+                        .last(limitClause(limit, offset)))
                 .stream()
                 .map(review -> toReviewDocument(
                         review,
@@ -236,5 +236,9 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
         return java.util.Arrays.stream(values)
                 .filter(StringUtils::hasText)
                 .collect(Collectors.joining(" "));
+    }
+
+    private String limitClause(Integer limit, Integer offset) {
+        return "limit " + offset + ", " + limit;
     }
 }

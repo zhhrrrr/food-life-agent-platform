@@ -38,18 +38,23 @@ class JavaSearchExportClient:
         self,
         scope: str,
         limit: int | None = None,
+        offset: int | None = None,
     ) -> list[SearchDocument]:
         if scope not in SEARCH_SCOPES:
             raise JavaSearchExportError(f"unsupported search scope: {scope}")
 
         service_name, path = self._ENDPOINTS[scope]
         base_url = self._base_url(service_name)
-        params = {"limit": limit} if limit is not None else None
+        params: dict[str, int] = {}
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
 
         try:
             response = httpx.get(
                 self._join_url(base_url, path),
-                params=params,
+                params=params or None,
                 timeout=self.timeout_seconds,
             )
             response.raise_for_status()

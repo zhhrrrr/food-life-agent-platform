@@ -25,13 +25,15 @@ public class SearchDocumentInternalController {
     }
 
     @GetMapping("/activities")
-    public Response<SearchDocumentListResponseDTO> listActivityDocuments(@RequestParam(required = false) Integer limit) {
-        return Response.success(toResponse(searchDocumentDomainService.listActivityDocuments(limit)));
+    public Response<SearchDocumentListResponseDTO> listActivityDocuments(@RequestParam(required = false) Integer limit,
+                                                                         @RequestParam(required = false) Integer offset) {
+        return Response.success(toResponse(searchDocumentDomainService.listActivityDocuments(limit, offset)));
     }
 
     @GetMapping("/coupons")
-    public Response<SearchDocumentListResponseDTO> listCouponDocuments(@RequestParam(required = false) Integer limit) {
-        return Response.success(toResponse(searchDocumentDomainService.listCouponDocuments(limit)));
+    public Response<SearchDocumentListResponseDTO> listCouponDocuments(@RequestParam(required = false) Integer limit,
+                                                                       @RequestParam(required = false) Integer offset) {
+        return Response.success(toResponse(searchDocumentDomainService.listCouponDocuments(limit, offset)));
     }
 
     @GetMapping("/activities/group-buy/{activityId}")

@@ -18,16 +18,16 @@ public class SearchDocumentDomainService {
         this.searchDocumentRepository = searchDocumentRepository;
     }
 
-    public List<SearchDocumentEntity> listShopDocuments(Integer limit) {
-        return searchDocumentRepository.listShopDocuments(normalizeLimit(limit));
+    public List<SearchDocumentEntity> listShopDocuments(Integer limit, Integer offset) {
+        return searchDocumentRepository.listShopDocuments(normalizeLimit(limit), normalizeOffset(offset));
     }
 
-    public List<SearchDocumentEntity> listPackageDocuments(Integer limit) {
-        return searchDocumentRepository.listPackageDocuments(normalizeLimit(limit));
+    public List<SearchDocumentEntity> listPackageDocuments(Integer limit, Integer offset) {
+        return searchDocumentRepository.listPackageDocuments(normalizeLimit(limit), normalizeOffset(offset));
     }
 
-    public List<SearchDocumentEntity> listReviewDocuments(Integer limit) {
-        return searchDocumentRepository.listReviewDocuments(normalizeLimit(limit));
+    public List<SearchDocumentEntity> listReviewDocuments(Integer limit, Integer offset) {
+        return searchDocumentRepository.listReviewDocuments(normalizeLimit(limit), normalizeOffset(offset));
     }
 
     public SearchDocumentEntity findShopDocument(Long shopId) {
@@ -47,5 +47,12 @@ public class SearchDocumentDomainService {
             return DEFAULT_LIMIT;
         }
         return Math.min(limit, MAX_LIMIT);
+    }
+
+    private Integer normalizeOffset(Integer offset) {
+        if (offset == null || offset <= 0) {
+            return 0;
+        }
+        return offset;
     }
 }

@@ -6,11 +6,11 @@ import java.util.List;
 
 public interface ISearchDocumentRepository {
 
-    List<SearchDocumentEntity> listShopDocuments(Integer limit);
+    List<SearchDocumentEntity> listShopDocuments(Integer limit, Integer offset);
 
-    List<SearchDocumentEntity> listPackageDocuments(Integer limit);
+    List<SearchDocumentEntity> listPackageDocuments(Integer limit, Integer offset);
 
-    List<SearchDocumentEntity> listReviewDocuments(Integer limit);
+    List<SearchDocumentEntity> listReviewDocuments(Integer limit, Integer offset);
 
     SearchDocumentEntity findShopDocument(Long shopId);
 

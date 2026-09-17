@@ -16,6 +16,7 @@ from app.core.errors import (
 )
 from app.core.logging import configure_logging
 from app.sync.es_sync_consumer import start_es_sync_consumer, stop_es_sync_consumer
+from app.sync.es_reconciliation import start_es_reconciliation, stop_es_reconciliation
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -63,8 +64,10 @@ app.include_router(indexing_router)
 @app.on_event("startup")
 def startup() -> None:
     start_es_sync_consumer(settings)
+    start_es_reconciliation(settings)
 
 
 @app.on_event("shutdown")
 def shutdown() -> None:
+    stop_es_reconciliation()
     stop_es_sync_consumer()

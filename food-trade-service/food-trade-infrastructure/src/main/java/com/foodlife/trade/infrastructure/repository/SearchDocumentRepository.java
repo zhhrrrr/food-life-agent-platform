@@ -37,11 +37,12 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
     }
 
     @Override
-    public List<SearchDocumentEntity> listActivityDocuments(Integer limit) {
+    public List<SearchDocumentEntity> listActivityDocuments(Integer limit, Integer offset) {
+        int queryLimit = limit + offset;
         List<SearchDocumentEntity> groupBuyDocuments = groupBuyActivityMapper.selectList(new LambdaQueryWrapper<GroupBuyActivityPO>()
                         .eq(GroupBuyActivityPO::getActivityStatus, 1)
                         .orderByDesc(GroupBuyActivityPO::getId)
-                        .last("limit " + limit))
+                        .last(limitClause(queryLimit, 0)))
                 .stream()
                 .map(this::toGroupBuyDocument)
                 .collect(Collectors.toList());
@@ -49,22 +50,23 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
         List<SearchDocumentEntity> seckillDocuments = seckillActivityMapper.selectList(new LambdaQueryWrapper<SeckillActivityPO>()
                         .eq(SeckillActivityPO::getActivityStatus, 1)
                         .orderByDesc(SeckillActivityPO::getId)
-                        .last("limit " + limit))
+                        .last(limitClause(queryLimit, 0)))
                 .stream()
                 .map(this::toSeckillDocument)
                 .collect(Collectors.toList());
 
         return Stream.concat(groupBuyDocuments.stream(), seckillDocuments.stream())
+                .skip(offset)
                 .limit(limit)
                 .collect(Collectors.toList());
     }
 
     @Override
-    public List<SearchDocumentEntity> listCouponDocuments(Integer limit) {
+    public List<SearchDocumentEntity> listCouponDocuments(Integer limit, Integer offset) {
         return couponTemplateMapper.selectList(new LambdaQueryWrapper<CouponTemplatePO>()
                         .eq(CouponTemplatePO::getTemplateStatus, 1)
                         .orderByDesc(CouponTemplatePO::getId)
-                        .last("limit " + limit))
+                        .last(limitClause(limit, offset)))
                 .stream()
                 .map(this::toCouponDocument)
                 .collect(Collectors.toList());
@@ -186,5 +188,9 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
         return java.util.Arrays.stream(values)
                 .filter(StringUtils::hasText)
                 .collect(Collectors.joining(" "));
+    }
+
+    private String limitClause(Integer limit, Integer offset) {
+        return "limit " + offset + ", " + limit;
     }
 }

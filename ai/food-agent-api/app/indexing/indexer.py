@@ -1,8 +1,11 @@
+import json
+
 from pydantic import BaseModel, Field
 
 from app.core.config import Settings, get_settings
 from app.indexing.java_export_client import JavaSearchExportClient
 from app.search.index_names import SEARCH_SCOPES, index_name_for_scope
+from app.search.schemas import SearchDocument
 from app.search.search_service import SearchService
 
 
@@ -24,6 +27,45 @@ class IndexRebuildResult(BaseModel):
     @property
     def indexed(self) -> int:
         return sum(scope.indexed for scope in self.scopes)
+
+    @property
+    def failed(self) -> int:
+        return sum(scope.failed for scope in self.scopes)
+
+
+class IndexReconcileScopeResult(BaseModel):
+    scope: str
+    index: str
+    fetched: int = 0
+    checked: int = 0
+    upserted: int = 0
+    unchanged: int = 0
+    deleted: int = 0
+    failed: int = 0
+
+
+class IndexReconcileResult(BaseModel):
+    scopes: list[IndexReconcileScopeResult] = Field(default_factory=list)
+
+    @property
+    def fetched(self) -> int:
+        return sum(scope.fetched for scope in self.scopes)
+
+    @property
+    def checked(self) -> int:
+        return sum(scope.checked for scope in self.scopes)
+
+    @property
+    def upserted(self) -> int:
+        return sum(scope.upserted for scope in self.scopes)
+
+    @property
+    def unchanged(self) -> int:
+        return sum(scope.unchanged for scope in self.scopes)
+
+    @property
+    def deleted(self) -> int:
+        return sum(scope.deleted for scope in self.scopes)
 
     @property
     def failed(self) -> int:
@@ -66,6 +108,29 @@ class SearchIndexer:
             )
 
         return IndexRebuildResult(scopes=scope_results)
+
+    def reconcile(
+        self,
+        scopes: list[str] | None = None,
+        page_size: int | None = None,
+        prune_stale: bool | None = None,
+    ) -> IndexReconcileResult:
+        scope_results: list[IndexReconcileScopeResult] = []
+        normalized_page_size = self._normalize_page_size(page_size or self.settings.es_reconcile_page_size)
+        should_prune_stale = (
+            self.settings.es_reconcile_prune_stale if prune_stale is None else prune_stale
+        )
+
+        for scope in self._normalize_scopes(scopes):
+            scope_results.append(
+                self._reconcile_scope(
+                    scope=scope,
+                    page_size=normalized_page_size,
+                    prune_stale=should_prune_stale,
+                )
+            )
+
+        return IndexReconcileResult(scopes=scope_results)
 
     def sync_document(
         self,
@@ -128,6 +193,69 @@ class SearchIndexer:
             raise ValueError(f"unsupported search scopes: {', '.join(unknown_scopes)}")
 
         return list(dict.fromkeys(scopes))
+
+    def _reconcile_scope(
+        self,
+        scope: str,
+        page_size: int,
+        prune_stale: bool,
+    ) -> IndexReconcileScopeResult:
+        index = index_name_for_scope(self.settings, scope)
+        result = IndexReconcileScopeResult(scope=scope, index=index)
+        expected_ids: set[str] = set()
+        offset = 0
+
+        while True:
+            documents = self.export_client.fetch_documents(
+                scope=scope,
+                limit=page_size,
+                offset=offset,
+            )
+            if not documents:
+                break
+
+            result.fetched += len(documents)
+            for document in documents:
+                expected_ids.add(document.id)
+                result.checked += 1
+                existing = self.search_service.get_document(index=index, document_id=document.id)
+                if existing is not None and self._document_equal(existing, document):
+                    result.unchanged += 1
+                    continue
+                if self.search_service.index_document(index=index, document=document):
+                    result.upserted += 1
+                else:
+                    result.failed += 1
+
+            if len(documents) < page_size:
+                break
+            offset += page_size
+
+        if prune_stale:
+            for document_id in self.search_service.list_document_ids(
+                index=index,
+                size=self.settings.es_reconcile_scan_size,
+            ):
+                if document_id in expected_ids:
+                    continue
+                if self.search_service.delete_document(index=index, document_id=document_id):
+                    result.deleted += 1
+                else:
+                    result.failed += 1
+
+        return result
+
+    @staticmethod
+    def _normalize_page_size(page_size: int) -> int:
+        return max(1, min(page_size, 1000))
+
+    @staticmethod
+    def _document_equal(left: SearchDocument, right: SearchDocument) -> bool:
+        return json.dumps(left.model_dump(mode="json"), sort_keys=True, default=str) == json.dumps(
+            right.model_dump(mode="json"),
+            sort_keys=True,
+            default=str,
+        )
 
     @staticmethod
     def _document_id(scope: str, entity_id: int | str, entity_type: str | None = None) -> str:

@@ -25,18 +25,21 @@ public class SearchDocumentInternalController {
     }
 
     @GetMapping("/shops")
-    public Response<SearchDocumentListResponseDTO> listShopDocuments(@RequestParam(required = false) Integer limit) {
-        return Response.success(toResponse(searchDocumentDomainService.listShopDocuments(limit)));
+    public Response<SearchDocumentListResponseDTO> listShopDocuments(@RequestParam(required = false) Integer limit,
+                                                                     @RequestParam(required = false) Integer offset) {
+        return Response.success(toResponse(searchDocumentDomainService.listShopDocuments(limit, offset)));
     }
 
     @GetMapping("/packages")
-    public Response<SearchDocumentListResponseDTO> listPackageDocuments(@RequestParam(required = false) Integer limit) {
-        return Response.success(toResponse(searchDocumentDomainService.listPackageDocuments(limit)));
+    public Response<SearchDocumentListResponseDTO> listPackageDocuments(@RequestParam(required = false) Integer limit,
+                                                                        @RequestParam(required = false) Integer offset) {
+        return Response.success(toResponse(searchDocumentDomainService.listPackageDocuments(limit, offset)));
     }
 
     @GetMapping("/reviews")
-    public Response<SearchDocumentListResponseDTO> listReviewDocuments(@RequestParam(required = false) Integer limit) {
-        return Response.success(toResponse(searchDocumentDomainService.listReviewDocuments(limit)));
+    public Response<SearchDocumentListResponseDTO> listReviewDocuments(@RequestParam(required = false) Integer limit,
+                                                                       @RequestParam(required = false) Integer offset) {
+        return Response.success(toResponse(searchDocumentDomainService.listReviewDocuments(limit, offset)));
     }
 
     @GetMapping("/shops/{shopId}")
