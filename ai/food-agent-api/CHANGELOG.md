@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+- Hardened the single-instance ES reconciliation scheduler with duplicate-start protection, optional run-on-startup, graceful stop, and interval normalization.
+
 ## 0.6.0
 
 - Added paged Java search export support for full ES reconciliation snapshots.

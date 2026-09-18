@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.6.0"
+    app_version: str = "0.6.1"
     app_port: int = 8500
     log_level: str = "INFO"
     java_gateway_base_url: str = "http://127.0.0.1:8080"
@@ -27,6 +27,7 @@ class Settings(BaseModel):
     es_sync_trade_queue: str = "food.trade.search.sync.queue"
     es_reconcile_enabled: bool = False
     es_reconcile_interval_seconds: int = 900
+    es_reconcile_run_on_startup: bool = True
     es_reconcile_page_size: int = 200
     es_reconcile_prune_stale: bool = True
     es_reconcile_scan_size: int = 10000
@@ -126,6 +127,12 @@ def get_settings() -> Settings:
                 str(defaults.es_reconcile_interval_seconds),
             )
         ),
+        es_reconcile_run_on_startup=_get_value(
+            dotenv_values,
+            "ES_RECONCILE_RUN_ON_STARTUP",
+            str(defaults.es_reconcile_run_on_startup),
+        ).lower()
+        in {"1", "true", "yes", "on"},
         es_reconcile_page_size=int(
             _get_value(
                 dotenv_values,
