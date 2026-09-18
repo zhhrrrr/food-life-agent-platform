@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.6.2`
+Current version: `0.6.3`
 
 Current route chain:
 
@@ -26,6 +26,7 @@ Added by version:
 0.6.0: scheduled/manual ES reconciliation for missed events and stale documents
 0.6.1: single-instance reconciliation scheduler hardening
 0.6.2: Redis distributed lock for multi-worker reconciliation safety
+0.6.3: extracted Redis distributed lock into a reusable sync module
 ```
 
 This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. LLM, Tool Calling, MCP, Redis Memory, SSE, and Human Confirmation are still future stages.
@@ -66,7 +67,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.6.2
+APP_VERSION=0.6.3
 APP_PORT=8500
 LOG_LEVEL=INFO
 JAVA_GATEWAY_BASE_URL=http://127.0.0.1:8080

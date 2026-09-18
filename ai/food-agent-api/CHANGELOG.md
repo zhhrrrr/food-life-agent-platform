@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.3
+
+- Extracted Redis distributed lock logic from the ES reconciliation scheduler into a reusable sync lock module.
+- Added focused tests for disabled-lock behavior, TTL normalization, and reconciliation lock settings mapping.
+
 ## 0.6.2
 
 - Added an optional Redis distributed lock for ES reconciliation so only one FastAPI/ASGI worker runs each reconciliation round.
