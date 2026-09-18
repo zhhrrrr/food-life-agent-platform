@@ -23,6 +23,20 @@ class FakeIndexer:
         return FakeReconcileResult()
 
 
+class FakeLock:
+    def __init__(self, acquired: bool = True) -> None:
+        self.acquired = acquired
+        self.acquire_calls = 0
+        self.release_calls = 0
+
+    def acquire(self) -> bool:
+        self.acquire_calls += 1
+        return self.acquired
+
+    def release(self) -> None:
+        self.release_calls += 1
+
+
 def test_scheduler_does_not_start_duplicate_thread() -> None:
     calls: list[str] = []
     scheduler = EsReconciliationScheduler(
@@ -73,3 +87,41 @@ def test_scheduler_run_once_releases_lock_after_failure() -> None:
     scheduler._run_once()
 
     assert calls == ["reconcile", "reconcile"]
+
+
+def test_scheduler_skips_reconcile_when_distributed_lock_is_busy() -> None:
+    calls: list[str] = []
+    lock = FakeLock(acquired=False)
+    scheduler = EsReconciliationScheduler(
+        settings=Settings(
+            es_reconcile_enabled=True,
+            es_reconcile_distributed_lock_enabled=True,
+        ),
+        reconcile_factory=lambda: FakeIndexer(calls),
+        lock_factory=lambda: lock,
+    )
+
+    scheduler._run_once()
+
+    assert calls == []
+    assert lock.acquire_calls == 1
+    assert lock.release_calls == 0
+
+
+def test_scheduler_releases_distributed_lock_after_success() -> None:
+    calls: list[str] = []
+    lock = FakeLock(acquired=True)
+    scheduler = EsReconciliationScheduler(
+        settings=Settings(
+            es_reconcile_enabled=True,
+            es_reconcile_distributed_lock_enabled=True,
+        ),
+        reconcile_factory=lambda: FakeIndexer(calls),
+        lock_factory=lambda: lock,
+    )
+
+    scheduler._run_once()
+
+    assert calls == ["reconcile"]
+    assert lock.acquire_calls == 1
+    assert lock.release_calls == 1

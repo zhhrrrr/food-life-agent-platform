@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.2
+
+- Added an optional Redis distributed lock for ES reconciliation so only one FastAPI/ASGI worker runs each reconciliation round.
+- Added lock renewal and token-checked Lua release to avoid stale lock expiry and accidental unlock by another process.
+
 ## 0.6.1
 
 - Hardened the single-instance ES reconciliation scheduler with duplicate-start protection, optional run-on-startup, graceful stop, and interval normalization.

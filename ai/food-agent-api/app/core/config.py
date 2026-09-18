@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.6.1"
+    app_version: str = "0.6.2"
     app_port: int = 8500
     log_level: str = "INFO"
     java_gateway_base_url: str = "http://127.0.0.1:8080"
@@ -22,12 +22,16 @@ class Settings(BaseModel):
     es_index_activity: str = "food_activity_index"
     es_index_coupon: str = "food_coupon_index"
     rabbitmq_url: str = "amqp://guest:guest@127.0.0.1:5672/%2F"
+    redis_url: str = "redis://127.0.0.1:6379/0"
     es_sync_consumer_enabled: bool = False
     es_sync_business_queue: str = "food.business.search.sync.queue"
     es_sync_trade_queue: str = "food.trade.search.sync.queue"
     es_reconcile_enabled: bool = False
     es_reconcile_interval_seconds: int = 900
     es_reconcile_run_on_startup: bool = True
+    es_reconcile_distributed_lock_enabled: bool = False
+    es_reconcile_lock_key: str = "food-agent-api:es-reconciliation:lock"
+    es_reconcile_lock_ttl_seconds: int = 1800
     es_reconcile_page_size: int = 200
     es_reconcile_prune_stale: bool = True
     es_reconcile_scan_size: int = 10000
@@ -98,6 +102,7 @@ def get_settings() -> Settings:
         ),
         es_index_coupon=_get_value(dotenv_values, "ES_INDEX_COUPON", defaults.es_index_coupon),
         rabbitmq_url=_get_value(dotenv_values, "RABBITMQ_URL", defaults.rabbitmq_url),
+        redis_url=_get_value(dotenv_values, "REDIS_URL", defaults.redis_url),
         es_sync_consumer_enabled=_get_value(
             dotenv_values,
             "ES_SYNC_CONSUMER_ENABLED",
@@ -133,6 +138,24 @@ def get_settings() -> Settings:
             str(defaults.es_reconcile_run_on_startup),
         ).lower()
         in {"1", "true", "yes", "on"},
+        es_reconcile_distributed_lock_enabled=_get_value(
+            dotenv_values,
+            "ES_RECONCILE_DISTRIBUTED_LOCK_ENABLED",
+            str(defaults.es_reconcile_distributed_lock_enabled),
+        ).lower()
+        in {"1", "true", "yes", "on"},
+        es_reconcile_lock_key=_get_value(
+            dotenv_values,
+            "ES_RECONCILE_LOCK_KEY",
+            defaults.es_reconcile_lock_key,
+        ),
+        es_reconcile_lock_ttl_seconds=int(
+            _get_value(
+                dotenv_values,
+                "ES_RECONCILE_LOCK_TTL_SECONDS",
+                str(defaults.es_reconcile_lock_ttl_seconds),
+            )
+        ),
         es_reconcile_page_size=int(
             _get_value(
                 dotenv_values,
