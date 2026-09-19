@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0
+
+- Added the stage 4 lightweight RAG retrieval chain for RecommendAgent and SupportAgent.
+- Introduced a reusable `RagRetriever` result object and structured context item builder on top of ES BM25 search.
+- Changed RecommendAgent and SupportAgent from pure mock replies to evidence-aware template answers with references.
+- Documented that this stage is Retrieval + Template Answer, not full LLM RAG.
+
 ## 0.6.3
 
 - Extracted Redis distributed lock logic from the ES reconciliation scheduler into a reusable sync lock module.

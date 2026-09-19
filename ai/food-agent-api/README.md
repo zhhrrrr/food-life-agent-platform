@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.6.3`
+Current version: `0.7.0`
 
 Current route chain:
 
@@ -12,6 +12,8 @@ HTTP Request
 -> LangGraph State
 -> rule-based Router
 -> Recommend / Trade / Support Agent
+-> ES BM25 retrieval for Recommend / Support
+-> Template answer with references
 -> Response
 ```
 
@@ -27,9 +29,10 @@ Added by version:
 0.6.1: single-instance reconciliation scheduler hardening
 0.6.2: Redis distributed lock for multi-worker reconciliation safety
 0.6.3: extracted Redis distributed lock into a reusable sync module
+0.7.0: stage 4 RAG retrieval chain with ES BM25 context and template answers
 ```
 
-This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. LLM, Tool Calling, MCP, Redis Memory, SSE, and Human Confirmation are still future stages.
+This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain: Retrieval + Template Answer. It is not full LLM RAG yet. LLM, Tool Calling, MCP, Redis Memory, SSE, and Human Confirmation are still future stages.
 
 Elasticsearch support is present but disabled by default. Set `ES_ENABLED=true` only after Elasticsearch is available and the indexes have data.
 
@@ -67,7 +70,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.6.3
+APP_VERSION=0.7.0
 APP_PORT=8500
 LOG_LEVEL=INFO
 JAVA_GATEWAY_BASE_URL=http://127.0.0.1:8080
@@ -174,6 +177,8 @@ When ES returns matches, `POST /api/agent/chat` also includes:
   ]
 }
 ```
+
+RecommendAgent searches shop, package, review, activity, and coupon indexes. SupportAgent searches the platform rule index. If ES is disabled or no document matches, the agents return a clear no-evidence template instead of pretending to have generated an answer.
 
 ## Run Tests
 

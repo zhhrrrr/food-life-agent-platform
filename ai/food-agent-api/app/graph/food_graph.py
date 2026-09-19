@@ -14,6 +14,8 @@ class FoodAgentState(TypedDict):
     intent: str
     agent: str
     response: str
+    rag_mode: str
+    context: list[dict[str, Any]]
     references: list[dict[str, Any]]
 
 
@@ -89,6 +91,8 @@ def run_food_agent(message: str) -> FoodAgentState:
         "intent": "",
         "agent": "",
         "response": "",
+        "rag_mode": "",
+        "context": [],
         "references": [],
     }
 

@@ -1,9 +1,11 @@
 from fastapi.testclient import TestClient
 
+from app.agents.recommend_agent import recommend_agent_node
+from app.agents.support_agent import support_agent_node
 from app.core.config import get_settings
 from app.main import app
 from app.rag.context_builder import build_context_summary, build_references
-from app.rag.retriever import retrieve_for_agent
+from app.rag.retriever import RagRetriever, RetrievalResult, retrieve_for_agent
 from app.search.schemas import SearchHit
 
 
@@ -21,7 +23,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = get_settings()
 
-    assert settings.app_version == "0.6.3"
+    assert settings.app_version == "0.7.0"
     assert settings.es_enabled is False
     assert settings.es_index_shop == "food_shop_index"
 
@@ -34,7 +36,7 @@ def test_chat_routes_to_recommend_agent() -> None:
     data = response.json()
     assert data["intent"] == "recommend"
     assert data["agent"] == "recommend"
-    assert data["response"] == f"Recommend Agent \u6536\u5230\u8bf7\u6c42\uff1a{message}"
+    assert "\u6682\u672a\u4ece ES \u68c0\u7d22\u5230\u53ef\u7528\u4f9d\u636e" in data["response"]
     assert data["references"] == []
 
 
@@ -58,7 +60,7 @@ def test_chat_routes_to_support_agent() -> None:
     data = response.json()
     assert data["intent"] == "support"
     assert data["agent"] == "support"
-    assert data["response"] == f"Support Agent \u6536\u5230\u8bf7\u6c42\uff1a{message}"
+    assert "\u6682\u672a\u4ece ES \u68c0\u7d22\u5230\u76f8\u5173\u5e73\u53f0\u89c4\u5219" in data["response"]
     assert data["references"] == []
 
 
@@ -92,6 +94,112 @@ def test_context_builder_creates_summary_and_references() -> None:
     context = build_context_summary(hits)
     references = build_references(hits)
 
-    assert context == "1. Shu Xiang: Sichuan restaurant for team dinners."
+    assert context == "1. Shu Xiang [food_shop_index]: Sichuan restaurant for team dinners."
     assert references[0].id == "shop-1"
     assert references[0].source == "food_shop_index"
+
+
+class FakeSearchService:
+    def __init__(self) -> None:
+        self.calls: list[tuple[list[str], str, int]] = []
+
+    def search_many(self, indices: list[str], query: str, size: int = 3) -> list[SearchHit]:
+        self.calls.append((indices, query, size))
+        return [
+            SearchHit(
+                id="shop-1",
+                title="Shu Xiang",
+                content="Sichuan restaurant for team dinners.",
+                source="food_shop_index",
+                score=4.2,
+            )
+        ]
+
+
+def test_rag_retriever_searches_recommend_indices() -> None:
+    settings = get_settings()
+    search_service = FakeSearchService()
+
+    result = RagRetriever(settings=settings, search_service=search_service).retrieve(
+        "recommend",
+        "\u5ddd\u83dc\u9986",
+        size=2,
+    )
+
+    assert result.has_hits is True
+    assert result.hits[0].id == "shop-1"
+    assert search_service.calls == [
+        (
+            [
+                "food_shop_index",
+                "food_package_index",
+                "food_review_index",
+                "food_activity_index",
+                "food_coupon_index",
+            ],
+            "\u5ddd\u83dc\u9986",
+            2,
+        )
+    ]
+
+
+class FakeRagRetriever:
+    def __init__(self, hit: SearchHit) -> None:
+        self.hit = hit
+
+    def retrieve(self, agent: str, query: str, size: int = 3) -> RetrievalResult:
+        return RetrievalResult(agent=agent, query=query, hits=[self.hit])
+
+
+def test_recommend_agent_uses_rag_hits(monkeypatch) -> None:
+    hit = SearchHit(
+        id="shop-1",
+        title="Shu Xiang",
+        content="Sichuan restaurant for team dinners.",
+        source="food_shop_index",
+        score=4.2,
+    )
+    monkeypatch.setattr(
+        "app.agents.recommend_agent.RagRetriever",
+        lambda: FakeRagRetriever(hit),
+    )
+
+    result = recommend_agent_node({"message": "\u63a8\u8350\u5ddd\u83dc"})
+
+    assert "\u6839\u636e\u68c0\u7d22\u7ed3\u679c" in str(result["response"])
+    assert result["references"] == [
+        {
+            "id": "shop-1",
+            "title": "Shu Xiang",
+            "source": "food_shop_index",
+            "score": 4.2,
+        }
+    ]
+    assert result["rag_mode"] == "retrieval_template"
+
+
+def test_support_agent_uses_rag_hits(monkeypatch) -> None:
+    hit = SearchHit(
+        id="rule-1",
+        title="Refund Rule",
+        content="Refunds are reviewed after payment records are verified.",
+        source="food_rule_index",
+        score=5.0,
+    )
+    monkeypatch.setattr(
+        "app.agents.support_agent.RagRetriever",
+        lambda: FakeRagRetriever(hit),
+    )
+
+    result = support_agent_node({"message": "\u9000\u6b3e\u89c4\u5219"})
+
+    assert "\u5e73\u53f0\u89c4\u5219\u68c0\u7d22\u7ed3\u679c" in str(result["response"])
+    assert result["references"] == [
+        {
+            "id": "rule-1",
+            "title": "Refund Rule",
+            "source": "food_rule_index",
+            "score": 5.0,
+        }
+    ]
+    assert result["rag_mode"] == "retrieval_template"
