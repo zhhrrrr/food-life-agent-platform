@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.1
+
+- Simplified scheduled ES reconciliation locking by removing local `_start_lock` and `_run_lock`.
+- Kept only the Redis distributed lock as the run guard for multi-instance reconciliation reliability.
+- Documented the timer-thread -> Redis lock -> reconcile -> release flow.
+
 ## 0.7.0
 
 - Added the stage 4 lightweight RAG retrieval chain for RecommendAgent and SupportAgent.

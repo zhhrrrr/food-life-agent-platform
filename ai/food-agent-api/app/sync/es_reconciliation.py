@@ -23,22 +23,19 @@ class EsReconciliationScheduler:
         )
         self._thread: threading.Thread | None = None
         self._stopping = threading.Event()
-        self._start_lock = threading.Lock()
-        self._run_lock = threading.Lock()
 
     def start(self) -> None:
         if not self.settings.es_reconcile_enabled:
             return
-        with self._start_lock:
-            if self.is_running:
-                return
-            self._stopping.clear()
-            self._thread = threading.Thread(
-                target=self._run,
-                name="es-reconciliation",
-                daemon=True,
-            )
-            self._thread.start()
+        if self.is_running:
+            return
+        self._stopping.clear()
+        self._thread = threading.Thread(
+            target=self._run,
+            name="es-reconciliation",
+            daemon=True,
+        )
+        self._thread.start()
 
     def stop(self) -> None:
         self._stopping.set()
@@ -67,9 +64,6 @@ class EsReconciliationScheduler:
             self._run_once()
 
     def _run_once(self) -> None:
-        if not self._run_lock.acquire(blocking=False):
-            logger.info("es_reconciliation_skipped reason=previous_run_still_active")
-            return
         lock = self.lock_factory()
         lock_acquired = False
         try:
@@ -93,7 +87,6 @@ class EsReconciliationScheduler:
         finally:
             if lock_acquired:
                 lock.release()
-            self._run_lock.release()
 
     def _interval_seconds(self) -> int:
         return max(1, self.settings.es_reconcile_interval_seconds)

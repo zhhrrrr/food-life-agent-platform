@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.7.0`
+Current version: `0.7.1`
 
 Current route chain:
 
@@ -30,6 +30,7 @@ Added by version:
 0.6.2: Redis distributed lock for multi-worker reconciliation safety
 0.6.3: extracted Redis distributed lock into a reusable sync module
 0.7.0: stage 4 RAG retrieval chain with ES BM25 context and template answers
+0.7.1: simplified ES reconciliation locking to a single Redis distributed lock
 ```
 
 This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain: Retrieval + Template Answer. It is not full LLM RAG yet. LLM, Tool Calling, MCP, Redis Memory, SSE, and Human Confirmation are still future stages.
@@ -70,7 +71,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.7.0
+APP_VERSION=0.7.1
 APP_PORT=8500
 LOG_LEVEL=INFO
 JAVA_GATEWAY_BASE_URL=http://127.0.0.1:8080
@@ -162,6 +163,8 @@ ES_SYNC_CONSUMER_ENABLED=true
 ES_RECONCILE_ENABLED=true
 ES_RECONCILE_DISTRIBUTED_LOCK_ENABLED=true
 ```
+
+Scheduled ES reconciliation uses one timer thread per process and one Redis distributed lock per run. The flow is: timer waits for the interval, calls `_run_once()`, tries to acquire the Redis lock, skips the round if the lock is busy, runs `reconcile()` only after lock success, and releases the lock in `finally`.
 
 When ES returns matches, `POST /api/agent/chat` also includes:
 

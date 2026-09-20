@@ -70,6 +70,15 @@ def test_scheduler_normalizes_interval_seconds() -> None:
     assert scheduler._interval_seconds() == 1
 
 
+def test_scheduler_uses_only_distributed_lock_for_run_guard() -> None:
+    scheduler = EsReconciliationScheduler(
+        settings=Settings(es_reconcile_enabled=True),
+    )
+
+    assert not hasattr(scheduler, "_start_lock")
+    assert not hasattr(scheduler, "_run_lock")
+
+
 def test_scheduler_run_once_releases_lock_after_failure() -> None:
     calls: list[str] = []
     should_fail = True
