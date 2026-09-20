@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0
+
+- Added a seeded platform rule document source for SupportAgent RAG retrieval.
+- Added the `rules` search scope, mapped to `food_rule_index`, while keeping MySQL-backed scopes exported by Java services.
+- Extended rebuild/reconcile indexing so rules use the same `SearchDocument` schema and ES write path as business documents.
+- Documented the dedicated rule rebuild command and the distinction between MySQL business documents and non-MySQL platform rule documents.
+
 ## 0.7.1
 
 - Simplified scheduled ES reconciliation locking by removing local `_start_lock` and `_run_lock`.

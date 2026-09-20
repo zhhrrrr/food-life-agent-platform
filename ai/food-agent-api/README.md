@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.7.1`
+Current version: `0.8.0`
 
 Current route chain:
 
@@ -31,6 +31,7 @@ Added by version:
 0.6.3: extracted Redis distributed lock into a reusable sync module
 0.7.0: stage 4 RAG retrieval chain with ES BM25 context and template answers
 0.7.1: simplified ES reconciliation locking to a single Redis distributed lock
+0.8.0: seeded platform rule and FAQ-style documents into the ES rule indexing path
 ```
 
 This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain: Retrieval + Template Answer. It is not full LLM RAG yet. LLM, Tool Calling, MCP, Redis Memory, SSE, and Human Confirmation are still future stages.
@@ -71,7 +72,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.7.1
+APP_VERSION=0.8.0
 APP_PORT=8500
 LOG_LEVEL=INFO
 JAVA_GATEWAY_BASE_URL=http://127.0.0.1:8080
@@ -155,6 +156,16 @@ curl -X POST http://127.0.0.1:8500/api/agent/indexes/reconcile \
   -d "{\"scopes\":[\"shops\",\"packages\",\"reviews\",\"activities\",\"coupons\"],\"page_size\":200,\"prune_stale\":true}"
 ```
 
+Rebuild seeded platform rule documents for SupportAgent:
+
+```bash
+curl -X POST http://127.0.0.1:8500/api/agent/indexes/rebuild \
+  -H "Content-Type: application/json" \
+  -d "{\"scopes\":[\"rules\"]}"
+```
+
+Rules are not MySQL business rows. They use the same `SearchDocument` ES schema but come from the local platform rule document source until formal operations Markdown/config imports are added.
+
 Incremental ES sync is disabled by default. Enable it only after RabbitMQ, Elasticsearch, and Java services are available:
 
 ```text
@@ -191,4 +202,4 @@ pytest
 
 ## Next Step
 
-Import platform rules and FAQ articles from formal Markdown or configuration documents, then add them to the support RAG indexes.
+Replace seeded platform rules with formal operations Markdown/config imports when the production rule documents are available.

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.7.1"
+    app_version: str = "0.8.0"
     app_port: int = 8500
     log_level: str = "INFO"
     java_gateway_base_url: str = "http://127.0.0.1:8080"

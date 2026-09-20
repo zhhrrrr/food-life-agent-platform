@@ -3,7 +3,7 @@ from typing import Any
 import httpx
 
 from app.core.config import Settings, get_settings
-from app.search.index_names import SEARCH_SCOPES
+from app.search.index_names import MYSQL_SEARCH_SCOPES
 from app.search.schemas import SearchDocument
 
 
@@ -40,7 +40,7 @@ class JavaSearchExportClient:
         limit: int | None = None,
         offset: int | None = None,
     ) -> list[SearchDocument]:
-        if scope not in SEARCH_SCOPES:
+        if scope not in MYSQL_SEARCH_SCOPES:
             raise JavaSearchExportError(f"unsupported search scope: {scope}")
 
         service_name, path = self._ENDPOINTS[scope]

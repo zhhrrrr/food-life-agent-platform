@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config import Settings, get_settings
 from app.indexing.java_export_client import JavaSearchExportClient
+from app.indexing.rule_document_source import list_rule_documents
 from app.search.index_names import SEARCH_SCOPES, index_name_for_scope
 from app.search.schemas import SearchDocument
 from app.search.search_service import SearchService
@@ -92,7 +93,7 @@ class SearchIndexer:
 
         for scope in self._normalize_scopes(scopes):
             index = index_name_for_scope(self.settings, scope)
-            documents = self.export_client.fetch_documents(scope=scope, limit=limit)
+            documents = self._fetch_documents(scope=scope, limit=limit)
             indexed, failed = self.search_service.index_documents(
                 index=index,
                 documents=documents,
@@ -140,6 +141,8 @@ class SearchIndexer:
         action: str = "UPSERT",
     ) -> IndexScopeResult:
         self._normalize_scopes([scope])
+        if scope == "rules":
+            raise ValueError("rules scope does not support single-document sync; use rebuild/reconcile")
         index = index_name_for_scope(self.settings, scope)
         normalized_action = action.upper()
 
@@ -206,7 +209,7 @@ class SearchIndexer:
         offset = 0
 
         while True:
-            documents = self.export_client.fetch_documents(
+            documents = self._fetch_documents(
                 scope=scope,
                 limit=page_size,
                 offset=offset,
@@ -244,6 +247,24 @@ class SearchIndexer:
                     result.failed += 1
 
         return result
+
+    def _fetch_documents(
+        self,
+        scope: str,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[SearchDocument]:
+        if scope == "rules":
+            return list_rule_documents(
+                limit=limit,
+                offset=offset,
+                settings=self.settings,
+            )
+        return self.export_client.fetch_documents(
+            scope=scope,
+            limit=limit,
+            offset=offset,
+        )
 
     @staticmethod
     def _normalize_page_size(page_size: int) -> int:

@@ -61,6 +61,7 @@ class FakeSearchService:
         documents: list[SearchDocument],
     ) -> tuple[int, int]:
         self.calls.append((index, [document.id for document in documents]))
+        self.documents.setdefault(index, {}).update({document.id: document for document in documents})
         return len(documents), 0
 
     def index_document(self, index: str, document: SearchDocument) -> bool:
@@ -115,6 +116,54 @@ def test_indexer_rejects_unknown_scope() -> None:
         indexer.rebuild(scopes=["orders"])
     except ValueError as exc:
         assert "unsupported search scopes: orders" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_indexer_rebuilds_seeded_rule_documents_without_java_export() -> None:
+    export_client = FakeExportClient()
+    search_service = FakeSearchService()
+    indexer = SearchIndexer(
+        export_client=export_client,
+        search_service=search_service,
+        settings=Settings(),
+    )
+
+    result = indexer.rebuild(scopes=["rules"], limit=3)
+
+    assert result.fetched == 3
+    assert result.indexed == 3
+    assert result.failed == 0
+    assert export_client.calls == []
+    assert search_service.calls == [
+        (
+            "food_rule_index",
+            [
+                "rule-refund-apply-window",
+                "rule-refund-payment-route",
+                "rule-refund-coupon-return",
+            ],
+        )
+    ]
+    assert (
+        search_service.documents["food_rule_index"]["rule-refund-apply-window"].metadata[
+            "doc_type"
+        ]
+        == "platform_rule"
+    )
+
+
+def test_indexer_rejects_single_rule_document_sync() -> None:
+    indexer = SearchIndexer(
+        export_client=FakeExportClient(),
+        search_service=FakeSearchService(),
+        settings=Settings(),
+    )
+
+    try:
+        indexer.sync_document(scope="rules", entity_id="refund-apply-window")
+    except ValueError as exc:
+        assert "rules scope does not support single-document sync" in str(exc)
     else:
         raise AssertionError("expected ValueError")
 
