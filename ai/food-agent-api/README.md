@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.9.0`
+Current version: `0.9.1`
 
 Current route chain:
 
@@ -33,6 +33,7 @@ Added by version:
 0.7.1: simplified ES reconciliation locking to a single Redis distributed lock
 0.8.0: seeded platform rule and FAQ-style documents into the ES rule indexing path
 0.9.0: LangChain ChatModel router with Pydantic Structured Output and rule fallback
+0.9.1: Zhipu GLM OpenAI-compatible chat model configuration
 ```
 
 This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain: Retrieval + Template Answer. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Tool Calling, MCP, Redis Memory, SSE, and Human Confirmation are still future stages.
@@ -73,7 +74,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.9.0
+APP_VERSION=0.9.1
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false
@@ -110,6 +111,16 @@ ES_RECONCILE_PRUNE_STALE=true
 ES_RECONCILE_SCAN_SIZE=10000
 ```
 
+Zhipu GLM router example:
+
+```text
+LLM_ROUTER_ENABLED=true
+LLM_PROVIDER=zhipu
+LLM_MODEL=glm-4.5-air
+LLM_API_KEY=your-zhipu-api-key
+LLM_BASE_URL=https://api.z.ai/api/paas/v4/
+```
+
 ## LLM Router
 
 The LLM router is disabled by default. When `LLM_ROUTER_ENABLED=true` and `LLM_API_KEY` is configured, LangChain calls the chat model with Pydantic Structured Output:
@@ -120,6 +131,8 @@ class IntentResult(BaseModel):
     confidence: float
     reason: str
 ```
+
+The default provider is `openai`. Set `LLM_PROVIDER=zhipu` to call Zhipu GLM through its OpenAI-compatible API. If `LLM_BASE_URL` is empty for `zhipu`, the service uses `https://api.z.ai/api/paas/v4/`.
 
 If the LLM provider is not configured, unavailable, or returns an invalid structure, the router falls back to the existing keyword rules.
 

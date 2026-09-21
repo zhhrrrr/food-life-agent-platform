@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.1
+
+- Added `zhipu` as an OpenAI-compatible LangChain chat model provider.
+- Added the default Zhipu GLM base URL for `LLM_PROVIDER=zhipu`.
+- Documented the `glm-4.5-air` router configuration while keeping real API keys out of committed files.
+- Added tests for Zhipu chat model option resolution.
+
 ## 0.9.0
 
 - Added LangChain ChatModel configuration for the intent router.

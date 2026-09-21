@@ -5,6 +5,7 @@ from app.agents.support_agent import support_agent_node
 from app.core.config import get_settings
 from app.graph.food_graph import run_food_agent
 from app.graph.router import IntentResult, route_intent
+from app.llm.chat_model import ZHIPU_OPENAI_COMPATIBLE_BASE_URL, resolve_chat_model_options
 from app.main import app
 from app.rag.context_builder import build_context_summary, build_references
 from app.rag.retriever import RagRetriever, RetrievalResult, retrieve_for_agent
@@ -25,7 +26,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = get_settings()
 
-    assert settings.app_version == "0.9.0"
+    assert settings.app_version == "0.9.1"
     assert settings.es_enabled is False
     assert settings.es_index_shop == "food_shop_index"
     assert settings.llm_router_enabled is False
@@ -277,3 +278,21 @@ def test_route_intent_falls_back_when_llm_fails() -> None:
     assert result.intent == "trade"
     assert result.confidence == 0.65
     assert "fallback rule" in result.reason
+
+
+def test_zhipu_chat_model_options_use_openai_compatible_base_url() -> None:
+    settings = get_settings().model_copy(
+        update={
+            "llm_router_enabled": True,
+            "llm_provider": "zhipu",
+            "llm_model": "glm-4.5-air",
+            "llm_api_key": "test-key",
+            "llm_base_url": "",
+        }
+    )
+
+    options = resolve_chat_model_options(settings)
+
+    assert options["model"] == "glm-4.5-air"
+    assert options["api_key"] == "test-key"
+    assert options["base_url"] == ZHIPU_OPENAI_COMPATIBLE_BASE_URL
