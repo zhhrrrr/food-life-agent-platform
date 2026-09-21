@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 pydantic
 langchain
+langchain-openai
 langgraph
 pytest
 httpx

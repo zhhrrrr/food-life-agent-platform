@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0
+
+- Added LangChain ChatModel configuration for the intent router.
+- Added `IntentResult` Pydantic Structured Output with intent, confidence, and reason.
+- Replaced the LangGraph router node with an LLM router while preserving the rule-based router as fallback.
+- Added tests for fallback routing, router metadata, and structured LLM routing.
+
 ## 0.8.0
 
 - Added a seeded platform rule document source for SupportAgent RAG retrieval.

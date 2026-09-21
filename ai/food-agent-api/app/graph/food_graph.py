@@ -5,6 +5,7 @@ from langgraph.graph import END, START, StateGraph
 from app.agents.recommend_agent import recommend_agent_node
 from app.agents.support_agent import support_agent_node
 from app.agents.trade_agent import trade_agent_node
+from app.graph.router import route_intent
 
 AgentName = Literal["recommend", "trade", "support"]
 
@@ -15,42 +16,20 @@ class FoodAgentState(TypedDict):
     agent: str
     response: str
     rag_mode: str
+    router_confidence: float
+    router_reason: str
     context: list[dict[str, Any]]
     references: list[dict[str, Any]]
 
 
-TRADE_KEYWORDS = (
-    "\u8ba2\u5355",
-    "\u4e0b\u5355",
-    "\u5e93\u5b58",
-    "\u4f18\u60e0\u5238",
-    "\u4ef7\u683c",
-    "\u62fc\u56e2",
-    "\u53d6\u6d88",
-)
-SUPPORT_KEYWORDS = (
-    "\u9000\u6b3e",
-    "\u552e\u540e",
-    "\u89c4\u5219",
-    "\u652f\u4ed8",
-    "FAQ",
-    "faq",
-)
-
-
-def router_node(state: FoodAgentState) -> dict[str, str]:
-    message = state["message"]
-
-    # TODO:
-    # Replace this rule-based router with LLM + Pydantic Structured Output.
-    if any(keyword in message for keyword in TRADE_KEYWORDS):
-        intent: AgentName = "trade"
-    elif any(keyword in message for keyword in SUPPORT_KEYWORDS):
-        intent = "support"
-    else:
-        intent = "recommend"
-
-    return {"intent": intent, "agent": intent}
+def router_node(state: FoodAgentState) -> dict[str, object]:
+    result = route_intent(state["message"])
+    return {
+        "intent": result.intent,
+        "agent": result.intent,
+        "router_confidence": result.confidence,
+        "router_reason": result.reason,
+    }
 
 
 def route_agent(state: FoodAgentState) -> AgentName:
@@ -92,6 +71,8 @@ def run_food_agent(message: str) -> FoodAgentState:
         "agent": "",
         "response": "",
         "rag_mode": "",
+        "router_confidence": 0.0,
+        "router_reason": "",
         "context": [],
         "references": [],
     }

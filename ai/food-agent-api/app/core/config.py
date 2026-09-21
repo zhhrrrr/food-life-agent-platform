@@ -7,9 +7,16 @@ from pydantic import BaseModel
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.8.0"
+    app_version: str = "0.9.0"
     app_port: int = 8500
     log_level: str = "INFO"
+    llm_router_enabled: bool = False
+    llm_provider: str = "openai"
+    llm_model: str = "gpt-4o-mini"
+    llm_api_key: str = ""
+    llm_base_url: str = ""
+    llm_temperature: float = 0.0
+    llm_timeout_seconds: float = 10.0
     java_gateway_base_url: str = "http://127.0.0.1:8080"
     java_business_base_url: str = "http://127.0.0.1:8201"
     java_trade_base_url: str = "http://127.0.0.1:8301"
@@ -65,6 +72,26 @@ def get_settings() -> Settings:
         app_version=_get_value(dotenv_values, "APP_VERSION", defaults.app_version),
         app_port=int(_get_value(dotenv_values, "APP_PORT", str(defaults.app_port))),
         log_level=_get_value(dotenv_values, "LOG_LEVEL", defaults.log_level),
+        llm_router_enabled=_get_value(
+            dotenv_values,
+            "LLM_ROUTER_ENABLED",
+            str(defaults.llm_router_enabled),
+        ).lower()
+        in {"1", "true", "yes", "on"},
+        llm_provider=_get_value(dotenv_values, "LLM_PROVIDER", defaults.llm_provider),
+        llm_model=_get_value(dotenv_values, "LLM_MODEL", defaults.llm_model),
+        llm_api_key=_get_value(dotenv_values, "LLM_API_KEY", defaults.llm_api_key),
+        llm_base_url=_get_value(dotenv_values, "LLM_BASE_URL", defaults.llm_base_url),
+        llm_temperature=float(
+            _get_value(dotenv_values, "LLM_TEMPERATURE", str(defaults.llm_temperature))
+        ),
+        llm_timeout_seconds=float(
+            _get_value(
+                dotenv_values,
+                "LLM_TIMEOUT_SECONDS",
+                str(defaults.llm_timeout_seconds),
+            )
+        ),
         java_gateway_base_url=_get_value(
             dotenv_values,
             "JAVA_GATEWAY_BASE_URL",

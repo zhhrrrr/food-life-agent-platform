@@ -3,6 +3,8 @@ from fastapi.testclient import TestClient
 from app.agents.recommend_agent import recommend_agent_node
 from app.agents.support_agent import support_agent_node
 from app.core.config import get_settings
+from app.graph.food_graph import run_food_agent
+from app.graph.router import IntentResult, route_intent
 from app.main import app
 from app.rag.context_builder import build_context_summary, build_references
 from app.rag.retriever import RagRetriever, RetrievalResult, retrieve_for_agent
@@ -23,9 +25,10 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = get_settings()
 
-    assert settings.app_version == "0.8.0"
+    assert settings.app_version == "0.9.0"
     assert settings.es_enabled is False
     assert settings.es_index_shop == "food_shop_index"
+    assert settings.llm_router_enabled is False
 
 
 def test_chat_routes_to_recommend_agent() -> None:
@@ -203,3 +206,74 @@ def test_support_agent_uses_rag_hits(monkeypatch) -> None:
         }
     ]
     assert result["rag_mode"] == "retrieval_template"
+
+
+def test_food_graph_records_router_metadata() -> None:
+    result = run_food_agent("\u9000\u6b3e\u89c4\u5219\u662f\u4ec0\u4e48")
+
+    assert result["intent"] == "support"
+    assert result["agent"] == "support"
+    assert result["router_confidence"] == 0.65
+    assert "fallback rule" in result["router_reason"]
+
+
+class FakeStructuredModel:
+    def __init__(self, result: IntentResult) -> None:
+        self.result = result
+        self.messages: list[tuple[str, str]] | None = None
+
+    def invoke(self, messages: list[tuple[str, str]]) -> IntentResult:
+        self.messages = messages
+        return self.result
+
+
+class FakeChatModel:
+    def __init__(self, result: IntentResult) -> None:
+        self.result = result
+        self.schema: object | None = None
+        self.structured_model: FakeStructuredModel | None = None
+
+    def with_structured_output(self, schema: object) -> FakeStructuredModel:
+        self.schema = schema
+        self.structured_model = FakeStructuredModel(self.result)
+        return self.structured_model
+
+
+def test_route_intent_uses_llm_structured_output_when_enabled() -> None:
+    llm_result = IntentResult(
+        intent="support",
+        confidence=0.91,
+        reason="The user asks about refund policy.",
+    )
+    chat_model = FakeChatModel(llm_result)
+
+    result = route_intent(
+        "\u8fd9\u4e2a\u9000\u6b3e\u89c4\u5219\u600e\u4e48\u7b97",
+        settings=get_settings().model_copy(update={"llm_router_enabled": True}),
+        chat_model=chat_model,
+    )
+
+    assert result == llm_result
+    assert chat_model.schema is IntentResult
+    assert chat_model.structured_model is not None
+    assert chat_model.structured_model.messages is not None
+    assert chat_model.structured_model.messages[-1] == (
+        "human",
+        "\u8fd9\u4e2a\u9000\u6b3e\u89c4\u5219\u600e\u4e48\u7b97",
+    )
+
+
+def test_route_intent_falls_back_when_llm_fails() -> None:
+    class BrokenChatModel:
+        def with_structured_output(self, schema: object) -> object:
+            raise RuntimeError("llm unavailable")
+
+    result = route_intent(
+        "\u67e5\u8be2\u8ba2\u5355",
+        settings=get_settings().model_copy(update={"llm_router_enabled": True}),
+        chat_model=BrokenChatModel(),
+    )
+
+    assert result.intent == "trade"
+    assert result.confidence == 0.65
+    assert "fallback rule" in result.reason
