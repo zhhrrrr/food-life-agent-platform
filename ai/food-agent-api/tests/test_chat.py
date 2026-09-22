@@ -26,7 +26,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = get_settings()
 
-    assert settings.app_version == "0.9.1"
+    assert settings.app_version == "0.9.2"
     assert settings.es_enabled is False
     assert settings.es_index_shop == "food_shop_index"
     assert settings.llm_router_enabled is False
@@ -232,10 +232,12 @@ class FakeChatModel:
     def __init__(self, result: IntentResult) -> None:
         self.result = result
         self.schema: object | None = None
+        self.structured_kwargs: dict[str, object] = {}
         self.structured_model: FakeStructuredModel | None = None
 
-    def with_structured_output(self, schema: object) -> FakeStructuredModel:
+    def with_structured_output(self, schema: object, **kwargs: object) -> FakeStructuredModel:
         self.schema = schema
+        self.structured_kwargs = kwargs
         self.structured_model = FakeStructuredModel(self.result)
         return self.structured_model
 
@@ -262,6 +264,29 @@ def test_route_intent_uses_llm_structured_output_when_enabled() -> None:
         "human",
         "\u8fd9\u4e2a\u9000\u6b3e\u89c4\u5219\u600e\u4e48\u7b97",
     )
+
+
+def test_route_intent_uses_json_mode_for_zhipu_provider() -> None:
+    llm_result = IntentResult(
+        intent="recommend",
+        confidence=0.95,
+        reason="The user asks for food recommendations.",
+    )
+    chat_model = FakeChatModel(llm_result)
+
+    result = route_intent(
+        "\u63a8\u8350\u5ddd\u83dc\u9986",
+        settings=get_settings().model_copy(
+            update={
+                "llm_router_enabled": True,
+                "llm_provider": "zhipu",
+            }
+        ),
+        chat_model=chat_model,
+    )
+
+    assert result == llm_result
+    assert chat_model.structured_kwargs == {"method": "json_mode"}
 
 
 def test_route_intent_falls_back_when_llm_fails() -> None:

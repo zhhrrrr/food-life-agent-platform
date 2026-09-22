@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.9.1"
+    app_version: str = "0.9.2"
     app_port: int = 8500
     log_level: str = "INFO"
     llm_router_enabled: bool = False

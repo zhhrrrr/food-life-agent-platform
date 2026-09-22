@@ -49,7 +49,11 @@ def route_intent(
 
     try:
         model = chat_model or build_chat_model(resolved_settings)
-        structured_model = model.with_structured_output(IntentResult)  # type: ignore[attr-defined]
+        structured_kwargs = _structured_output_kwargs(resolved_settings)
+        structured_model = model.with_structured_output(  # type: ignore[attr-defined]
+            IntentResult,
+            **structured_kwargs,
+        )
         result = structured_model.invoke(_router_messages(message))
     except ChatModelUnavailableError as exc:
         logger.info("llm_router_fallback reason=%s", exc)
@@ -65,6 +69,12 @@ def route_intent(
     except Exception:
         logger.exception("llm_router_invalid_result")
         return fallback
+
+
+def _structured_output_kwargs(settings: Settings) -> dict[str, str]:
+    if settings.llm_provider.strip().lower() == "zhipu":
+        return {"method": "json_mode"}
+    return {}
 
 
 def route_intent_by_rules(message: str) -> IntentResult:
@@ -98,7 +108,10 @@ def _router_messages(message: str) -> list[tuple[str, str]]:
                 "trade for order, payment, stock, coupon transaction, cancellation, "
                 "group-buy or seckill operation requests, "
                 "support for platform rules, refund, after-sales, FAQ, policy, or help questions. "
-                "Return only the structured schema."
+                "Return only one valid JSON object, without markdown fences or extra text. "
+                "The JSON object must include all fields: "
+                'intent, confidence, reason. Example: {"intent":"recommend",'
+                '"confidence":0.86,"reason":"The user asks for restaurant suggestions."}'
             ),
         ),
         ("human", message),

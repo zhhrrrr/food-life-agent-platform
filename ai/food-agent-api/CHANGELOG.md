@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.2
+
+- Switched the Zhipu LangChain structured router call to JSON mode for OpenAI-compatible response parsing.
+- Strengthened the router prompt to require a complete JSON object with `intent`, `confidence`, and `reason`.
+- Verified real `glm-4.5-air` routing returns an `IntentResult` instead of falling back to rules.
+
 ## 0.9.1
 
 - Added `zhipu` as an OpenAI-compatible LangChain chat model provider.

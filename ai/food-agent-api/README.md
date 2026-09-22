@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.9.1`
+Current version: `0.9.2`
 
 Current route chain:
 
@@ -34,6 +34,7 @@ Added by version:
 0.8.0: seeded platform rule and FAQ-style documents into the ES rule indexing path
 0.9.0: LangChain ChatModel router with Pydantic Structured Output and rule fallback
 0.9.1: Zhipu GLM OpenAI-compatible chat model configuration
+0.9.2: Zhipu router structured output compatibility through JSON mode
 ```
 
 This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain: Retrieval + Template Answer. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Tool Calling, MCP, Redis Memory, SSE, and Human Confirmation are still future stages.
@@ -74,7 +75,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.9.1
+APP_VERSION=0.9.2
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false
@@ -132,7 +133,7 @@ class IntentResult(BaseModel):
     reason: str
 ```
 
-The default provider is `openai`. Set `LLM_PROVIDER=zhipu` to call Zhipu GLM through its OpenAI-compatible API. If `LLM_BASE_URL` is empty for `zhipu`, the service uses `https://api.z.ai/api/paas/v4/`.
+The default provider is `openai`. Set `LLM_PROVIDER=zhipu` to call Zhipu GLM through its OpenAI-compatible API. If `LLM_BASE_URL` is empty for `zhipu`, the service uses `https://api.z.ai/api/paas/v4/`. Zhipu routing uses LangChain structured output with JSON mode so OpenAI-compatible responses can be parsed into `IntentResult`.
 
 If the LLM provider is not configured, unavailable, or returns an invalid structure, the router falls back to the existing keyword rules.
 
