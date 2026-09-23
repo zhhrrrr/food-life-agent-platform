@@ -17,9 +17,15 @@ class IntentResult(BaseModel):
     reason: str
 
 
+TRADE_ACTION_KEYWORDS = (
+    "\u7533\u8bf7\u9000\u6b3e",
+    "\u9000\u6b3e\u7533\u8bf7",
+    "\u6211\u8981\u9000\u6b3e",
+    "\u53d6\u6d88\u8ba2\u5355",
+    "\u4e0b\u5355",
+)
 TRADE_KEYWORDS = (
     "\u8ba2\u5355",
-    "\u4e0b\u5355",
     "\u5e93\u5b58",
     "\u4f18\u60e0\u5238",
     "\u4ef7\u683c",
@@ -27,6 +33,11 @@ TRADE_KEYWORDS = (
     "\u53d6\u6d88",
 )
 SUPPORT_KEYWORDS = (
+    "\u9000\u6b3e\u89c4\u5219",
+    "\u62fc\u56e2\u89c4\u5219",
+    "\u652f\u4ed8\u89c4\u5219",
+    "\u8ba2\u5355\u72b6\u6001",
+    "\u8ba2\u5355\u8fdb\u5ea6",
     "\u9000\u6b3e",
     "\u552e\u540e",
     "\u89c4\u5219",
@@ -78,17 +89,23 @@ def _structured_output_kwargs(settings: Settings) -> dict[str, str]:
 
 
 def route_intent_by_rules(message: str) -> IntentResult:
-    if any(keyword in message for keyword in TRADE_KEYWORDS):
+    if any(keyword in message for keyword in TRADE_ACTION_KEYWORDS):
         return IntentResult(
             intent="trade",
             confidence=0.65,
-            reason="fallback rule matched trade keyword",
+            reason="fallback rule matched trade action keyword",
         )
     if any(keyword in message for keyword in SUPPORT_KEYWORDS):
         return IntentResult(
             intent="support",
             confidence=0.65,
             reason="fallback rule matched support keyword",
+        )
+    if any(keyword in message for keyword in TRADE_KEYWORDS):
+        return IntentResult(
+            intent="trade",
+            confidence=0.65,
+            reason="fallback rule matched trade keyword",
         )
     return IntentResult(
         intent="recommend",

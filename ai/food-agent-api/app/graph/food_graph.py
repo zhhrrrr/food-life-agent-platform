@@ -12,6 +12,7 @@ AgentName = Literal["recommend", "trade", "support"]
 
 class FoodAgentState(TypedDict):
     message: str
+    authorization: str
     intent: str
     agent: str
     response: str
@@ -19,6 +20,7 @@ class FoodAgentState(TypedDict):
     query: str
     rewritten_query: str
     capabilities: list[str]
+    order_status: dict[str, object] | None
     router_confidence: float
     router_reason: str
     context: list[dict[str, Any]]
@@ -67,9 +69,10 @@ def build_food_graph():
 food_graph = build_food_graph()
 
 
-def run_food_agent(message: str) -> FoodAgentState:
+def run_food_agent(message: str, authorization: str = "") -> FoodAgentState:
     initial_state: FoodAgentState = {
         "message": message,
+        "authorization": authorization,
         "intent": "",
         "agent": "",
         "response": "",
@@ -77,6 +80,7 @@ def run_food_agent(message: str) -> FoodAgentState:
         "query": "",
         "rewritten_query": "",
         "capabilities": [],
+        "order_status": None,
         "router_confidence": 0.0,
         "router_reason": "",
         "context": [],

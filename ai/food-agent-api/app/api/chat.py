@@ -29,7 +29,10 @@ def chat(chat_request: ChatRequest, request: Request) -> ChatResponse:
     start_time = time.perf_counter()
 
     try:
-        result = run_food_agent(chat_request.message)
+        result = run_food_agent(
+            chat_request.message,
+            authorization=request.headers.get("authorization", ""),
+        )
     except Exception as exc:
         logger.exception(
             "agent_chat_failed request_id=%s message=%s",

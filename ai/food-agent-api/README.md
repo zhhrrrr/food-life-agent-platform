@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.10.0`
+Current version: `0.11.0`
 
 Current route chain:
 
@@ -13,7 +13,7 @@ HTTP Request
 -> LLM Router with Pydantic Structured Output
 -> Recommend / Trade / Support Agent
 -> Recommend query rewrite -> ES BM25 retrieval -> LLM answer
--> Support ES BM25 retrieval -> Template answer
+-> Support rule retrieval -> optional Java order-status query -> LLM answer
 -> Response
 ```
 
@@ -35,10 +35,11 @@ Added by version:
 0.9.0: LangChain ChatModel router with Pydantic Structured Output and rule fallback
 0.9.1: Zhipu GLM OpenAI-compatible chat model configuration
 0.9.2: Zhipu router structured output compatibility through JSON mode
+0.11.0: stage 7 SupportAgent rule RAG, read-only Java order-status query, and LLM answer chain
 0.10.0: stage 6 RecommendAgent query rewrite, ES/RAG retrieval, and LLM answer chain
 ```
 
-This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Stage 6 upgrades RecommendAgent to query rewrite -> ES retrieval -> context builder -> LLM answer -> references. Tool Calling, MCP, Redis Memory, SSE, and Human Confirmation are still future stages.
+This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Stage 6 upgrades RecommendAgent to query rewrite -> ES retrieval -> context builder -> LLM answer -> references. Stage 7 upgrades SupportAgent to rule retrieval -> optional owner-authorized Java order-status query -> LLM answer -> references. Tool Calling, MCP, Redis Memory, SSE, and Human Confirmation are still future stages.
 
 Elasticsearch support is present but disabled by default. Set `ES_ENABLED=true` only after Elasticsearch is available and the indexes have data.
 
@@ -228,7 +229,7 @@ When ES returns matches, `POST /api/agent/chat` also includes:
 }
 ```
 
-RecommendAgent searches shop, package, review, activity, and coupon indexes. It can rewrite recommendation questions for shop/package recommendation, cuisine filtering, budget filtering, scene recommendation, review semantic search, and shop comparison before ES retrieval. When LLM is enabled, it generates an evidence-grounded answer from the retrieved context and keeps references. It does not create orders or change stock. SupportAgent searches the platform rule index. If ES is disabled or no document matches, the agents return a clear no-evidence template instead of pretending to have generated an answer.
+RecommendAgent searches shop, package, review, activity, and coupon indexes. It can rewrite recommendation questions for shop/package recommendation, cuisine filtering, budget filtering, scene recommendation, review semantic search, and shop comparison before ES retrieval. When LLM is enabled, it generates an evidence-grounded answer from the retrieved context and keeps references. It does not create orders or change stock. SupportAgent searches the platform rule index for refund, group-buy, payment, order-status explanation, and platform FAQ. When a message explicitly contains an order ID and asks for its status, it forwards the incoming Authorization header to Java's owner-authorized GET /api/trade/orders/{orderId}; it never queries MySQL or uses an operations endpoint. If ES is disabled or no document matches, the agents return a clear no-evidence template instead of pretending to have generated an answer.
 
 ## Run Tests
 

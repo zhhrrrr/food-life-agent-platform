@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0
+
+- Upgraded SupportAgent from a retrieval template to a rule retrieval -> optional read-only Java order-status query -> LLM answer chain.
+- Added structured support answers for refund rules, group-buy rules, payment rules, order-status explanations, and platform FAQ.
+- Forwarded the incoming Authorization header only for Java's owner-authorized order-detail query; SupportAgent never accesses MySQL, operations endpoints, or order write APIs.
+- Preserved evidence references and template fallback when the LLM, ES, Java service, authorization, or order ID is unavailable.
+
 ## 0.10.0
 
 - Upgraded RecommendAgent from a retrieval template to a query rewrite -> ES/RAG retrieval -> LLM answer chain.

@@ -4,7 +4,7 @@ from app.agents.recommend_agent import recommend_agent_node
 from app.agents.support_agent import support_agent_node
 from app.core.config import get_settings
 from app.graph.food_graph import run_food_agent
-from app.graph.router import IntentResult, route_intent
+from app.graph.router import IntentResult, route_intent, route_intent_by_rules
 from app.llm.chat_model import ZHIPU_OPENAI_COMPATIBLE_BASE_URL, resolve_chat_model_options
 from app.main import app
 from app.recommend.chain import (
@@ -16,6 +16,12 @@ from app.recommend.chain import (
 from app.rag.context_builder import build_context_summary, build_references
 from app.rag.retriever import RagRetriever, RetrievalResult, retrieve_for_agent
 from app.search.schemas import SearchHit
+from app.support.chain import SupportAnswer, SupportChain
+from app.support.order_status_client import (
+    JavaOrderStatusClient,
+    OrderStatusLookup,
+    OrderStatusSnapshot,
+)
 
 
 client = TestClient(app)
@@ -32,7 +38,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = get_settings()
 
-    assert settings.app_version == "0.10.0"
+    assert settings.app_version == "0.11.0"
     assert settings.es_enabled is False
     assert settings.es_index_shop == "food_shop_index"
     assert settings.llm_router_enabled is False
@@ -309,14 +315,20 @@ def test_support_agent_uses_rag_hits(monkeypatch) -> None:
         source="food_rule_index",
         score=5.0,
     )
-    monkeypatch.setattr(
-        "app.agents.support_agent.RagRetriever",
-        lambda: FakeRagRetriever(hit),
-    )
+    class FakeSupportChain:
+        def run(self, message: str, authorization: str = "") -> object:
+            assert message == "\u9000\u6b3e\u89c4\u5219"
+            assert authorization == ""
+            return SupportChain(
+                settings=get_settings().model_copy(update={"llm_router_enabled": False}),
+                retriever=FakeRagRetriever(hit),
+            ).run(message)
+
+    monkeypatch.setattr("app.agents.support_agent.SupportChain", lambda: FakeSupportChain())
 
     result = support_agent_node({"message": "\u9000\u6b3e\u89c4\u5219"})
 
-    assert "\u5e73\u53f0\u89c4\u5219\u68c0\u7d22\u7ed3\u679c" in str(result["response"])
+    assert "\u5e73\u53f0\u89c4\u5219\u548c\u5f53\u524d\u67e5\u8be2\u7ed3\u679c" in str(result["response"])
     assert result["references"] == [
         {
             "id": "rule-1",
@@ -325,7 +337,146 @@ def test_support_agent_uses_rag_hits(monkeypatch) -> None:
             "score": 5.0,
         }
     ]
-    assert result["rag_mode"] == "retrieval_template"
+    assert result["rag_mode"] == "support_agent_llm_rag"
+
+
+def test_support_chain_queries_java_order_status_only_for_explicit_order_status() -> None:
+    snapshot = OrderStatusSnapshot(
+        order_id=12345,
+        order_no="NO-12345",
+        trade_type="NORMAL",
+        order_status="PAID",
+    )
+
+    class TrackingOrderStatusClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, str]] = []
+
+        def get_order_status(self, order_id: int, authorization: str) -> OrderStatusLookup:
+            self.calls.append((order_id, authorization))
+            return OrderStatusLookup(status="success", order_id=order_id, snapshot=snapshot)
+
+    order_client = TrackingOrderStatusClient()
+    result = SupportChain(
+        settings=get_settings().model_copy(update={"llm_router_enabled": False}),
+        retriever=FakeRagRetriever(
+            SearchHit(
+                id="rule-1",
+                title="Order Status Rule",
+                content="A paid order can be used according to its use rule.",
+                source="food_rule_index",
+                score=5.0,
+            )
+        ),
+        order_status_client=order_client,  # type: ignore[arg-type]
+    ).run("\u8ba2\u5355 12345 \u7684\u8ba2\u5355\u72b6\u6001\u662f\u4ec0\u4e48", authorization="token-1")
+
+    assert order_client.calls == [(12345, "token-1")]
+    assert result.capabilities == ["order_status_explanation"]
+    assert result.order_status == snapshot.model_dump()
+    assert result.references[-1]["source"] == "java_trade_order_query"
+    assert "order_status=PAID" in result.response
+
+
+def test_support_chain_does_not_call_java_without_an_explicit_order_id() -> None:
+    class FailingOrderStatusClient:
+        def get_order_status(self, order_id: int, authorization: str) -> OrderStatusLookup:
+            raise AssertionError("Java must not be called without an explicit order ID")
+
+    result = SupportChain(
+        settings=get_settings().model_copy(update={"llm_router_enabled": False}),
+        retriever=FakeRagRetriever(
+            SearchHit(
+                id="rule-1",
+                title="Order Status Rule",
+                content="Order status is determined by current order data.",
+                source="food_rule_index",
+                score=5.0,
+            )
+        ),
+        order_status_client=FailingOrderStatusClient(),  # type: ignore[arg-type]
+    ).run("\u8ba2\u5355\u72b6\u6001\u600e\u4e48\u89e3\u91ca", authorization="token-1")
+
+    assert "\u8bf7\u63d0\u4f9b\u8ba2\u5355 ID" in result.response
+
+
+def test_support_chain_uses_llm_answer_with_rule_and_order_evidence(monkeypatch) -> None:
+    snapshot = OrderStatusSnapshot(
+        order_id=12345,
+        order_no="NO-12345",
+        trade_type="NORMAL",
+        order_status="PAID",
+    )
+    answer = SupportAnswer(
+        answer="\u8ba2\u5355\u5f53\u524d\u4e3a\u5df2\u652f\u4ed8\uff0c\u4f7f\u7528\u4e0e\u9000\u6b3e\u8bf7\u4ee5\u5e73\u53f0\u89c4\u5219\u4e3a\u51c6\u3002",
+        used_reference_ids=["rule-1", "order:12345"],
+    )
+
+    class StructuredModel:
+        def invoke(self, messages: list[tuple[str, str]]) -> SupportAnswer:
+            assert "order_status=PAID" in messages[-1][1]
+            return answer
+
+    class ChatModel:
+        def with_structured_output(self, schema: object, **kwargs: object) -> StructuredModel:
+            assert schema is SupportAnswer
+            assert kwargs == {"method": "json_mode"}
+            return StructuredModel()
+
+    class SuccessfulOrderStatusClient:
+        def get_order_status(self, order_id: int, authorization: str) -> OrderStatusLookup:
+            assert authorization == "token-1"
+            return OrderStatusLookup(status="success", order_id=order_id, snapshot=snapshot)
+
+    monkeypatch.setattr("app.support.chain.build_chat_model", lambda settings: ChatModel())
+    result = SupportChain(
+        settings=get_settings().model_copy(
+            update={"llm_router_enabled": True, "llm_provider": "zhipu", "llm_api_key": "test-key"}
+        ),
+        retriever=FakeRagRetriever(
+            SearchHit(
+                id="rule-1",
+                title="Refund Rule",
+                content="Refunds follow the platform review rule.",
+                source="food_rule_index",
+                score=5.0,
+            )
+        ),
+        order_status_client=SuccessfulOrderStatusClient(),  # type: ignore[arg-type]
+    ).run("\u8ba2\u5355 12345 \u7684\u8ba2\u5355\u72b6\u6001\u548c\u9000\u6b3e\u89c4\u5219", authorization="token-1")
+
+    assert result.response == answer.answer
+    assert result.capabilities == ["refund_rule", "order_status_explanation"]
+
+
+def test_java_order_status_client_forwards_authorization(monkeypatch) -> None:
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict[str, object]:
+            return {
+                "code": "0000",
+                "data": {
+                    "orderId": 12345,
+                    "orderNo": "NO-12345",
+                    "tradeType": "NORMAL",
+                    "orderStatus": "PAID",
+                },
+            }
+
+    def fake_get(url: str, headers: dict[str, str], timeout: float) -> FakeResponse:
+        assert url == "http://127.0.0.1:8301/api/trade/orders/12345"
+        assert headers == {"authorization": "token-1"}
+        assert timeout == 5.0
+        return FakeResponse()
+
+    monkeypatch.setattr("app.support.order_status_client.httpx.get", fake_get)
+    result = JavaOrderStatusClient(settings=get_settings()).get_order_status(12345, "token-1")
+
+    assert result.status == "success"
+    assert result.snapshot is not None
+    assert result.snapshot.order_status == "PAID"
 
 
 def test_food_graph_records_router_metadata() -> None:
@@ -335,6 +486,11 @@ def test_food_graph_records_router_metadata() -> None:
     assert result["agent"] == "support"
     assert result["router_confidence"] == 0.65
     assert "fallback rule" in result["router_reason"]
+
+
+def test_rule_router_sends_support_questions_to_support_before_trade() -> None:
+    assert route_intent_by_rules("\u62fc\u56e2\u89c4\u5219\u662f\u4ec0\u4e48").intent == "support"
+    assert route_intent_by_rules("\u7533\u8bf7\u9000\u6b3e").intent == "trade"
 
 
 class FakeStructuredModel:
