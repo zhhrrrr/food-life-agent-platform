@@ -16,6 +16,9 @@ class FoodAgentState(TypedDict):
     agent: str
     response: str
     rag_mode: str
+    query: str
+    rewritten_query: str
+    capabilities: list[str]
     router_confidence: float
     router_reason: str
     context: list[dict[str, Any]]
@@ -71,6 +74,9 @@ def run_food_agent(message: str) -> FoodAgentState:
         "agent": "",
         "response": "",
         "rag_mode": "",
+        "query": "",
+        "rewritten_query": "",
+        "capabilities": [],
         "router_confidence": 0.0,
         "router_reason": "",
         "context": [],

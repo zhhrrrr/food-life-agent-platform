@@ -7,6 +7,12 @@ from app.graph.food_graph import run_food_agent
 from app.graph.router import IntentResult, route_intent
 from app.llm.chat_model import ZHIPU_OPENAI_COMPATIBLE_BASE_URL, resolve_chat_model_options
 from app.main import app
+from app.recommend.chain import (
+    RecommendAnswer,
+    RecommendChain,
+    RecommendChainResult,
+    RecommendQueryRewrite,
+)
 from app.rag.context_builder import build_context_summary, build_references
 from app.rag.retriever import RagRetriever, RetrievalResult, retrieve_for_agent
 from app.search.schemas import SearchHit
@@ -26,7 +32,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = get_settings()
 
-    assert settings.app_version == "0.9.2"
+    assert settings.app_version == "0.10.0"
     assert settings.es_enabled is False
     assert settings.es_index_shop == "food_shop_index"
     assert settings.llm_router_enabled is False
@@ -40,7 +46,7 @@ def test_chat_routes_to_recommend_agent() -> None:
     data = response.json()
     assert data["intent"] == "recommend"
     assert data["agent"] == "recommend"
-    assert "\u6682\u672a\u4ece ES \u68c0\u7d22\u5230\u53ef\u7528\u4f9d\u636e" in data["response"]
+    assert "\u6682\u672a\u4ece ES \u68c0\u7d22\u5230\u53ef\u7528\u4e8e\u63a8\u8350" in data["response"]
     assert data["references"] == []
 
 
@@ -155,7 +161,43 @@ class FakeRagRetriever:
         return RetrievalResult(agent=agent, query=query, hits=[self.hit])
 
 
-def test_recommend_agent_uses_rag_hits(monkeypatch) -> None:
+def test_recommend_agent_uses_chain_result(monkeypatch) -> None:
+    chain_result = RecommendChainResult(
+        response="\u6839\u636e\u68c0\u7d22\u7ed3\u679c\uff0c\u63a8\u8350 Shu Xiang\u3002",
+        rag_mode="recommend_agent_llm_rag",
+        query="\u63a8\u8350\u5ddd\u83dc",
+        rewritten_query="\u5ddd\u83dc \u5546\u5bb6 \u63a8\u8350",
+        capabilities=["shop_recommendation", "cuisine_filter"],
+        context=[],
+        references=[
+            {
+                "id": "shop-1",
+                "title": "Shu Xiang",
+                "source": "food_shop_index",
+                "score": 4.2,
+            }
+        ],
+    )
+
+    class FakeRecommendChain:
+        def run(self, message: str) -> RecommendChainResult:
+            assert message == "\u63a8\u8350\u5ddd\u83dc"
+            return chain_result
+
+    monkeypatch.setattr(
+        "app.agents.recommend_agent.RecommendChain",
+        lambda: FakeRecommendChain(),
+    )
+
+    result = recommend_agent_node({"message": "\u63a8\u8350\u5ddd\u83dc"})
+
+    assert "\u63a8\u8350 Shu Xiang" in str(result["response"])
+    assert result["rag_mode"] == "recommend_agent_llm_rag"
+    assert result["rewritten_query"] == "\u5ddd\u83dc \u5546\u5bb6 \u63a8\u8350"
+    assert result["references"] == chain_result.references
+
+
+def test_recommend_chain_uses_rag_hits_with_template_fallback() -> None:
     hit = SearchHit(
         id="shop-1",
         title="Shu Xiang",
@@ -163,15 +205,17 @@ def test_recommend_agent_uses_rag_hits(monkeypatch) -> None:
         source="food_shop_index",
         score=4.2,
     )
-    monkeypatch.setattr(
-        "app.agents.recommend_agent.RagRetriever",
-        lambda: FakeRagRetriever(hit),
-    )
 
-    result = recommend_agent_node({"message": "\u63a8\u8350\u5ddd\u83dc"})
+    result = RecommendChain(
+        settings=get_settings().model_copy(update={"llm_router_enabled": False}),
+        retriever=FakeRagRetriever(hit),
+    ).run("\u63a8\u8350\u5ddd\u83dc")
 
-    assert "\u6839\u636e\u68c0\u7d22\u7ed3\u679c" in str(result["response"])
-    assert result["references"] == [
+    assert "\u6839\u636e\u68c0\u7d22\u7ed3\u679c" in result.response
+    assert result.rag_mode == "recommend_agent_llm_rag"
+    assert result.rewritten_query == "\u63a8\u8350\u5ddd\u83dc"
+    assert result.capabilities == ["shop_recommendation", "cuisine_filter"]
+    assert result.references == [
         {
             "id": "shop-1",
             "title": "Shu Xiang",
@@ -179,7 +223,82 @@ def test_recommend_agent_uses_rag_hits(monkeypatch) -> None:
             "score": 4.2,
         }
     ]
-    assert result["rag_mode"] == "retrieval_template"
+
+
+def test_recommend_chain_rewrites_retrieves_and_generates_llm_answer(monkeypatch) -> None:
+    hit = SearchHit(
+        id="shop-1",
+        title="Shu Xiang",
+        content="Sichuan restaurant with good reviews and two-person coupon packages.",
+        source="food_shop_index",
+        score=4.2,
+    )
+    rewrite = RecommendQueryRewrite(
+        search_query="\u5ddd\u83dc \u53cc\u4eba \u4f18\u60e0\u5238 \u597d\u8bc4 \u5546\u5bb6",
+        capabilities=[
+            "shop_recommendation",
+            "cuisine_filter",
+            "scene_recommendation",
+            "review_semantic_search",
+        ],
+        reason="The user asks for a two-person Sichuan recommendation with coupons.",
+    )
+    answer = RecommendAnswer(
+        answer="推荐 Shu Xiang：它匹配川菜、双人场景和优惠券线索，且评价较好。",
+        used_reference_ids=["shop-1"],
+    )
+
+    class TrackingRetriever:
+        def __init__(self) -> None:
+            self.query = ""
+
+        def retrieve(self, agent: str, query: str, size: int = 3) -> RetrievalResult:
+            assert agent == "recommend"
+            assert size == 5
+            self.query = query
+            return RetrievalResult(agent=agent, query=query, hits=[hit])
+
+    class SchemaAwareStructuredModel:
+        def __init__(self, result: object) -> None:
+            self.result = result
+
+        def invoke(self, messages: list[tuple[str, str]]) -> object:
+            assert messages
+            return self.result
+
+    class SchemaAwareChatModel:
+        def __init__(self) -> None:
+            self.structured_kwargs: list[dict[str, object]] = []
+
+        def with_structured_output(self, schema: object, **kwargs: object) -> object:
+            self.structured_kwargs.append(kwargs)
+            if schema is RecommendQueryRewrite:
+                return SchemaAwareStructuredModel(rewrite)
+            if schema is RecommendAnswer:
+                return SchemaAwareStructuredModel(answer)
+            raise AssertionError("unexpected schema")
+
+    chat_model = SchemaAwareChatModel()
+    monkeypatch.setattr("app.recommend.chain.build_chat_model", lambda settings: chat_model)
+    retriever = TrackingRetriever()
+
+    result = RecommendChain(
+        settings=get_settings().model_copy(
+            update={
+                "llm_router_enabled": True,
+                "llm_provider": "zhipu",
+                "llm_api_key": "test-key",
+            }
+        ),
+        retriever=retriever,
+    ).run("\u4e24\u4e2a\u4eba\u5403\u5ddd\u83dc\uff0c\u6700\u597d\u6709\u4f18\u60e0\u5238\u548c\u597d\u8bc4")
+
+    assert retriever.query == rewrite.search_query
+    assert result.response == answer.answer
+    assert result.rewritten_query == rewrite.search_query
+    assert result.capabilities == list(rewrite.capabilities)
+    assert result.references[0]["id"] == "shop-1"
+    assert chat_model.structured_kwargs == [{"method": "json_mode"}, {"method": "json_mode"}]
 
 
 def test_support_agent_uses_rag_hits(monkeypatch) -> None:

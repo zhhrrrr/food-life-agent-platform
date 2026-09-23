@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0
+
+- Upgraded RecommendAgent from a retrieval template to a query rewrite -> ES/RAG retrieval -> LLM answer chain.
+- Added recommendation capabilities for shops, packages, cuisine filters, budget filters, scenes, reviews, and shop comparison.
+- Kept recommendation read-only: the agent does not create orders, reserve stock, or mutate business data.
+- Preserved template fallback when LLM or ES evidence is unavailable.
+
 ## 0.9.2
 
 - Switched the Zhipu LangChain structured router call to JSON mode for OpenAI-compatible response parsing.

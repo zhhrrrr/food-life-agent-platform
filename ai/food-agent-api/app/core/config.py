@@ -7,9 +7,10 @@ from pydantic import BaseModel
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.9.2"
+    app_version: str = "0.10.0"
     app_port: int = 8500
     log_level: str = "INFO"
+    # 本地env 文件中配置的llm_router_enabled优先级高于此处的默认值
     llm_router_enabled: bool = False
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
