@@ -38,7 +38,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = get_settings()
 
-    assert settings.app_version == "0.13.0"
+    assert settings.app_version == "0.13.1"
     assert settings.es_enabled is False
     assert settings.es_index_shop == "food_shop_index"
     assert Settings().llm_router_enabled is False

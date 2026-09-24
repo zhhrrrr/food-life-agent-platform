@@ -5,7 +5,10 @@ from fastapi.testclient import TestClient
 from app.core.config import Settings
 from app.graph.router import ROUTING_TOOLS, route_intent
 from app.graph.semantic_router import ROUTE_EXAMPLES, SemanticRouteMatch, SemanticRouter
-from app.llm.embedding_model import resolve_embedding_model_options
+from app.llm.embedding_model import (
+    SILICONFLOW_OPENAI_COMPATIBLE_BASE_URL,
+    resolve_embedding_model_options,
+)
 from app.llm.chat_model import ZHIPU_OPENAI_COMPATIBLE_BASE_URL
 from app.main import app
 from app.memory.conversation_memory import ConversationTurn, RedisConversationMemory
@@ -58,6 +61,20 @@ def test_zhipu_embedding_options_use_separate_key_and_compatible_url() -> None:
     assert options["model"] == "embedding-3"
     assert options["api_key"] == "embedding-test-key"
     assert options["base_url"] == ZHIPU_OPENAI_COMPATIBLE_BASE_URL
+
+
+def test_siliconflow_embedding_options_use_official_compatible_url() -> None:
+    options = resolve_embedding_model_options(
+        Settings(
+            semantic_router_enabled=True,
+            embedding_provider="siliconflow",
+            embedding_model="BAAI/bge-m3",
+            embedding_api_key="embedding-test-key",
+        )
+    )
+
+    assert options["model"] == "BAAI/bge-m3"
+    assert options["base_url"] == SILICONFLOW_OPENAI_COMPATIBLE_BASE_URL
 
 
 def test_low_confidence_semantic_route_uses_llm_function_calling() -> None:

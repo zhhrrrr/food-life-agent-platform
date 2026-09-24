@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.1
+
+- Added an explicit SiliconFlow embedding provider with the official OpenAI-compatible base URL.
+- Expanded canonical route examples for recommendation comparisons, real-time trade facts, coupons, and support-rule boundaries.
+- Calibrated the BAAI/bge-m3 semantic acceptance gate to a 0.74 similarity threshold while retaining a 0.05 top-intent margin.
+- Verified a real 1024-dimensional SiliconFlow embedding response and kept ambiguous semantic matches on the LLM fallback path.
+
 ## 0.13.0
 
 - Added bounded, expiring Redis conversation memory shared across FastAPI workers without storing Authorization.

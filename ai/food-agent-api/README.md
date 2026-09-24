@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.13.0`
+Current version: `0.13.1`
 
 Current route chain:
 
@@ -41,6 +41,7 @@ Added by version:
 0.9.0: LangChain ChatModel router with Pydantic Structured Output and rule fallback
 0.9.1: Zhipu GLM OpenAI-compatible chat model configuration
 0.9.2: Zhipu router structured output compatibility through JSON mode
+0.13.1: SiliconFlow BGE-M3 embedding provider and calibrated semantic routing gates
 0.13.0: Redis conversation memory and Semantic Router + LLM Function Calling routing pipeline
 0.12.0: stage 8 read-only TradeAgent queries through Java Gateway and unified three-chain contracts
 0.11.1: unified RecommendAgent and SupportAgent chain contracts, validation, fallbacks, and structured output
@@ -86,7 +87,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.13.0
+APP_VERSION=0.13.1
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false
@@ -102,7 +103,7 @@ EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_API_KEY=
 EMBEDDING_BASE_URL=
 EMBEDDING_TIMEOUT_SECONDS=10
-SEMANTIC_ROUTER_HIGH_THRESHOLD=0.82
+SEMANTIC_ROUTER_HIGH_THRESHOLD=0.74
 SEMANTIC_ROUTER_MIN_MARGIN=0.05
 SEMANTIC_ROUTER_FAILURE_COOLDOWN_SECONDS=30
 CONVERSATION_MEMORY_ENABLED=false
@@ -174,7 +175,19 @@ current query + relevant Redis conversation turns
 -> deterministic rule fallback
 ```
 
-Semantic routing and Redis memory are disabled until their providers are configured. Embeddings use a separate API key from the chat model. OpenAI, Zhipu's OpenAI-compatible endpoint, and custom OpenAI-compatible endpoints are supported. Conversation history participates in deterministic and semantic routing only for follow-up wording such as “那这个呢” or “还有吗”, which prevents an old topic from overriding an explicit new request. Embedding and Redis failures enter a short per-instance cooldown and fail open to the next routing layer instead of delaying every request.
+Semantic routing and Redis memory are disabled until their providers are configured. Embeddings use a separate API key from the chat model. OpenAI, Zhipu, SiliconFlow, and custom OpenAI-compatible endpoints are supported. Conversation history participates in deterministic and semantic routing only for follow-up wording such as “那这个呢” or “还有吗”, which prevents an old topic from overriding an explicit new request. Embedding and Redis failures enter a short per-instance cooldown and fail open to the next routing layer instead of delaying every request.
+
+SiliconFlow example:
+
+```text
+SEMANTIC_ROUTER_ENABLED=true
+EMBEDDING_PROVIDER=siliconflow
+EMBEDDING_MODEL=BAAI/bge-m3
+EMBEDDING_API_KEY=your-siliconflow-key
+EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
+SEMANTIC_ROUTER_HIGH_THRESHOLD=0.74
+SEMANTIC_ROUTER_MIN_MARGIN=0.05
+```
 
 The three routing tools only select a LangGraph agent. They do not expose Java, order, payment, refund, or inventory write operations. Redis stores bounded, expiring `user`, `assistant`, and `intent` turns; Authorization is never stored.
 

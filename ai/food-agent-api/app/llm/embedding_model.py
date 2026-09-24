@@ -3,6 +3,7 @@ from typing import Any
 from app.core.config import Settings, get_settings
 from app.llm.chat_model import ZHIPU_OPENAI_COMPATIBLE_BASE_URL
 
+SILICONFLOW_OPENAI_COMPATIBLE_BASE_URL = "https://api.siliconflow.cn/v1"
 
 class EmbeddingModelUnavailableError(RuntimeError):
     pass
@@ -10,7 +11,7 @@ class EmbeddingModelUnavailableError(RuntimeError):
 
 def resolve_embedding_model_options(settings: Settings) -> dict[str, Any]:
     provider = settings.embedding_provider.strip().lower()
-    if provider not in {"openai", "zhipu", "openai_compatible"}:
+    if provider not in {"openai", "zhipu", "siliconflow", "openai_compatible"}:
         raise EmbeddingModelUnavailableError(
             f"unsupported embedding provider: {settings.embedding_provider}"
         )
@@ -22,6 +23,8 @@ def resolve_embedding_model_options(settings: Settings) -> dict[str, Any]:
     base_url = settings.embedding_base_url.strip() or None
     if provider == "zhipu" and base_url is None:
         base_url = ZHIPU_OPENAI_COMPATIBLE_BASE_URL
+    if provider == "siliconflow" and base_url is None:
+        base_url = SILICONFLOW_OPENAI_COMPATIBLE_BASE_URL
     if provider == "openai_compatible" and base_url is None:
         raise EmbeddingModelUnavailableError(
             "embedding base URL is required for openai_compatible provider"

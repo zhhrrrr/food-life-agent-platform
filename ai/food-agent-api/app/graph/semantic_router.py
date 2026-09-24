@@ -17,19 +17,27 @@ SemanticIntent = Literal["recommend", "trade", "support"]
 ROUTE_EXAMPLES: tuple[tuple[SemanticIntent, str], ...] = (
     ("recommend", "推荐一家适合朋友聚餐的川菜馆"),
     ("recommend", "预算两百元有什么双人套餐推荐"),
+    ("recommend", "推荐预算两百元以内的双人套餐"),
     ("recommend", "比较这两家餐厅哪家口碑更好"),
+    ("recommend", "比较两家餐厅的评价和口碑"),
     ("recommend", "附近有什么好吃的火锅店"),
     ("recommend", "想找适合约会而且环境安静的餐厅"),
     ("trade", "查询订单详情和当前进度"),
+    ("trade", "查询订单一二三四五的当前状态"),
     ("trade", "这个套餐现在多少钱还有多少库存"),
+    ("trade", "套餐十二现在价格多少库存多少"),
     ("trade", "查询我可以使用的优惠券"),
+    ("trade", "我的账户有哪些可用优惠券"),
     ("trade", "查看这个套餐当前可参加的拼团"),
     ("trade", "预览套餐订单和折扣前金额"),
     ("trade", "取消订单或者申请退款"),
     ("support", "退款规则和售后流程是什么"),
+    ("support", "平台退款规则是什么"),
     ("support", "拼团失败以后钱怎么退"),
     ("support", "支付失败的处理规则是什么"),
+    ("support", "支付失败应该怎么处理"),
     ("support", "订单状态中的待使用是什么意思"),
+    ("support", "待使用订单状态是什么意思"),
     ("support", "平台优惠券的使用规则是什么"),
     ("support", "常见问题和平台帮助"),
 )
@@ -125,10 +133,10 @@ def _contextual_query(message: str, history: list[ConversationTurn]) -> str:
     if not recent_history or not should_use_conversation_history(message):
         return message
     previous = "\n".join(
-        f"Previous user request ({turn.intent or 'unknown'}): {turn.user}"
+        f"上一轮用户请求（{turn.intent or 'unknown'}）：{turn.user}"
         for turn in recent_history
     )
-    return f"{previous}\nCurrent user request: {message}"
+    return f"{previous}\n当前用户请求：{message}"
 
 
 def _validate_vector(vector: Any) -> list[float]:

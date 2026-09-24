@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.13.0"
+    app_version: str = "0.13.1"
     app_port: int = 8500
     log_level: str = "INFO"
     # 本地env 文件中配置的llm_router_enabled优先级高于此处的默认值
@@ -24,7 +24,7 @@ class Settings(BaseModel):
     embedding_api_key: str = ""
     embedding_base_url: str = ""
     embedding_timeout_seconds: float = Field(default=10.0, gt=0)
-    semantic_router_high_threshold: float = Field(default=0.82, ge=0.0, le=1.0)
+    semantic_router_high_threshold: float = Field(default=0.74, ge=0.0, le=1.0)
     semantic_router_min_margin: float = Field(default=0.05, ge=0.0, le=1.0)
     semantic_router_failure_cooldown_seconds: float = Field(default=30.0, ge=1.0, le=300.0)
     conversation_memory_enabled: bool = False
