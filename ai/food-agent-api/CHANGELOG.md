@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.0
+
+- Upgraded TradeAgent from a mock to read-only price, stock, coupon, group-buy, order, and order-preview queries through Java Gateway.
+- Added an allow-listed GET-only Gateway client that forwards user Authorization but exposes no create, cancel, pay, refund, operations, or generic write API.
+- Built order previews from the package trade snapshot and current-user coupons without creating an order or changing inventory.
+- Unified RecommendAgent, SupportAgent, and TradeAgent around shared query, answer, result, capability merge, fallback, and reference-selection contracts.
+- Added deterministic identifier extraction and transaction-action blocking so LLM output cannot invent resource IDs or authorize writes.
+
 ## 0.11.1
 
 - Unified RecommendAgent and SupportAgent around the same rewrite -> retrieval -> context -> structured answer chain contract.

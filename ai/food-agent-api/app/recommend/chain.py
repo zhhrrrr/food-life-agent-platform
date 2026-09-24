@@ -7,9 +7,9 @@ from app.core.config import Settings, get_settings
 from app.llm.chat_model import ChatModelUnavailableError
 from app.llm.structured_output import invoke_structured_output
 from app.rag.chain_models import (
+    AgentAnswer,
+    AgentChainResult,
     QueryRewriteBase,
-    RagAnswer,
-    RagChainResult,
     merge_capabilities,
     select_references,
 )
@@ -34,11 +34,11 @@ class RecommendQueryRewrite(QueryRewriteBase):
     capabilities: list[RecommendCapability] = Field(min_length=1)
 
 
-class RecommendAnswer(RagAnswer):
+class RecommendAnswer(AgentAnswer):
     pass
 
 
-class RecommendChainResult(RagChainResult):
+class RecommendChainResult(AgentChainResult):
     pass
 
 

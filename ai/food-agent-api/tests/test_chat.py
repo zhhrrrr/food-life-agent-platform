@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from app.agents.recommend_agent import recommend_agent_node
 from app.agents.support_agent import support_agent_node
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.graph.food_graph import run_food_agent
 from app.graph.router import IntentResult, route_intent, route_intent_by_rules
 from app.llm.chat_model import ZHIPU_OPENAI_COMPATIBLE_BASE_URL, resolve_chat_model_options
@@ -38,10 +38,10 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = get_settings()
 
-    assert settings.app_version == "0.11.1"
+    assert settings.app_version == "0.12.0"
     assert settings.es_enabled is False
     assert settings.es_index_shop == "food_shop_index"
-    assert settings.llm_router_enabled is False
+    assert Settings().llm_router_enabled is False
 
 
 def test_chat_routes_to_recommend_agent() -> None:
@@ -64,7 +64,7 @@ def test_chat_routes_to_trade_agent() -> None:
     data = response.json()
     assert data["intent"] == "trade"
     assert data["agent"] == "trade"
-    assert data["response"] == f"Trade Agent \u6536\u5230\u8bf7\u6c42\uff1a{message}"
+    assert "Authorization" in data["response"]
     assert data["references"] == []
 
 

@@ -21,6 +21,9 @@ class FoodAgentState(TypedDict):
     rewritten_query: str
     capabilities: list[str]
     order_status: dict[str, object] | None
+    facts: list[dict[str, object]]
+    query_statuses: list[dict[str, object]]
+    operation_executed: bool
     router_confidence: float
     router_reason: str
     context: list[dict[str, Any]]
@@ -81,6 +84,9 @@ def run_food_agent(message: str, authorization: str = "") -> FoodAgentState:
         "rewritten_query": "",
         "capabilities": [],
         "order_status": None,
+        "facts": [],
+        "query_statuses": [],
+        "operation_executed": False,
         "router_confidence": 0.0,
         "router_reason": "",
         "context": [],

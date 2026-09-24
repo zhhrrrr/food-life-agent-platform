@@ -24,7 +24,7 @@ class QueryRewriteBase(BaseModel):
         return list(dict.fromkeys(values))
 
 
-class RagAnswer(BaseModel):
+class AgentAnswer(BaseModel):
     answer: str = Field(min_length=1)
     used_reference_ids: list[str] = Field(default_factory=list)
 
@@ -42,7 +42,7 @@ class RagAnswer(BaseModel):
         return list(dict.fromkeys(value for value in values if value))
 
 
-class RagChainResult(BaseModel):
+class AgentChainResult(BaseModel):
     response: str
     rag_mode: str
     query: str
@@ -50,6 +50,11 @@ class RagChainResult(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     context: list[dict[str, object]] = Field(default_factory=list)
     references: list[dict[str, object]] = Field(default_factory=list)
+
+
+# Compatibility aliases for code that still uses the stage-4 RAG names.
+RagAnswer = AgentAnswer
+RagChainResult = AgentChainResult
 
 
 def merge_capabilities(
