@@ -6,6 +6,7 @@ from app.agents.recommend_agent import recommend_agent_node
 from app.agents.support_agent import support_agent_node
 from app.agents.trade_agent import trade_agent_node
 from app.graph.router import route_intent
+from app.memory.conversation_memory import ConversationTurn
 
 AgentName = Literal["recommend", "trade", "support"]
 
@@ -24,19 +25,31 @@ class FoodAgentState(TypedDict):
     facts: list[dict[str, object]]
     query_statuses: list[dict[str, object]]
     operation_executed: bool
+    conversation_history: list[ConversationTurn]
     router_confidence: float
     router_reason: str
+    router_source: str
+    router_tool: str
+    semantic_score: float | None
+    semantic_margin: float | None
     context: list[dict[str, Any]]
     references: list[dict[str, Any]]
 
 
 def router_node(state: FoodAgentState) -> dict[str, object]:
-    result = route_intent(state["message"])
+    result = route_intent(
+        state["message"],
+        conversation_history=state.get("conversation_history", []),
+    )
     return {
         "intent": result.intent,
         "agent": result.intent,
         "router_confidence": result.confidence,
         "router_reason": result.reason,
+        "router_source": result.source,
+        "router_tool": result.tool,
+        "semantic_score": result.semantic_score,
+        "semantic_margin": result.semantic_margin,
     }
 
 
@@ -72,7 +85,11 @@ def build_food_graph():
 food_graph = build_food_graph()
 
 
-def run_food_agent(message: str, authorization: str = "") -> FoodAgentState:
+def run_food_agent(
+    message: str,
+    authorization: str = "",
+    conversation_history: list[ConversationTurn] | None = None,
+) -> FoodAgentState:
     initial_state: FoodAgentState = {
         "message": message,
         "authorization": authorization,
@@ -87,8 +104,13 @@ def run_food_agent(message: str, authorization: str = "") -> FoodAgentState:
         "facts": [],
         "query_statuses": [],
         "operation_executed": False,
+        "conversation_history": conversation_history or [],
         "router_confidence": 0.0,
         "router_reason": "",
+        "router_source": "",
+        "router_tool": "",
+        "semantic_score": None,
+        "semantic_margin": None,
         "context": [],
         "references": [],
     }

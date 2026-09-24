@@ -8,4 +8,4 @@ pytest
 httpx
 elasticsearch
 pika
-redis
+redis>=5.0,<6.0

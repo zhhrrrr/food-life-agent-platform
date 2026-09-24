@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.0
+
+- Added bounded, expiring Redis conversation memory shared across FastAPI workers without storing Authorization.
+- Added a cached embedding-based Semantic Router with configurable high-confidence and top-intent margin gates.
+- Added LLM Function Calling through three restricted routing tools: `route_recommend`, `route_trade`, and `route_support`.
+- Kept Structured Output and deterministic rules as ordered fallbacks when semantic routing is uncertain or providers fail.
+- Added router source/confidence and conversation ID response metadata for routing observability.
+- Isolated embedding credentials from LLM credentials and left semantic routing disabled until an embedding API is configured and evaluated.
+
 ## 0.12.0
 
 - Upgraded TradeAgent from a mock to read-only price, stock, coupon, group-buy, order, and order-preview queries through Java Gateway.

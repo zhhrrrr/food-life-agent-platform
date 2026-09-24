@@ -2,15 +2,20 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.12.0`
+Current version: `0.13.0`
 
 Current route chain:
 
 ```text
 HTTP Request
 -> FastAPI
+-> Redis Conversation Memory
 -> LangGraph State
--> LLM Router with Pydantic Structured Output
+-> Semantic Router (Embedding cosine similarity + confidence/margin gates)
+   -> high confidence: direct agent route
+   -> low confidence/unavailable: LLM Router Function Calling
+      -> Structured Output compatibility fallback
+      -> deterministic rule fallback
 -> Recommend / Trade / Support Agent
 -> Recommend query rewrite -> ES BM25 retrieval -> LLM answer
 -> Support query rewrite -> rule retrieval -> optional Java order-status query -> LLM answer
@@ -36,13 +41,14 @@ Added by version:
 0.9.0: LangChain ChatModel router with Pydantic Structured Output and rule fallback
 0.9.1: Zhipu GLM OpenAI-compatible chat model configuration
 0.9.2: Zhipu router structured output compatibility through JSON mode
+0.13.0: Redis conversation memory and Semantic Router + LLM Function Calling routing pipeline
 0.12.0: stage 8 read-only TradeAgent queries through Java Gateway and unified three-chain contracts
 0.11.1: unified RecommendAgent and SupportAgent chain contracts, validation, fallbacks, and structured output
 0.11.0: stage 7 SupportAgent rule RAG, read-only Java order-status query, and LLM answer chain
 0.10.0: stage 6 RecommendAgent query rewrite, ES/RAG retrieval, and LLM answer chain
 ```
 
-This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Stage 6 upgrades RecommendAgent to query rewrite -> ES retrieval -> context builder -> LLM answer -> references. Stage 7 upgrades SupportAgent to query rewrite -> rule retrieval -> optional owner-authorized Java order-status query -> LLM answer -> references. Stage 8 upgrades TradeAgent to query rewrite -> allow-listed Java Gateway GET queries -> context -> LLM answer -> references. All three chains share the same structured-output invocation, non-empty query/capability validation, local capability completion, result contract, and reference selection rules. Tool Calling, MCP, Redis Memory, SSE, and Human Confirmation are still future stages.
+This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Stage 6 upgrades RecommendAgent to query rewrite -> ES retrieval -> context builder -> LLM answer -> references. Stage 7 upgrades SupportAgent to query rewrite -> rule retrieval -> optional owner-authorized Java order-status query -> LLM answer -> references. Stage 8 upgrades TradeAgent to query rewrite -> allow-listed Java Gateway GET queries -> context -> LLM answer -> references. Version 0.13.0 adds bounded Redis conversation memory, a cached embedding-based Semantic Router, high-confidence and margin gates, LLM routing through three restricted function tools, Structured Output compatibility fallback, and deterministic rule fallback. All three agent chains retain their shared contracts and safety boundaries. MCP, SSE, Human Confirmation, and business action tools are still future stages.
 
 Elasticsearch support is present but disabled by default. Set `ES_ENABLED=true` only after Elasticsearch is available and the indexes have data.
 
@@ -80,7 +86,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.12.0
+APP_VERSION=0.13.0
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false
@@ -90,6 +96,19 @@ LLM_API_KEY=
 LLM_BASE_URL=
 LLM_TEMPERATURE=0
 LLM_TIMEOUT_SECONDS=10
+SEMANTIC_ROUTER_ENABLED=false
+EMBEDDING_PROVIDER=openai
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_API_KEY=
+EMBEDDING_BASE_URL=
+EMBEDDING_TIMEOUT_SECONDS=10
+SEMANTIC_ROUTER_HIGH_THRESHOLD=0.82
+SEMANTIC_ROUTER_MIN_MARGIN=0.05
+SEMANTIC_ROUTER_FAILURE_COOLDOWN_SECONDS=30
+CONVERSATION_MEMORY_ENABLED=false
+CONVERSATION_MEMORY_TTL_SECONDS=86400
+CONVERSATION_MEMORY_MAX_TURNS=8
+CONVERSATION_MEMORY_KEY_PREFIX=food-agent-api:conversation:
 JAVA_GATEWAY_BASE_URL=http://127.0.0.1:8080
 JAVA_BUSINESS_BASE_URL=http://127.0.0.1:8201
 JAVA_TRADE_BASE_URL=http://127.0.0.1:8301
@@ -141,6 +160,25 @@ class IntentResult(BaseModel):
 The default provider is `openai`. Set `LLM_PROVIDER=zhipu` to call Zhipu GLM through its OpenAI-compatible API. If `LLM_BASE_URL` is empty for `zhipu`, the service uses `https://api.z.ai/api/paas/v4/`. Zhipu routing uses LangChain structured output with JSON mode so OpenAI-compatible responses can be parsed into `IntentResult`.
 
 If the LLM provider is not configured, unavailable, or returns an invalid structure, the router falls back to the existing keyword rules.
+
+## Semantic Router And Memory
+
+The routing order is:
+
+```text
+current query + relevant Redis conversation turns
+-> embedding similarity against versioned route examples
+-> accept only when score >= high threshold and top-intent margin >= minimum margin
+-> otherwise LLM Function Calling selects route_recommend / route_trade / route_support
+-> Structured Output compatibility fallback
+-> deterministic rule fallback
+```
+
+Semantic routing and Redis memory are disabled until their providers are configured. Embeddings use a separate API key from the chat model. OpenAI, Zhipu's OpenAI-compatible endpoint, and custom OpenAI-compatible endpoints are supported. Conversation history participates in deterministic and semantic routing only for follow-up wording such as “那这个呢” or “还有吗”, which prevents an old topic from overriding an explicit new request. Embedding and Redis failures enter a short per-instance cooldown and fail open to the next routing layer instead of delaying every request.
+
+The three routing tools only select a LangGraph agent. They do not expose Java, order, payment, refund, or inventory write operations. Redis stores bounded, expiring `user`, `assistant`, and `intent` turns; Authorization is never stored.
+
+Each chat response returns `conversation_id`, `router_source`, and `router_confidence`. Send the same `conversation_id` in the next request to continue the conversation.
 
 ## Start Service
 

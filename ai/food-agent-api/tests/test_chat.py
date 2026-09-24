@@ -38,7 +38,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = get_settings()
 
-    assert settings.app_version == "0.12.0"
+    assert settings.app_version == "0.13.0"
     assert settings.es_enabled is False
     assert settings.es_index_shop == "food_shop_index"
     assert Settings().llm_router_enabled is False
@@ -573,7 +573,11 @@ def test_route_intent_uses_llm_structured_output_when_enabled() -> None:
         chat_model=chat_model,
     )
 
-    assert result == llm_result
+    assert result.intent == llm_result.intent
+    assert result.confidence == llm_result.confidence
+    assert result.reason == llm_result.reason
+    assert result.source == "llm_structured"
+    assert result.tool == "route_support"
     assert chat_model.schema is IntentResult
     assert chat_model.structured_model is not None
     assert chat_model.structured_model.messages is not None
@@ -602,7 +606,10 @@ def test_route_intent_uses_json_mode_for_zhipu_provider() -> None:
         chat_model=chat_model,
     )
 
-    assert result == llm_result
+    assert result.intent == llm_result.intent
+    assert result.confidence == llm_result.confidence
+    assert result.source == "llm_structured"
+    assert result.tool == "route_recommend"
     assert chat_model.structured_kwargs == {"method": "json_mode"}
 
 

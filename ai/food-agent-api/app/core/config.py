@@ -2,12 +2,12 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.12.0"
+    app_version: str = "0.13.0"
     app_port: int = 8500
     log_level: str = "INFO"
     # 本地env 文件中配置的llm_router_enabled优先级高于此处的默认值
@@ -18,6 +18,19 @@ class Settings(BaseModel):
     llm_base_url: str = ""
     llm_temperature: float = 0.0
     llm_timeout_seconds: float = 10.0
+    semantic_router_enabled: bool = False
+    embedding_provider: str = "openai"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_api_key: str = ""
+    embedding_base_url: str = ""
+    embedding_timeout_seconds: float = Field(default=10.0, gt=0)
+    semantic_router_high_threshold: float = Field(default=0.82, ge=0.0, le=1.0)
+    semantic_router_min_margin: float = Field(default=0.05, ge=0.0, le=1.0)
+    semantic_router_failure_cooldown_seconds: float = Field(default=30.0, ge=1.0, le=300.0)
+    conversation_memory_enabled: bool = False
+    conversation_memory_ttl_seconds: int = Field(default=86400, ge=60)
+    conversation_memory_max_turns: int = Field(default=8, ge=1, le=50)
+    conversation_memory_key_prefix: str = "food-agent-api:conversation:"
     java_gateway_base_url: str = "http://127.0.0.1:8080"
     java_business_base_url: str = "http://127.0.0.1:8201"
     java_trade_base_url: str = "http://127.0.0.1:8301"
@@ -92,6 +105,85 @@ def get_settings() -> Settings:
                 "LLM_TIMEOUT_SECONDS",
                 str(defaults.llm_timeout_seconds),
             )
+        ),
+        semantic_router_enabled=_get_value(
+            dotenv_values,
+            "SEMANTIC_ROUTER_ENABLED",
+            str(defaults.semantic_router_enabled),
+        ).lower()
+        in {"1", "true", "yes", "on"},
+        embedding_provider=_get_value(
+            dotenv_values,
+            "EMBEDDING_PROVIDER",
+            defaults.embedding_provider,
+        ),
+        embedding_model=_get_value(
+            dotenv_values,
+            "EMBEDDING_MODEL",
+            defaults.embedding_model,
+        ),
+        embedding_api_key=_get_value(
+            dotenv_values,
+            "EMBEDDING_API_KEY",
+            defaults.embedding_api_key,
+        ),
+        embedding_base_url=_get_value(
+            dotenv_values,
+            "EMBEDDING_BASE_URL",
+            defaults.embedding_base_url,
+        ),
+        embedding_timeout_seconds=float(
+            _get_value(
+                dotenv_values,
+                "EMBEDDING_TIMEOUT_SECONDS",
+                str(defaults.embedding_timeout_seconds),
+            )
+        ),
+        semantic_router_high_threshold=float(
+            _get_value(
+                dotenv_values,
+                "SEMANTIC_ROUTER_HIGH_THRESHOLD",
+                str(defaults.semantic_router_high_threshold),
+            )
+        ),
+        semantic_router_min_margin=float(
+            _get_value(
+                dotenv_values,
+                "SEMANTIC_ROUTER_MIN_MARGIN",
+                str(defaults.semantic_router_min_margin),
+            )
+        ),
+        semantic_router_failure_cooldown_seconds=float(
+            _get_value(
+                dotenv_values,
+                "SEMANTIC_ROUTER_FAILURE_COOLDOWN_SECONDS",
+                str(defaults.semantic_router_failure_cooldown_seconds),
+            )
+        ),
+        conversation_memory_enabled=_get_value(
+            dotenv_values,
+            "CONVERSATION_MEMORY_ENABLED",
+            str(defaults.conversation_memory_enabled),
+        ).lower()
+        in {"1", "true", "yes", "on"},
+        conversation_memory_ttl_seconds=int(
+            _get_value(
+                dotenv_values,
+                "CONVERSATION_MEMORY_TTL_SECONDS",
+                str(defaults.conversation_memory_ttl_seconds),
+            )
+        ),
+        conversation_memory_max_turns=int(
+            _get_value(
+                dotenv_values,
+                "CONVERSATION_MEMORY_MAX_TURNS",
+                str(defaults.conversation_memory_max_turns),
+            )
+        ),
+        conversation_memory_key_prefix=_get_value(
+            dotenv_values,
+            "CONVERSATION_MEMORY_KEY_PREFIX",
+            defaults.conversation_memory_key_prefix,
         ),
         java_gateway_base_url=_get_value(
             dotenv_values,
