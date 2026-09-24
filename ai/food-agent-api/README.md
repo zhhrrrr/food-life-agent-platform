@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.11.0`
+Current version: `0.11.1`
 
 Current route chain:
 
@@ -13,7 +13,7 @@ HTTP Request
 -> LLM Router with Pydantic Structured Output
 -> Recommend / Trade / Support Agent
 -> Recommend query rewrite -> ES BM25 retrieval -> LLM answer
--> Support rule retrieval -> optional Java order-status query -> LLM answer
+-> Support query rewrite -> rule retrieval -> optional Java order-status query -> LLM answer
 -> Response
 ```
 
@@ -35,11 +35,12 @@ Added by version:
 0.9.0: LangChain ChatModel router with Pydantic Structured Output and rule fallback
 0.9.1: Zhipu GLM OpenAI-compatible chat model configuration
 0.9.2: Zhipu router structured output compatibility through JSON mode
+0.11.1: unified RecommendAgent and SupportAgent chain contracts, validation, fallbacks, and structured output
 0.11.0: stage 7 SupportAgent rule RAG, read-only Java order-status query, and LLM answer chain
 0.10.0: stage 6 RecommendAgent query rewrite, ES/RAG retrieval, and LLM answer chain
 ```
 
-This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Stage 6 upgrades RecommendAgent to query rewrite -> ES retrieval -> context builder -> LLM answer -> references. Stage 7 upgrades SupportAgent to rule retrieval -> optional owner-authorized Java order-status query -> LLM answer -> references. Tool Calling, MCP, Redis Memory, SSE, and Human Confirmation are still future stages.
+This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Stage 6 upgrades RecommendAgent to query rewrite -> ES retrieval -> context builder -> LLM answer -> references. Stage 7 upgrades SupportAgent to query rewrite -> rule retrieval -> optional owner-authorized Java order-status query -> LLM answer -> references. Both chains now share the same structured-output invocation, non-empty query/capability validation, local capability completion, result contract, and reference selection rules. Tool Calling, MCP, Redis Memory, SSE, and Human Confirmation are still future stages.
 
 Elasticsearch support is present but disabled by default. Set `ES_ENABLED=true` only after Elasticsearch is available and the indexes have data.
 

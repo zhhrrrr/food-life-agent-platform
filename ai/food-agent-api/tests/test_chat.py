@@ -16,7 +16,7 @@ from app.recommend.chain import (
 from app.rag.context_builder import build_context_summary, build_references
 from app.rag.retriever import RagRetriever, RetrievalResult, retrieve_for_agent
 from app.search.schemas import SearchHit
-from app.support.chain import SupportAnswer, SupportChain
+from app.support.chain import SupportAnswer, SupportChain, SupportQueryRewrite
 from app.support.order_status_client import (
     JavaOrderStatusClient,
     OrderStatusLookup,
@@ -38,7 +38,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = get_settings()
 
-    assert settings.app_version == "0.11.0"
+    assert settings.app_version == "0.11.1"
     assert settings.es_enabled is False
     assert settings.es_index_shop == "food_shop_index"
     assert settings.llm_router_enabled is False
@@ -231,7 +231,7 @@ def test_recommend_chain_uses_rag_hits_with_template_fallback() -> None:
     ]
 
 
-def test_recommend_chain_rewrites_retrieves_and_generates_llm_answer(monkeypatch) -> None:
+def test_recommend_chain_rewrites_retrieves_and_generates_llm_answer() -> None:
     hit = SearchHit(
         id="shop-1",
         title="Shu Xiang",
@@ -285,7 +285,6 @@ def test_recommend_chain_rewrites_retrieves_and_generates_llm_answer(monkeypatch
             raise AssertionError("unexpected schema")
 
     chat_model = SchemaAwareChatModel()
-    monkeypatch.setattr("app.recommend.chain.build_chat_model", lambda settings: chat_model)
     retriever = TrackingRetriever()
 
     result = RecommendChain(
@@ -297,6 +296,7 @@ def test_recommend_chain_rewrites_retrieves_and_generates_llm_answer(monkeypatch
             }
         ),
         retriever=retriever,
+        chat_model=chat_model,
     ).run("\u4e24\u4e2a\u4eba\u5403\u5ddd\u83dc\uff0c\u6700\u597d\u6709\u4f18\u60e0\u5238\u548c\u597d\u8bc4")
 
     assert retriever.query == rewrite.search_query
@@ -305,6 +305,32 @@ def test_recommend_chain_rewrites_retrieves_and_generates_llm_answer(monkeypatch
     assert result.capabilities == list(rewrite.capabilities)
     assert result.references[0]["id"] == "shop-1"
     assert chat_model.structured_kwargs == [{"method": "json_mode"}, {"method": "json_mode"}]
+
+
+def test_recommend_rewrite_rejects_empty_capabilities_and_uses_fallback() -> None:
+    class InvalidStructuredModel:
+        def invoke(self, messages: list[tuple[str, str]]) -> dict[str, object]:
+            return {
+                "search_query": "\u9884\u7b97200\u5143 \u7ea6\u4f1a",
+                "capabilities": [],
+                "reason": "invalid empty capabilities",
+            }
+
+    class InvalidChatModel:
+        def with_structured_output(self, schema: object, **kwargs: object) -> InvalidStructuredModel:
+            assert schema is RecommendQueryRewrite
+            assert kwargs == {"method": "json_mode"}
+            return InvalidStructuredModel()
+
+    result = RecommendChain(
+        settings=get_settings().model_copy(
+            update={"llm_router_enabled": True, "llm_provider": "zhipu", "llm_api_key": "test-key"}
+        ),
+        chat_model=InvalidChatModel(),
+    ).rewrite_query("\u9884\u7b97200\u5143\uff0c\u9002\u5408\u7ea6\u4f1a")
+
+    assert result.search_query == "\u9884\u7b97200\u5143\uff0c\u9002\u5408\u7ea6\u4f1a"
+    assert result.capabilities == ["budget_filter", "scene_recommendation"]
 
 
 def test_support_agent_uses_rag_hits(monkeypatch) -> None:
@@ -400,7 +426,7 @@ def test_support_chain_does_not_call_java_without_an_explicit_order_id() -> None
     assert "\u8bf7\u63d0\u4f9b\u8ba2\u5355 ID" in result.response
 
 
-def test_support_chain_uses_llm_answer_with_rule_and_order_evidence(monkeypatch) -> None:
+def test_support_chain_uses_llm_answer_with_rule_and_order_evidence() -> None:
     snapshot = OrderStatusSnapshot(
         order_id=12345,
         order_no="NO-12345",
@@ -408,27 +434,41 @@ def test_support_chain_uses_llm_answer_with_rule_and_order_evidence(monkeypatch)
         order_status="PAID",
     )
     answer = SupportAnswer(
-        answer="\u8ba2\u5355\u5f53\u524d\u4e3a\u5df2\u652f\u4ed8\uff0c\u4f7f\u7528\u4e0e\u9000\u6b3e\u8bf7\u4ee5\u5e73\u53f0\u89c4\u5219\u4e3a\u51c6\u3002",
+        answer=(
+            "\u8ba2\u5355\u5f53\u524d\u4e3a\u5df2\u652f\u4ed8\uff0c"
+            "\u4f7f\u7528\u4e0e\u9000\u6b3e\u8bf7\u4ee5\u5e73\u53f0\u89c4\u5219\u4e3a\u51c6\u3002"
+        ),
         used_reference_ids=["rule-1", "order:12345"],
+    )
+    rewrite = SupportQueryRewrite(
+        search_query="\u9000\u6b3e\u89c4\u5219 \u8ba2\u5355\u72b6\u6001",
+        capabilities=["refund_rule"],
+        reason="The user asks about a refund rule and a current order status.",
     )
 
     class StructuredModel:
-        def invoke(self, messages: list[tuple[str, str]]) -> SupportAnswer:
-            assert "order_status=PAID" in messages[-1][1]
-            return answer
+        def __init__(self, result: object) -> None:
+            self.result = result
+
+        def invoke(self, messages: list[tuple[str, str]]) -> object:
+            if self.result is answer:
+                assert "order_status=PAID" in messages[-1][1]
+            return self.result
 
     class ChatModel:
         def with_structured_output(self, schema: object, **kwargs: object) -> StructuredModel:
-            assert schema is SupportAnswer
             assert kwargs == {"method": "json_mode"}
-            return StructuredModel()
+            if schema is SupportQueryRewrite:
+                return StructuredModel(rewrite)
+            if schema is SupportAnswer:
+                return StructuredModel(answer)
+            raise AssertionError("unexpected schema")
 
     class SuccessfulOrderStatusClient:
         def get_order_status(self, order_id: int, authorization: str) -> OrderStatusLookup:
             assert authorization == "token-1"
             return OrderStatusLookup(status="success", order_id=order_id, snapshot=snapshot)
 
-    monkeypatch.setattr("app.support.chain.build_chat_model", lambda settings: ChatModel())
     result = SupportChain(
         settings=get_settings().model_copy(
             update={"llm_router_enabled": True, "llm_provider": "zhipu", "llm_api_key": "test-key"}
@@ -443,10 +483,12 @@ def test_support_chain_uses_llm_answer_with_rule_and_order_evidence(monkeypatch)
             )
         ),
         order_status_client=SuccessfulOrderStatusClient(),  # type: ignore[arg-type]
+        chat_model=ChatModel(),
     ).run("\u8ba2\u5355 12345 \u7684\u8ba2\u5355\u72b6\u6001\u548c\u9000\u6b3e\u89c4\u5219", authorization="token-1")
 
     assert result.response == answer.answer
     assert result.capabilities == ["refund_rule", "order_status_explanation"]
+    assert result.rewritten_query == rewrite.search_query
 
 
 def test_java_order_status_client_forwards_authorization(monkeypatch) -> None:

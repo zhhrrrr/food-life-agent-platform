@@ -1,10 +1,18 @@
 import logging
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from app.core.config import Settings, get_settings
-from app.llm.chat_model import ChatModelUnavailableError, build_chat_model
+from app.llm.chat_model import ChatModelUnavailableError
+from app.llm.structured_output import invoke_structured_output
+from app.rag.chain_models import (
+    QueryRewriteBase,
+    RagAnswer,
+    RagChainResult,
+    merge_capabilities,
+    select_references,
+)
 from app.rag.context_builder import build_context_items, build_context_summary, build_references
 from app.rag.retriever import RagRetriever
 from app.search.schemas import SearchHit
@@ -22,25 +30,16 @@ RecommendCapability = Literal[
 ]
 
 
-class RecommendQueryRewrite(BaseModel):
-    search_query: str
-    capabilities: list[RecommendCapability] = Field(default_factory=list)
-    reason: str = ""
+class RecommendQueryRewrite(QueryRewriteBase):
+    capabilities: list[RecommendCapability] = Field(min_length=1)
 
 
-class RecommendAnswer(BaseModel):
-    answer: str
-    used_reference_ids: list[str] = Field(default_factory=list)
+class RecommendAnswer(RagAnswer):
+    pass
 
 
-class RecommendChainResult(BaseModel):
-    response: str
-    rag_mode: str
-    query: str
-    rewritten_query: str
-    capabilities: list[str] = Field(default_factory=list)
-    context: list[dict[str, object]] = Field(default_factory=list)
-    references: list[dict[str, object]] = Field(default_factory=list)
+class RecommendChainResult(RagChainResult):
+    pass
 
 
 class RecommendChain:
@@ -48,9 +47,11 @@ class RecommendChain:
         self,
         settings: Settings | None = None,
         retriever: RagRetriever | None = None,
+        chat_model: Any | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.retriever = retriever or RagRetriever(settings=self.settings)
+        self.chat_model = chat_model
 
     def run(self, message: str) -> RecommendChainResult:
         rewrite = self.rewrite_query(message)
@@ -71,6 +72,7 @@ class RecommendChain:
         context = build_context_summary(retrieval.hits)
         references = build_references(retrieval.hits)
         answer = self.generate_answer(message, rewrite, retrieval.hits, context)
+        reference_dicts = [reference.model_dump() for reference in references]
 
         return RecommendChainResult(
             response=answer.answer,
@@ -79,7 +81,7 @@ class RecommendChain:
             rewritten_query=rewrite.search_query,
             capabilities=list(rewrite.capabilities),
             context=build_context_items(retrieval.hits),
-            references=[reference.model_dump() for reference in references],
+            references=select_references(reference_dicts, answer.used_reference_ids),
         )
 
     def rewrite_query(self, message: str) -> RecommendQueryRewrite:
@@ -88,11 +90,12 @@ class RecommendChain:
             return fallback
 
         try:
-            model = build_chat_model(self.settings).with_structured_output(
-                RecommendQueryRewrite,
-                **_structured_output_kwargs(self.settings),
+            result = invoke_structured_output(
+                settings=self.settings,
+                schema=RecommendQueryRewrite,
+                messages=_rewrite_messages(message),
+                chat_model=self.chat_model,
             )
-            result = model.invoke(_rewrite_messages(message))
         except ChatModelUnavailableError as exc:
             logger.info("recommend_query_rewrite_fallback reason=%s", exc)
             return fallback
@@ -100,11 +103,14 @@ class RecommendChain:
             logger.exception("recommend_query_rewrite_failed")
             return fallback
 
-        try:
-            return result if isinstance(result, RecommendQueryRewrite) else RecommendQueryRewrite.model_validate(result)
-        except Exception:
-            logger.exception("recommend_query_rewrite_invalid")
-            return fallback
+        return result.model_copy(
+            update={
+                "capabilities": merge_capabilities(
+                    list(result.capabilities),
+                    list(fallback.capabilities),
+                )
+            }
+        )
 
     def generate_answer(
         self,
@@ -118,11 +124,12 @@ class RecommendChain:
             return fallback
 
         try:
-            model = build_chat_model(self.settings).with_structured_output(
-                RecommendAnswer,
-                **_structured_output_kwargs(self.settings),
+            return invoke_structured_output(
+                settings=self.settings,
+                schema=RecommendAnswer,
+                messages=_answer_messages(message, rewrite, context),
+                chat_model=self.chat_model,
             )
-            result = model.invoke(_answer_messages(message, rewrite, context))
         except ChatModelUnavailableError as exc:
             logger.info("recommend_answer_fallback reason=%s", exc)
             return fallback
@@ -130,11 +137,6 @@ class RecommendChain:
             logger.exception("recommend_answer_failed")
             return fallback
 
-        try:
-            return result if isinstance(result, RecommendAnswer) else RecommendAnswer.model_validate(result)
-        except Exception:
-            logger.exception("recommend_answer_invalid")
-            return fallback
 
 
 def _fallback_rewrite(message: str) -> RecommendQueryRewrite:
@@ -164,12 +166,6 @@ def _fallback_rewrite(message: str) -> RecommendQueryRewrite:
 
 def _template_answer(context: str) -> str:
     return f"根据检索结果，为你整理出以下推荐线索：\n{context}"
-
-
-def _structured_output_kwargs(settings: Settings) -> dict[str, str]:
-    if settings.llm_provider.strip().lower() == "zhipu":
-        return {"method": "json_mode"}
-    return {}
 
 
 def _rewrite_messages(message: str) -> list[tuple[str, str]]:

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.1
+
+- Unified RecommendAgent and SupportAgent around the same rewrite -> retrieval -> context -> structured answer chain contract.
+- Added shared query, answer, result, capability merge, reference selection, and LangChain structured-output helpers.
+- Required non-blank rewritten queries and at least one valid capability; invalid LLM plans now fall back to deterministic local plans.
+- Added SupportAgent query rewriting while keeping Java order lookup gated by explicit local order-status wording and an order ID.
+- Filtered response references by structured `used_reference_ids`, with all verified evidence retained when the model returns no valid IDs.
+
 ## 0.11.0
 
 - Upgraded SupportAgent from a retrieval template to a rule retrieval -> optional read-only Java order-status query -> LLM answer chain.

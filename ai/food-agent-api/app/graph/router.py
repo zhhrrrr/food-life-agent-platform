@@ -4,7 +4,8 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.core.config import Settings, get_settings
-from app.llm.chat_model import ChatModelUnavailableError, build_chat_model
+from app.llm.chat_model import ChatModelUnavailableError
+from app.llm.structured_output import invoke_structured_output
 
 AgentName = Literal["recommend", "trade", "support"]
 
@@ -59,34 +60,18 @@ def route_intent(
         return fallback
 
     try:
-        model = chat_model or build_chat_model(resolved_settings)
-        structured_kwargs = _structured_output_kwargs(resolved_settings)
-        structured_model = model.with_structured_output(  # type: ignore[attr-defined]
-            IntentResult,
-            **structured_kwargs,
+        return invoke_structured_output(
+            settings=resolved_settings,
+            schema=IntentResult,
+            messages=_router_messages(message),
+            chat_model=chat_model,
         )
-        result = structured_model.invoke(_router_messages(message))
     except ChatModelUnavailableError as exc:
         logger.info("llm_router_fallback reason=%s", exc)
         return fallback
     except Exception:
         logger.exception("llm_router_failed")
         return fallback
-
-    if isinstance(result, IntentResult):
-        return result
-    try:
-        return IntentResult.model_validate(result)
-    except Exception:
-        logger.exception("llm_router_invalid_result")
-        return fallback
-
-
-def _structured_output_kwargs(settings: Settings) -> dict[str, str]:
-    if settings.llm_provider.strip().lower() == "zhipu":
-        return {"method": "json_mode"}
-    return {}
-
 
 def route_intent_by_rules(message: str) -> IntentResult:
     if any(keyword in message for keyword in TRADE_ACTION_KEYWORDS):
