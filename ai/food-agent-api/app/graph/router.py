@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from collections.abc import Sequence
 from functools import lru_cache
 from typing import Literal
@@ -10,7 +11,11 @@ from app.core.config import Settings, get_settings
 from app.graph.semantic_router import SemanticRouter
 from app.llm.chat_model import ChatModelUnavailableError, build_chat_model
 from app.llm.structured_output import invoke_structured_output
-from app.memory.conversation_memory import ConversationTurn, should_use_conversation_history
+from app.memory.conversation_memory import (
+    ConversationTurn,
+    should_use_conversation_history,
+)
+from app.trade.policy import detect_trade_mutation
 
 AgentName = Literal["recommend", "trade", "support"]
 RouterSource = Literal["semantic", "llm_tool", "llm_structured", "rules"]
@@ -95,13 +100,6 @@ class IntentResult(BaseModel):
     semantic_margin: float | None = None
 
 
-TRADE_ACTION_KEYWORDS = (
-    "\u7533\u8bf7\u9000\u6b3e",
-    "\u9000\u6b3e\u7533\u8bf7",
-    "\u6211\u8981\u9000\u6b3e",
-    "\u53d6\u6d88\u8ba2\u5355",
-    "\u4e0b\u5355",
-)
 TRADE_KEYWORDS = (
     "\u8ba2\u5355",
     "\u5e93\u5b58",
@@ -114,8 +112,6 @@ SUPPORT_KEYWORDS = (
     "\u9000\u6b3e\u89c4\u5219",
     "\u62fc\u56e2\u89c4\u5219",
     "\u652f\u4ed8\u89c4\u5219",
-    "\u8ba2\u5355\u72b6\u6001",
-    "\u8ba2\u5355\u8fdb\u5ea6",
     "\u9000\u6b3e",
     "\u552e\u540e",
     "\u89c4\u5219",
@@ -123,8 +119,31 @@ SUPPORT_KEYWORDS = (
     "FAQ",
     "faq",
 )
+ORDER_ID_PATTERN = re.compile(
+    r"(?:订单(?:号|ID|id|编号)?|order(?:\s*id|\s*no)?)\s*[:：#]?\s*\d{1,19}",
+    re.IGNORECASE,
+)
+ORDER_STATUS_EXPLANATION_MARKERS = (
+    "是什么意思",
+    "代表什么",
+    "怎么理解",
+    "怎么解释",
+    "状态说明",
+    "有哪些状态",
+)
+ORDER_QUERY_MARKERS = (
+    "查询",
+    "我的订单",
+    "当前",
+    "现在",
+    "订单详情",
+    "订单进度",
+    "到哪一步",
+    "怎么样",
+)
 
 
+# 按照“语义路由 → LLM Tool Calling → LLM 结构化输出 → 规则兜底”的顺序，最终判断用户属于 recommend / trade / support 哪个意图。
 def route_intent(
     message: str,
     settings: Settings | None = None,
@@ -135,8 +154,11 @@ def route_intent(
     resolved_settings = settings or get_settings()
     history = conversation_history or []
     fallback = route_intent_by_rules(_rule_query(message, history))
-    semantic_match = (semantic_router or _resolve_semantic_router(settings)).match(message, history)
+    semantic_match = (semantic_router or _resolve_semantic_router(settings)).match(
+        message, history
+    )
 
+    # 分两个支路走
     if semantic_match is not None:
         logger.info(
             "semantic_route intent=%s score=%.4f margin=%.4f accepted=%s",
@@ -171,6 +193,7 @@ def route_intent(
     except Exception as exc:
         logger.warning("llm_tool_router_failed error=%s", type(exc).__name__)
 
+    # Tool Calling 失败后，尝试 LLM 结构化输出
     try:
         result = invoke_structured_output(
             settings=resolved_settings,
@@ -193,13 +216,31 @@ def route_intent(
 
 
 def route_intent_by_rules(message: str) -> IntentResult:
-    if any(keyword in message for keyword in TRADE_ACTION_KEYWORDS):
+    if detect_trade_mutation(message):
         return _rule_result("trade", 0.65, "fallback rule matched trade action keyword")
+    if _is_order_status_explanation(message):
+        return _rule_result("support", 0.65, "fallback rule matched status explanation")
+    if _is_current_order_query(message):
+        return _rule_result("trade", 0.65, "fallback rule matched current order query")
     if any(keyword in message for keyword in SUPPORT_KEYWORDS):
         return _rule_result("support", 0.65, "fallback rule matched support keyword")
     if any(keyword in message for keyword in TRADE_KEYWORDS):
         return _rule_result("trade", 0.65, "fallback rule matched trade keyword")
     return _rule_result("recommend", 0.55, "fallback rule defaulted to recommend")
+
+
+def _is_order_status_explanation(message: str) -> bool:
+    return "订单" in message and any(
+        marker in message for marker in ORDER_STATUS_EXPLANATION_MARKERS
+    )
+
+
+def _is_current_order_query(message: str) -> bool:
+    if "订单" not in message.lower() and "order" not in message.lower():
+        return False
+    return bool(ORDER_ID_PATTERN.search(message)) or any(
+        marker in message for marker in ORDER_QUERY_MARKERS
+    )
 
 
 def _invoke_tool_router(
@@ -211,6 +252,7 @@ def _invoke_tool_router(
     model = chat_model or build_chat_model(settings)
     if not hasattr(model, "bind_tools"):
         raise ChatModelUnavailableError("chat model does not support tool calling")
+    # model.bind_tools(...) 通常就是 LangChain ChatModel 提供的方法
     bound_model = model.bind_tools(ROUTING_TOOLS, tool_choice="required")
     response = bound_model.invoke(list(messages))
     tool_calls = getattr(response, "tool_calls", None) or []

@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.14.0`
+Current version: `0.15.0`
 
 Current route chain:
 
@@ -18,7 +18,7 @@ HTTP Request
       -> deterministic rule fallback
 -> Recommend / Trade / Support Agent
 -> Recommend query rewrite -> ES BM25 retrieval -> LLM answer
--> Support query rewrite -> rule retrieval -> optional Java order-status query -> LLM answer
+-> Support query rewrite -> ES rule retrieval -> LLM answer
 -> Trade query rewrite -> allow-listed Java Gateway GET queries -> LLM answer
 -> Response
 ```
@@ -26,6 +26,7 @@ HTTP Request
 Added by version:
 
 ```text
+0.15.0: removed duplicate Support order reads and shared repeated chain fallback logic
 0.14.0: production semantic-route corpus, independent evaluation set, and BGE-M3 input compatibility
 0.1.0: FastAPI + LangGraph skeleton
 0.2.0: settings, request_id, logging, stable error response
@@ -51,7 +52,7 @@ Added by version:
 0.10.0: stage 6 RecommendAgent query rewrite, ES/RAG retrieval, and LLM answer chain
 ```
 
-This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Stage 6 upgrades RecommendAgent to query rewrite -> ES retrieval -> context builder -> LLM answer -> references. Stage 7 upgrades SupportAgent to query rewrite -> rule retrieval -> optional owner-authorized Java order-status query -> LLM answer -> references. Stage 8 upgrades TradeAgent to query rewrite -> allow-listed Java Gateway GET queries -> context -> LLM answer -> references. Version 0.14.0 supplies 138 validated semantic anchors, a separate 60-case quality suite, and provider-safe raw-text embedding requests. All three agent chains retain their shared contracts and safety boundaries. MCP, SSE, Human Confirmation, and business action tools are still future stages.
+This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Stage 6 upgrades RecommendAgent to query rewrite -> ES retrieval -> context builder -> LLM answer -> references. SupportAgent owns only ES-backed rules, status meanings, and FAQ answers. TradeAgent exclusively owns current order, price, stock, coupon, group-buy, and preview reads through allow-listed Java Gateway GET queries. Version 0.15.0 removes the legacy Support order client and centralizes shared chain fallback and trade-mutation policy logic. MCP, SSE, Human Confirmation, and business action tools are still future stages.
 
 Elasticsearch support is present but disabled by default. Set `ES_ENABLED=true` only after Elasticsearch is available and the indexes have data.
 
@@ -89,7 +90,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.14.0
+APP_VERSION=0.15.0
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false
@@ -293,7 +294,7 @@ When ES returns matches, `POST /api/agent/chat` also includes:
 }
 ```
 
-RecommendAgent searches shop, package, review, activity, and coupon indexes. It can rewrite recommendation questions for shop/package recommendation, cuisine filtering, budget filtering, scene recommendation, review semantic search, and shop comparison before ES retrieval. When LLM is enabled, it generates an evidence-grounded answer from the retrieved context and keeps references. It does not create orders or change stock. SupportAgent searches the platform rule index for refund, group-buy, payment, order-status explanation, and platform FAQ. When a message explicitly contains an order ID and asks for its status, it forwards the incoming Authorization header to Java's owner-authorized GET /api/trade/orders/{orderId}; it never queries MySQL or uses an operations endpoint. If ES is disabled or no document matches, the agents return a clear no-evidence template instead of pretending to have generated an answer.
+RecommendAgent searches shop, package, review, activity, and coupon indexes. It can rewrite recommendation questions for shop/package recommendation, cuisine filtering, budget filtering, scene recommendation, review semantic search, and shop comparison before ES retrieval. When LLM is enabled, it generates an evidence-grounded answer from the retrieved context and keeps references. It does not create orders or change stock. SupportAgent searches only the platform rule index for refund, group-buy, payment, generic order-status meanings, and platform FAQ; it does not receive Authorization or query Java order APIs. If ES is disabled or no document matches, these agents return a clear no-evidence template instead of pretending to have generated an answer.
 
 TradeAgent queries current price, stock, coupons, group-buy teams/orders, user orders, and read-only order previews through `JAVA_GATEWAY_BASE_URL`. Its Java client exposes only fixed GET methods and forwards the incoming Authorization header for protected user queries. Order preview composes the package trade snapshot, a pre-discount estimate in cents, and candidate user coupons without claiming a final payable amount, creating an order, or reserving stock. Create, cancel, pay, and refund requests are rejected before any Gateway call.
 

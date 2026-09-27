@@ -10,21 +10,15 @@ from app.llm.chat_model import (
     resolve_chat_model_options,
 )
 from app.main import app
+from app.rag.chain_models import AgentAnswer, AgentChainResult
 from app.rag.context_builder import build_context_summary, build_references
 from app.rag.retriever import RagRetriever, RetrievalResult
 from app.recommend.chain import (
-    RecommendAnswer,
     RecommendChain,
-    RecommendChainResult,
     RecommendQueryRewrite,
 )
 from app.search.schemas import SearchHit
-from app.support.chain import SupportAnswer, SupportChain, SupportQueryRewrite
-from app.support.order_status_client import (
-    JavaOrderStatusClient,
-    OrderStatusLookup,
-    OrderStatusSnapshot,
-)
+from app.support.chain import SupportChain, SupportQueryRewrite
 
 client = TestClient(app)
 
@@ -40,7 +34,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = get_settings()
 
-    assert settings.app_version == "0.14.0"
+    assert settings.app_version == "0.15.0"
     assert settings.es_enabled is False
     assert settings.es_index_shop == "food_shop_index"
     assert Settings().llm_router_enabled is False
@@ -54,7 +48,10 @@ def test_chat_routes_to_recommend_agent() -> None:
     data = response.json()
     assert data["intent"] == "recommend"
     assert data["agent"] == "recommend"
-    assert "\u6682\u672a\u4ece ES \u68c0\u7d22\u5230\u53ef\u7528\u4e8e\u63a8\u8350" in data["response"]
+    assert (
+        "\u6682\u672a\u4ece ES \u68c0\u7d22\u5230\u53ef\u7528\u4e8e\u63a8\u8350"
+        in data["response"]
+    )
     assert data["references"] == []
 
 
@@ -78,7 +75,10 @@ def test_chat_routes_to_support_agent() -> None:
     data = response.json()
     assert data["intent"] == "support"
     assert data["agent"] == "support"
-    assert "\u6682\u672a\u4ece ES \u68c0\u7d22\u5230\u76f8\u5173\u5e73\u53f0\u89c4\u5219" in data["response"]
+    assert (
+        "\u6682\u672a\u4ece ES \u68c0\u7d22\u5230\u76f8\u5173\u5e73\u53f0\u89c4\u5219"
+        in data["response"]
+    )
     assert data["references"] == []
 
 
@@ -112,7 +112,10 @@ def test_context_builder_creates_summary_and_references() -> None:
     context = build_context_summary(hits)
     references = build_references(hits)
 
-    assert context == "1. Shu Xiang [food_shop_index]: Sichuan restaurant for team dinners."
+    assert (
+        context
+        == "1. Shu Xiang [food_shop_index]: Sichuan restaurant for team dinners."
+    )
     assert references[0].id == "shop-1"
     assert references[0].source == "food_shop_index"
 
@@ -121,7 +124,9 @@ class FakeSearchService:
     def __init__(self) -> None:
         self.calls: list[tuple[list[str], str, int]] = []
 
-    def search_many(self, indices: list[str], query: str, size: int = 3) -> list[SearchHit]:
+    def search_many(
+        self, indices: list[str], query: str, size: int = 3
+    ) -> list[SearchHit]:
         self.calls.append((indices, query, size))
         return [
             SearchHit(
@@ -170,7 +175,7 @@ class FakeRagRetriever:
 
 
 def test_recommend_agent_uses_chain_result(monkeypatch) -> None:
-    chain_result = RecommendChainResult(
+    chain_result = AgentChainResult(
         response="\u6839\u636e\u68c0\u7d22\u7ed3\u679c\uff0c\u63a8\u8350 Shu Xiang\u3002",
         rag_mode="recommend_agent_llm_rag",
         query="\u63a8\u8350\u5ddd\u83dc",
@@ -188,7 +193,7 @@ def test_recommend_agent_uses_chain_result(monkeypatch) -> None:
     )
 
     class FakeRecommendChain:
-        def run(self, message: str) -> RecommendChainResult:
+        def run(self, message: str) -> AgentChainResult:
             assert message == "\u63a8\u8350\u5ddd\u83dc"
             return chain_result
 
@@ -251,7 +256,7 @@ def test_recommend_chain_rewrites_retrieves_and_generates_llm_answer() -> None:
         ],
         reason="The user asks for a two-person Sichuan recommendation with coupons.",
     )
-    answer = RecommendAnswer(
+    answer = AgentAnswer(
         answer="推荐 Shu Xiang：它匹配川菜、双人场景和优惠券线索，且评价较好。",
         used_reference_ids=["shop-1"],
     )
@@ -282,7 +287,7 @@ def test_recommend_chain_rewrites_retrieves_and_generates_llm_answer() -> None:
             self.structured_kwargs.append(kwargs)
             if schema is RecommendQueryRewrite:
                 return SchemaAwareStructuredModel(rewrite)
-            if schema is RecommendAnswer:
+            if schema is AgentAnswer:
                 return SchemaAwareStructuredModel(answer)
             raise AssertionError("unexpected schema")
 
@@ -299,14 +304,19 @@ def test_recommend_chain_rewrites_retrieves_and_generates_llm_answer() -> None:
         ),
         retriever=retriever,
         chat_model=chat_model,
-    ).run("\u4e24\u4e2a\u4eba\u5403\u5ddd\u83dc\uff0c\u6700\u597d\u6709\u4f18\u60e0\u5238\u548c\u597d\u8bc4")
+    ).run(
+        "\u4e24\u4e2a\u4eba\u5403\u5ddd\u83dc\uff0c\u6700\u597d\u6709\u4f18\u60e0\u5238\u548c\u597d\u8bc4"
+    )
 
     assert retriever.query == rewrite.search_query
     assert result.response == answer.answer
     assert result.rewritten_query == rewrite.search_query
     assert result.capabilities == list(rewrite.capabilities)
     assert result.references[0]["id"] == "shop-1"
-    assert chat_model.structured_kwargs == [{"method": "json_mode"}, {"method": "json_mode"}]
+    assert chat_model.structured_kwargs == [
+        {"method": "json_mode"},
+        {"method": "json_mode"},
+    ]
 
 
 def test_recommend_rewrite_rejects_empty_capabilities_and_uses_fallback() -> None:
@@ -319,14 +329,20 @@ def test_recommend_rewrite_rejects_empty_capabilities_and_uses_fallback() -> Non
             }
 
     class InvalidChatModel:
-        def with_structured_output(self, schema: object, **kwargs: object) -> InvalidStructuredModel:
+        def with_structured_output(
+            self, schema: object, **kwargs: object
+        ) -> InvalidStructuredModel:
             assert schema is RecommendQueryRewrite
             assert kwargs == {"method": "json_mode"}
             return InvalidStructuredModel()
 
     result = RecommendChain(
         settings=get_settings().model_copy(
-            update={"llm_router_enabled": True, "llm_provider": "zhipu", "llm_api_key": "test-key"}
+            update={
+                "llm_router_enabled": True,
+                "llm_provider": "zhipu",
+                "llm_api_key": "test-key",
+            }
         ),
         chat_model=InvalidChatModel(),
     ).rewrite_query("\u9884\u7b97200\u5143\uff0c\u9002\u5408\u7ea6\u4f1a")
@@ -343,20 +359,24 @@ def test_support_agent_uses_rag_hits(monkeypatch) -> None:
         source="food_rule_index",
         score=5.0,
     )
+
     class FakeSupportChain:
-        def run(self, message: str, authorization: str = "") -> object:
+        def run(self, message: str) -> object:
             assert message == "\u9000\u6b3e\u89c4\u5219"
-            assert authorization == ""
             return SupportChain(
-                settings=get_settings().model_copy(update={"llm_router_enabled": False}),
+                settings=get_settings().model_copy(
+                    update={"llm_router_enabled": False}
+                ),
                 retriever=FakeRagRetriever(hit),
             ).run(message)
 
-    monkeypatch.setattr("app.agents.support_agent.SupportChain", lambda: FakeSupportChain())
+    monkeypatch.setattr(
+        "app.agents.support_agent.SupportChain", lambda: FakeSupportChain()
+    )
 
     result = support_agent_node({"message": "\u9000\u6b3e\u89c4\u5219"})
 
-    assert "\u5e73\u53f0\u89c4\u5219\u548c\u5f53\u524d\u67e5\u8be2\u7ed3\u679c" in str(result["response"])
+    assert "\u6839\u636e\u5e73\u53f0\u89c4\u5219" in str(result["response"])
     assert result["references"] == [
         {
             "id": "rule-1",
@@ -368,84 +388,34 @@ def test_support_agent_uses_rag_hits(monkeypatch) -> None:
     assert result["rag_mode"] == "support_agent_llm_rag"
 
 
-def test_support_chain_queries_java_order_status_only_for_explicit_order_status() -> None:
-    snapshot = OrderStatusSnapshot(
-        order_id=12345,
-        order_no="NO-12345",
-        trade_type="NORMAL",
-        order_status="PAID",
-    )
-
-    class TrackingOrderStatusClient:
-        def __init__(self) -> None:
-            self.calls: list[tuple[int, str]] = []
-
-        def get_order_status(self, order_id: int, authorization: str) -> OrderStatusLookup:
-            self.calls.append((order_id, authorization))
-            return OrderStatusLookup(status="success", order_id=order_id, snapshot=snapshot)
-
-    order_client = TrackingOrderStatusClient()
+def test_support_chain_explains_generic_order_status_from_rules_only() -> None:
     result = SupportChain(
         settings=get_settings().model_copy(update={"llm_router_enabled": False}),
         retriever=FakeRagRetriever(
             SearchHit(
                 id="rule-1",
                 title="Order Status Rule",
-                content="A paid order can be used according to its use rule.",
+                content="待使用表示订单已生效但尚未核销。",
                 source="food_rule_index",
                 score=5.0,
             )
         ),
-        order_status_client=order_client,  # type: ignore[arg-type]
-    ).run("\u8ba2\u5355 12345 \u7684\u8ba2\u5355\u72b6\u6001\u662f\u4ec0\u4e48", authorization="token-1")
+    ).run("待使用订单状态是什么意思")
 
-    assert order_client.calls == [(12345, "token-1")]
     assert result.capabilities == ["order_status_explanation"]
-    assert result.order_status == snapshot.model_dump()
-    assert result.references[-1]["source"] == "java_trade_order_query"
-    assert "order_status=PAID" in result.response
+    assert result.references[0]["source"] == "food_rule_index"
+    assert "待使用" in result.response
 
 
-def test_support_chain_does_not_call_java_without_an_explicit_order_id() -> None:
-    class FailingOrderStatusClient:
-        def get_order_status(self, order_id: int, authorization: str) -> OrderStatusLookup:
-            raise AssertionError("Java must not be called without an explicit order ID")
-
-    result = SupportChain(
-        settings=get_settings().model_copy(update={"llm_router_enabled": False}),
-        retriever=FakeRagRetriever(
-            SearchHit(
-                id="rule-1",
-                title="Order Status Rule",
-                content="Order status is determined by current order data.",
-                source="food_rule_index",
-                score=5.0,
-            )
-        ),
-        order_status_client=FailingOrderStatusClient(),  # type: ignore[arg-type]
-    ).run("\u8ba2\u5355\u72b6\u6001\u600e\u4e48\u89e3\u91ca", authorization="token-1")
-
-    assert "\u8bf7\u63d0\u4f9b\u8ba2\u5355 ID" in result.response
-
-
-def test_support_chain_uses_llm_answer_with_rule_and_order_evidence() -> None:
-    snapshot = OrderStatusSnapshot(
-        order_id=12345,
-        order_no="NO-12345",
-        trade_type="NORMAL",
-        order_status="PAID",
-    )
-    answer = SupportAnswer(
-        answer=(
-            "\u8ba2\u5355\u5f53\u524d\u4e3a\u5df2\u652f\u4ed8\uff0c"
-            "\u4f7f\u7528\u4e0e\u9000\u6b3e\u8bf7\u4ee5\u5e73\u53f0\u89c4\u5219\u4e3a\u51c6\u3002"
-        ),
-        used_reference_ids=["rule-1", "order:12345"],
+def test_support_chain_uses_llm_answer_with_rule_evidence() -> None:
+    answer = AgentAnswer(
+        answer="退款需要按照平台审核规则处理。",
+        used_reference_ids=["rule-1"],
     )
     rewrite = SupportQueryRewrite(
-        search_query="\u9000\u6b3e\u89c4\u5219 \u8ba2\u5355\u72b6\u6001",
+        search_query="退款规则",
         capabilities=["refund_rule"],
-        reason="The user asks about a refund rule and a current order status.",
+        reason="The user asks about refund rules.",
     )
 
     class StructuredModel:
@@ -453,27 +423,27 @@ def test_support_chain_uses_llm_answer_with_rule_and_order_evidence() -> None:
             self.result = result
 
         def invoke(self, messages: list[tuple[str, str]]) -> object:
-            if self.result is answer:
-                assert "order_status=PAID" in messages[-1][1]
+            assert "Java order status snapshot" not in messages[-1][1]
             return self.result
 
     class ChatModel:
-        def with_structured_output(self, schema: object, **kwargs: object) -> StructuredModel:
+        def with_structured_output(
+            self, schema: object, **kwargs: object
+        ) -> StructuredModel:
             assert kwargs == {"method": "json_mode"}
             if schema is SupportQueryRewrite:
                 return StructuredModel(rewrite)
-            if schema is SupportAnswer:
+            if schema is AgentAnswer:
                 return StructuredModel(answer)
             raise AssertionError("unexpected schema")
 
-    class SuccessfulOrderStatusClient:
-        def get_order_status(self, order_id: int, authorization: str) -> OrderStatusLookup:
-            assert authorization == "token-1"
-            return OrderStatusLookup(status="success", order_id=order_id, snapshot=snapshot)
-
     result = SupportChain(
         settings=get_settings().model_copy(
-            update={"llm_router_enabled": True, "llm_provider": "zhipu", "llm_api_key": "test-key"}
+            update={
+                "llm_router_enabled": True,
+                "llm_provider": "zhipu",
+                "llm_api_key": "test-key",
+            }
         ),
         retriever=FakeRagRetriever(
             SearchHit(
@@ -484,43 +454,12 @@ def test_support_chain_uses_llm_answer_with_rule_and_order_evidence() -> None:
                 score=5.0,
             )
         ),
-        order_status_client=SuccessfulOrderStatusClient(),  # type: ignore[arg-type]
         chat_model=ChatModel(),
-    ).run("\u8ba2\u5355 12345 \u7684\u8ba2\u5355\u72b6\u6001\u548c\u9000\u6b3e\u89c4\u5219", authorization="token-1")
+    ).run("退款规则是什么")
 
     assert result.response == answer.answer
-    assert result.capabilities == ["refund_rule", "order_status_explanation"]
+    assert result.capabilities == ["refund_rule"]
     assert result.rewritten_query == rewrite.search_query
-
-
-def test_java_order_status_client_forwards_authorization(monkeypatch) -> None:
-    class FakeResponse:
-        status_code = 200
-
-        @staticmethod
-        def json() -> dict[str, object]:
-            return {
-                "code": "0000",
-                "data": {
-                    "orderId": 12345,
-                    "orderNo": "NO-12345",
-                    "tradeType": "NORMAL",
-                    "orderStatus": "PAID",
-                },
-            }
-
-    def fake_get(url: str, headers: dict[str, str], timeout: float) -> FakeResponse:
-        assert url == "http://127.0.0.1:8301/api/trade/orders/12345"
-        assert headers == {"authorization": "token-1"}
-        assert timeout == 5.0
-        return FakeResponse()
-
-    monkeypatch.setattr("app.support.order_status_client.httpx.get", fake_get)
-    result = JavaOrderStatusClient(settings=get_settings()).get_order_status(12345, "token-1")
-
-    assert result.status == "success"
-    assert result.snapshot is not None
-    assert result.snapshot.order_status == "PAID"
 
 
 def test_food_graph_records_router_metadata() -> None:
@@ -533,8 +472,17 @@ def test_food_graph_records_router_metadata() -> None:
 
 
 def test_rule_router_sends_support_questions_to_support_before_trade() -> None:
-    assert route_intent_by_rules("\u62fc\u56e2\u89c4\u5219\u662f\u4ec0\u4e48").intent == "support"
+    assert (
+        route_intent_by_rules("\u62fc\u56e2\u89c4\u5219\u662f\u4ec0\u4e48").intent
+        == "support"
+    )
     assert route_intent_by_rules("\u7533\u8bf7\u9000\u6b3e").intent == "trade"
+
+
+def test_rule_router_separates_current_orders_from_status_meanings() -> None:
+    assert route_intent_by_rules("订单 12345 当前是什么状态").intent == "trade"
+    assert route_intent_by_rules("查询我的订单进度").intent == "trade"
+    assert route_intent_by_rules("待使用订单状态是什么意思").intent == "support"
 
 
 class FakeStructuredModel:
@@ -554,7 +502,9 @@ class FakeChatModel:
         self.structured_kwargs: dict[str, object] = {}
         self.structured_model: FakeStructuredModel | None = None
 
-    def with_structured_output(self, schema: object, **kwargs: object) -> FakeStructuredModel:
+    def with_structured_output(
+        self, schema: object, **kwargs: object
+    ) -> FakeStructuredModel:
         self.schema = schema
         self.structured_kwargs = kwargs
         self.structured_model = FakeStructuredModel(self.result)

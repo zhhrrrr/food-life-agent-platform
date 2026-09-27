@@ -19,7 +19,6 @@ class FoodAgentState(TypedDict, total=False):
     query: str
     rewritten_query: str
     capabilities: list[str]
-    order_status: dict[str, object] | None
     facts: list[dict[str, object]]
     query_statuses: list[dict[str, object]]
     operation_executed: bool

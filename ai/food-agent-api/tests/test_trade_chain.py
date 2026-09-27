@@ -2,8 +2,8 @@ from typing import Any
 
 from app.agents.trade_agent import trade_agent_node
 from app.core.config import get_settings
+from app.rag.chain_models import AgentAnswer
 from app.trade.chain import (
-    TradeAnswer,
     TradeChain,
     TradeChainResult,
     TradeQueryRewrite,
@@ -220,7 +220,7 @@ def test_trade_chain_uses_structured_rewrite_and_answer() -> None:
         capabilities=["price_query"],
         reason="The user asks for current package facts.",
     )
-    answer = TradeAnswer(
+    answer = AgentAnswer(
         answer="套餐 12 当前价格为 6800，库存为 12。",
         used_reference_ids=["package:12:trade-snapshot"],
     )
@@ -238,7 +238,7 @@ def test_trade_chain_uses_structured_rewrite_and_answer() -> None:
             assert kwargs == {"method": "json_mode"}
             if schema is TradeQueryRewrite:
                 return StructuredModel(rewrite)
-            if schema is TradeAnswer:
+            if schema is AgentAnswer:
                 return StructuredModel(answer)
             raise AssertionError("unexpected schema")
 

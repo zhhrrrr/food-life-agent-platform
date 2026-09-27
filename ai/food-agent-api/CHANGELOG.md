@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.0
+
+- Removed SupportAgent's duplicate Java order-status client; concrete order reads now belong exclusively to TradeAgent through Java Gateway, while SupportAgent remains an ES-backed rule and FAQ chain.
+- Centralized the repeated Structured Output enablement, exception handling, logging, and fallback behavior shared by RecommendAgent, SupportAgent, and TradeAgent.
+- Removed empty agent-specific answer/result models that added no fields or validation and reused the shared chain contracts directly.
+- Centralized transaction-mutation detection so Router and TradeAgent enforce one identical create/cancel/pay/refund policy.
+- Strengthened deterministic routing so current or concrete order queries go to TradeAgent while generic status meanings remain with SupportAgent.
+
 ## 0.14.0
 
 - Expanded the semantic route corpus from 25 demo phrases to 138 validated anchors grouped by intent, capability, and difficult routing boundary.

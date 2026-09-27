@@ -6,8 +6,7 @@ from typing import Any, Literal
 from pydantic import Field
 
 from app.core.config import Settings, get_settings
-from app.llm.chat_model import ChatModelUnavailableError
-from app.llm.structured_output import invoke_structured_output
+from app.llm.structured_output import invoke_structured_output_with_fallback
 from app.rag.chain_models import (
     AgentAnswer,
     AgentChainResult,
@@ -17,6 +16,7 @@ from app.rag.chain_models import (
 )
 from app.search.schemas import Reference
 from app.trade.gateway_client import GatewayQueryResult, TradeGatewayClient
+from app.trade.policy import detect_trade_mutation
 
 logger = logging.getLogger("food_agent.trade.chain")
 
@@ -30,10 +30,16 @@ TradeCapability = Literal[
 ]
 
 _PACKAGE_ID_PATTERNS = (
-    re.compile(r"(?:套餐(?:ID|id|编号|号)?|package(?:\s*id)?)\s*[:：#]?\s*(\d{1,19})", re.IGNORECASE),
+    re.compile(
+        r"(?:套餐(?:ID|id|编号|号)?|package(?:\s*id)?)\s*[:：#]?\s*(\d{1,19})",
+        re.IGNORECASE,
+    ),
 )
 _ORDER_ID_PATTERNS = (
-    re.compile(r"(?:订单(?:ID|id|编号|号)?|order(?:\s*id|\s*no)?)\s*[:：#]?\s*(\d{1,19})", re.IGNORECASE),
+    re.compile(
+        r"(?:订单(?:ID|id|编号|号)?|order(?:\s*id|\s*no)?)\s*[:：#]?\s*(\d{1,19})",
+        re.IGNORECASE,
+    ),
     re.compile(r"#(\d{1,19})"),
 )
 _TEAM_ID_PATTERNS = (
@@ -52,10 +58,6 @@ class TradeQueryRewrite(QueryRewriteBase):
     capabilities: list[TradeCapability] = Field(min_length=1)
 
 
-class TradeAnswer(AgentAnswer):
-    pass
-
-
 class TradeChainResult(AgentChainResult):
     facts: list[dict[str, object]] = Field(default_factory=list)
     query_statuses: list[dict[str, object]] = Field(default_factory=list)
@@ -70,12 +72,14 @@ class TradeChain:
         chat_model: Any | None = None,
     ) -> None:
         self.settings = settings or get_settings()
-        self.gateway_client = gateway_client or TradeGatewayClient(settings=self.settings)
+        self.gateway_client = gateway_client or TradeGatewayClient(
+            settings=self.settings
+        )
         self.chat_model = chat_model
 
     def run(self, message: str, authorization: str = "") -> TradeChainResult:
         rewrite = self.rewrite_query(message)
-        blocked_action = _blocked_action(message)
+        blocked_action = detect_trade_mutation(message)
         if blocked_action:
             return TradeChainResult(
                 response=(
@@ -103,7 +107,9 @@ class TradeChain:
                 query=message,
                 rewritten_query=rewrite.search_query,
                 capabilities=list(rewrite.capabilities),
-                query_statuses=[result.model_dump(exclude={"data"}) for result in query_results],
+                query_statuses=[
+                    result.model_dump(exclude={"data"}) for result in query_results
+                ],
             )
 
         facts = _facts(successful_results)
@@ -120,27 +126,22 @@ class TradeChain:
             context=facts,
             references=select_references(reference_dicts, answer.used_reference_ids),
             facts=facts,
-            query_statuses=[result.model_dump(exclude={"data"}) for result in query_results],
+            query_statuses=[
+                result.model_dump(exclude={"data"}) for result in query_results
+            ],
         )
 
     def rewrite_query(self, message: str) -> TradeQueryRewrite:
         fallback = _fallback_rewrite(message)
-        if not self.settings.llm_router_enabled:
-            return fallback
-
-        try:
-            result = invoke_structured_output(
-                settings=self.settings,
-                schema=TradeQueryRewrite,
-                messages=_rewrite_messages(message),
-                chat_model=self.chat_model,
-            )
-        except ChatModelUnavailableError as exc:
-            logger.info("trade_query_rewrite_fallback reason=%s", exc)
-            return fallback
-        except Exception:
-            logger.exception("trade_query_rewrite_failed")
-            return fallback
+        result = invoke_structured_output_with_fallback(
+            settings=self.settings,
+            schema=TradeQueryRewrite,
+            messages=_rewrite_messages(message),
+            fallback=fallback,
+            operation="trade_query_rewrite",
+            logger=logger,
+            chat_model=self.chat_model,
+        )
 
         return result.model_copy(
             update={
@@ -157,27 +158,20 @@ class TradeChain:
         rewrite: TradeQueryRewrite,
         context: str,
         references: list[Reference],
-    ) -> TradeAnswer:
-        fallback = TradeAnswer(
+    ) -> AgentAnswer:
+        fallback = AgentAnswer(
             answer=_template_answer(context),
             used_reference_ids=[reference.id for reference in references],
         )
-        if not self.settings.llm_router_enabled:
-            return fallback
-
-        try:
-            return invoke_structured_output(
-                settings=self.settings,
-                schema=TradeAnswer,
-                messages=_answer_messages(message, rewrite, context),
-                chat_model=self.chat_model,
-            )
-        except ChatModelUnavailableError as exc:
-            logger.info("trade_answer_fallback reason=%s", exc)
-            return fallback
-        except Exception:
-            logger.exception("trade_answer_failed")
-            return fallback
+        return invoke_structured_output_with_fallback(
+            settings=self.settings,
+            schema=AgentAnswer,
+            messages=_answer_messages(message, rewrite, context),
+            fallback=fallback,
+            operation="trade_answer",
+            logger=logger,
+            chat_model=self.chat_model,
+        )
 
     def _query_facts(
         self,
@@ -215,11 +209,17 @@ class TradeChain:
 
         if "group_buy_query" in capabilities:
             if _asks_for_my_group_buys(message):
-                results.append(self.gateway_client.list_my_group_buy_orders(authorization))
+                results.append(
+                    self.gateway_client.list_my_group_buy_orders(authorization)
+                )
             elif team_id:
-                results.append(self.gateway_client.get_group_buy_team(team_id, authorization))
+                results.append(
+                    self.gateway_client.get_group_buy_team(team_id, authorization)
+                )
             elif package_id is not None:
-                results.append(self.gateway_client.list_group_buy_teams(package_id, authorization))
+                results.append(
+                    self.gateway_client.list_group_buy_teams(package_id, authorization)
+                )
             else:
                 results.append(
                     _missing_parameter(
@@ -234,13 +234,21 @@ class TradeChain:
             else:
                 results.append(self.gateway_client.list_orders(authorization))
 
-        if "order_preview" in capabilities and package_result and package_result.has_data:
+        if (
+            "order_preview" in capabilities
+            and package_result
+            and package_result.has_data
+        ):
             preview_data: dict[str, object] = {
                 "package": package_result.data,
                 "quantity": quantity,
                 "previewOnly": True,
             }
-            price = package_result.data.get("price") if isinstance(package_result.data, dict) else None
+            price = (
+                package_result.data.get("price")
+                if isinstance(package_result.data, dict)
+                else None
+            )
             if isinstance(price, int):
                 preview_data["estimatedTotalAmountBeforeDiscount"] = price * quantity
                 preview_data["amountUnit"] = "cents"
@@ -287,20 +295,6 @@ def _fallback_rewrite(message: str) -> TradeQueryRewrite:
     )
 
 
-def _blocked_action(message: str) -> str:
-    action_keywords = (
-        ("创建订单", ("创建订单", "提交订单", "立即下单", "帮我下单", "直接下单")),
-        ("取消订单", ("取消订单", "撤销订单")),
-        ("支付订单", ("支付订单", "立即支付", "去支付", "帮我付款", "确认付款")),
-        ("发起退款", ("申请退款", "发起退款", "执行退款", "帮我退款")),
-    )
-    normalized = message.lower()
-    for action, keywords in action_keywords:
-        if any(keyword.lower() in normalized for keyword in keywords):
-            return action
-    return ""
-
-
 def _extract_int(message: str, patterns: tuple[re.Pattern[str], ...]) -> int | None:
     text = _extract_text(message, patterns)
     return int(text) if text else None
@@ -322,11 +316,16 @@ def _extract_quantity(message: str) -> int:
 
 
 def _asks_for_my_coupons(message: str) -> bool:
-    return any(keyword in message for keyword in ("我的优惠券", "我有的券", "已领取", "可用优惠券"))
+    return any(
+        keyword in message
+        for keyword in ("我的优惠券", "我有的券", "已领取", "可用优惠券")
+    )
 
 
 def _asks_for_my_group_buys(message: str) -> bool:
-    return any(keyword in message for keyword in ("我的拼团", "拼团订单", "我参加的拼团"))
+    return any(
+        keyword in message for keyword in ("我的拼团", "拼团订单", "我参加的拼团")
+    )
 
 
 def _missing_parameter(capability: str, message: str) -> GatewayQueryResult:
@@ -381,7 +380,9 @@ def _template_answer(context: str) -> str:
 
 
 def _no_facts_message(results: list[GatewayQueryResult]) -> str:
-    messages = list(dict.fromkeys(result.message for result in results if result.message))
+    messages = list(
+        dict.fromkeys(result.message for result in results if result.message)
+    )
     if not messages:
         return "当前未取得可用于回答的实时业务事实，请补充查询条件后重试。"
     return "当前未取得可用于回答的实时业务事实：" + "；".join(messages)

@@ -4,8 +4,7 @@ from typing import Any, Literal
 from pydantic import Field
 
 from app.core.config import Settings, get_settings
-from app.llm.chat_model import ChatModelUnavailableError
-from app.llm.structured_output import invoke_structured_output
+from app.llm.structured_output import invoke_structured_output_with_fallback
 from app.rag.chain_models import (
     AgentAnswer,
     AgentChainResult,
@@ -13,7 +12,11 @@ from app.rag.chain_models import (
     merge_capabilities,
     select_references,
 )
-from app.rag.context_builder import build_context_items, build_context_summary, build_references
+from app.rag.context_builder import (
+    build_context_items,
+    build_context_summary,
+    build_references,
+)
 from app.rag.retriever import RagRetriever
 from app.search.schemas import SearchHit
 
@@ -34,14 +37,6 @@ class RecommendQueryRewrite(QueryRewriteBase):
     capabilities: list[RecommendCapability] = Field(min_length=1)
 
 
-class RecommendAnswer(AgentAnswer):
-    pass
-
-
-class RecommendChainResult(AgentChainResult):
-    pass
-
-
 class RecommendChain:
     def __init__(
         self,
@@ -53,12 +48,12 @@ class RecommendChain:
         self.retriever = retriever or RagRetriever(settings=self.settings)
         self.chat_model = chat_model
 
-    def run(self, message: str) -> RecommendChainResult:
+    def run(self, message: str) -> AgentChainResult:
         rewrite = self.rewrite_query(message)
         retrieval = self.retriever.retrieve("recommend", rewrite.search_query, size=5)
 
         if not retrieval.has_hits:
-            return RecommendChainResult(
+            return AgentChainResult(
                 response=(
                     "暂未从 ES 检索到可用于推荐的商家、套餐、评价、活动或优惠券依据，"
                     "建议先同步相关业务文档后再进行推荐。"
@@ -74,7 +69,7 @@ class RecommendChain:
         answer = self.generate_answer(message, rewrite, retrieval.hits, context)
         reference_dicts = [reference.model_dump() for reference in references]
 
-        return RecommendChainResult(
+        return AgentChainResult(
             response=answer.answer,
             rag_mode="recommend_agent_llm_rag",
             query=message,
@@ -86,22 +81,15 @@ class RecommendChain:
 
     def rewrite_query(self, message: str) -> RecommendQueryRewrite:
         fallback = _fallback_rewrite(message)
-        if not self.settings.llm_router_enabled:
-            return fallback
-
-        try:
-            result = invoke_structured_output(
-                settings=self.settings,
-                schema=RecommendQueryRewrite,
-                messages=_rewrite_messages(message),
-                chat_model=self.chat_model,
-            )
-        except ChatModelUnavailableError as exc:
-            logger.info("recommend_query_rewrite_fallback reason=%s", exc)
-            return fallback
-        except Exception:
-            logger.exception("recommend_query_rewrite_failed")
-            return fallback
+        result = invoke_structured_output_with_fallback(
+            settings=self.settings,
+            schema=RecommendQueryRewrite,
+            messages=_rewrite_messages(message),
+            fallback=fallback,
+            operation="recommend_query_rewrite",
+            logger=logger,
+            chat_model=self.chat_model,
+        )
 
         return result.model_copy(
             update={
@@ -118,25 +106,20 @@ class RecommendChain:
         rewrite: RecommendQueryRewrite,
         hits: list[SearchHit],
         context: str,
-    ) -> RecommendAnswer:
-        fallback = RecommendAnswer(answer=_template_answer(context), used_reference_ids=[hit.id for hit in hits])
-        if not self.settings.llm_router_enabled:
-            return fallback
-
-        try:
-            return invoke_structured_output(
-                settings=self.settings,
-                schema=RecommendAnswer,
-                messages=_answer_messages(message, rewrite, context),
-                chat_model=self.chat_model,
-            )
-        except ChatModelUnavailableError as exc:
-            logger.info("recommend_answer_fallback reason=%s", exc)
-            return fallback
-        except Exception:
-            logger.exception("recommend_answer_failed")
-            return fallback
-
+    ) -> AgentAnswer:
+        fallback = AgentAnswer(
+            answer=_template_answer(context),
+            used_reference_ids=[hit.id for hit in hits],
+        )
+        return invoke_structured_output_with_fallback(
+            settings=self.settings,
+            schema=AgentAnswer,
+            messages=_answer_messages(message, rewrite, context),
+            fallback=fallback,
+            operation="recommend_answer",
+            logger=logger,
+            chat_model=self.chat_model,
+        )
 
 
 def _fallback_rewrite(message: str) -> RecommendQueryRewrite:

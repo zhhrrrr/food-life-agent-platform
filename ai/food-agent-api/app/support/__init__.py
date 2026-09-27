@@ -1,1 +1,1 @@
-"""SupportAgent rule and order-status chain."""
+"""SupportAgent platform-rule retrieval chain."""
