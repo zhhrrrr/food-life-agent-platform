@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.13.1`
+Current version: `0.13.2`
 
 Current route chain:
 
@@ -41,6 +41,7 @@ Added by version:
 0.9.0: LangChain ChatModel router with Pydantic Structured Output and rule fallback
 0.9.1: Zhipu GLM OpenAI-compatible chat model configuration
 0.9.2: Zhipu router structured output compatibility through JSON mode
+0.13.2: removed obsolete compatibility wrappers, empty graph state, and unused dependencies
 0.13.1: SiliconFlow BGE-M3 embedding provider and calibrated semantic routing gates
 0.13.0: Redis conversation memory and Semantic Router + LLM Function Calling routing pipeline
 0.12.0: stage 8 read-only TradeAgent queries through Java Gateway and unified three-chain contracts
@@ -87,7 +88,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.13.1
+APP_VERSION=0.13.2
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false

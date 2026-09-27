@@ -5,16 +5,19 @@ from app.agents.support_agent import support_agent_node
 from app.core.config import Settings, get_settings
 from app.graph.food_graph import run_food_agent
 from app.graph.router import IntentResult, route_intent, route_intent_by_rules
-from app.llm.chat_model import ZHIPU_OPENAI_COMPATIBLE_BASE_URL, resolve_chat_model_options
+from app.llm.chat_model import (
+    ZHIPU_OPENAI_COMPATIBLE_BASE_URL,
+    resolve_chat_model_options,
+)
 from app.main import app
+from app.rag.context_builder import build_context_summary, build_references
+from app.rag.retriever import RagRetriever, RetrievalResult
 from app.recommend.chain import (
     RecommendAnswer,
     RecommendChain,
     RecommendChainResult,
     RecommendQueryRewrite,
 )
-from app.rag.context_builder import build_context_summary, build_references
-from app.rag.retriever import RagRetriever, RetrievalResult, retrieve_for_agent
 from app.search.schemas import SearchHit
 from app.support.chain import SupportAnswer, SupportChain, SupportQueryRewrite
 from app.support.order_status_client import (
@@ -22,7 +25,6 @@ from app.support.order_status_client import (
     OrderStatusLookup,
     OrderStatusSnapshot,
 )
-
 
 client = TestClient(app)
 
@@ -38,7 +40,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = get_settings()
 
-    assert settings.app_version == "0.13.1"
+    assert settings.app_version == "0.13.2"
     assert settings.es_enabled is False
     assert settings.es_index_shop == "food_shop_index"
     assert Settings().llm_router_enabled is False
@@ -91,7 +93,7 @@ def test_request_id_can_be_provided_by_client() -> None:
 def test_retriever_returns_empty_when_es_disabled() -> None:
     settings = get_settings()
 
-    hits = retrieve_for_agent("recommend", "川菜", settings=settings)
+    hits = RagRetriever(settings=settings).retrieve("recommend", "川菜").hits
 
     assert hits == []
 

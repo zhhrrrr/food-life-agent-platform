@@ -1,21 +1,19 @@
-from typing import Any, Literal, TypedDict
+from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
 from app.agents.recommend_agent import recommend_agent_node
 from app.agents.support_agent import support_agent_node
 from app.agents.trade_agent import trade_agent_node
-from app.graph.router import route_intent
+from app.graph.router import AgentName, route_intent
 from app.memory.conversation_memory import ConversationTurn
 
-AgentName = Literal["recommend", "trade", "support"]
 
-
-class FoodAgentState(TypedDict):
+class FoodAgentState(TypedDict, total=False):
     message: str
     authorization: str
-    intent: str
-    agent: str
+    intent: AgentName
+    agent: AgentName
     response: str
     rag_mode: str
     query: str
@@ -29,11 +27,8 @@ class FoodAgentState(TypedDict):
     router_confidence: float
     router_reason: str
     router_source: str
-    router_tool: str
-    semantic_score: float | None
-    semantic_margin: float | None
-    context: list[dict[str, Any]]
-    references: list[dict[str, Any]]
+    context: list[dict[str, object]]
+    references: list[dict[str, object]]
 
 
 def router_node(state: FoodAgentState) -> dict[str, object]:
@@ -47,14 +42,11 @@ def router_node(state: FoodAgentState) -> dict[str, object]:
         "router_confidence": result.confidence,
         "router_reason": result.reason,
         "router_source": result.source,
-        "router_tool": result.tool,
-        "semantic_score": result.semantic_score,
-        "semantic_margin": result.semantic_margin,
     }
 
 
 def route_agent(state: FoodAgentState) -> AgentName:
-    return state["agent"]  # type: ignore[return-value]
+    return state["agent"]
 
 
 def build_food_graph():
@@ -93,26 +85,7 @@ def run_food_agent(
     initial_state: FoodAgentState = {
         "message": message,
         "authorization": authorization,
-        "intent": "",
-        "agent": "",
-        "response": "",
-        "rag_mode": "",
-        "query": "",
-        "rewritten_query": "",
-        "capabilities": [],
-        "order_status": None,
-        "facts": [],
-        "query_statuses": [],
-        "operation_executed": False,
         "conversation_history": conversation_history or [],
-        "router_confidence": 0.0,
-        "router_reason": "",
-        "router_source": "",
-        "router_tool": "",
-        "semantic_score": None,
-        "semantic_margin": None,
-        "context": [],
-        "references": [],
     }
 
     return food_graph.invoke(initial_state)

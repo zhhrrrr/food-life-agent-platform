@@ -39,17 +39,3 @@ class RagRetriever:
         if agent == "support":
             return support_indices(self.settings)
         return []
-
-
-def retrieve_for_agent(
-    agent: str,
-    query: str,
-    size: int = 3,
-    settings: Settings | None = None,
-    search_service: SearchService | None = None,
-) -> list[SearchHit]:
-    return RagRetriever(settings=settings, search_service=search_service).retrieve(
-        agent,
-        query,
-        size=size,
-    ).hits

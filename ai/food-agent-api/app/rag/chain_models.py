@@ -2,7 +2,6 @@ from typing import TypeVar
 
 from pydantic import BaseModel, Field, field_validator
 
-
 Capability = TypeVar("Capability", bound=str)
 
 
@@ -50,11 +49,6 @@ class AgentChainResult(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     context: list[dict[str, object]] = Field(default_factory=list)
     references: list[dict[str, object]] = Field(default_factory=list)
-
-
-# Compatibility aliases for code that still uses the stage-4 RAG names.
-RagAnswer = AgentAnswer
-RagChainResult = AgentChainResult
 
 
 def merge_capabilities(

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.2
+
+- Removed unused stage-4 RAG compatibility aliases and the test-only retrieval wrapper.
+- Simplified LangGraph state initialization to contain only actual request inputs.
+- Removed duplicated route types and unconsumed router metadata from graph state.
+- Removed the unused `langchain` meta-package while retaining `langchain-openai`, `langchain-core`, and LangGraph transitively.
+- Removed redundant conversation-memory comments without changing Redis behavior.
+
 ## 0.13.1
 
 - Added an explicit SiliconFlow embedding provider with the official OpenAI-compatible base URL.
