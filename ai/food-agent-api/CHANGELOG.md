@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.0
+
+- Expanded the semantic route corpus from 25 demo phrases to 138 validated anchors grouped by intent, capability, and difficult routing boundary.
+- Added a separate balanced 60-case evaluation suite with contextual follow-ups and a live embedding quality gate for accuracy, accepted precision, coverage, and confusion analysis.
+- Disabled incompatible client-side OpenAI tokenization so SiliconFlow BGE-M3 receives original Chinese text instead of provider-unsafe token ID arrays.
+- Verified BGE-M3 at 96.67% top-1 accuracy and 100% accepted-route precision with 76.67% coverage under the existing 0.74 score and 0.05 margin gates.
+
 ## 0.13.2
 
 - Removed unused stage-4 RAG compatibility aliases and the test-only retrieval wrapper.

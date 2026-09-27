@@ -1,17 +1,61 @@
+from collections import Counter
 from typing import Any
 
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings
+from app.graph.route_examples import (
+    MIN_EXAMPLES_PER_CAPABILITY,
+    MIN_EXAMPLES_PER_INTENT,
+    ROUTE_EXAMPLES,
+    validate_route_examples,
+)
 from app.graph.router import ROUTING_TOOLS, route_intent
-from app.graph.semantic_router import ROUTE_EXAMPLES, SemanticRouteMatch, SemanticRouter
+from app.graph.semantic_router import SemanticRouteMatch, SemanticRouter
+from app.llm.chat_model import ZHIPU_OPENAI_COMPATIBLE_BASE_URL
 from app.llm.embedding_model import (
     SILICONFLOW_OPENAI_COMPATIBLE_BASE_URL,
     resolve_embedding_model_options,
 )
-from app.llm.chat_model import ZHIPU_OPENAI_COMPATIBLE_BASE_URL
 from app.main import app
 from app.memory.conversation_memory import ConversationTurn, RedisConversationMemory
+from evaluation.semantic_route_cases import SEMANTIC_ROUTE_EVALUATION_CASES
+
+
+def test_semantic_route_corpus_has_production_coverage() -> None:
+    validate_route_examples()
+    intent_counts = Counter(example.intent for example in ROUTE_EXAMPLES)
+    capability_counts = Counter(
+        (example.intent, example.capability) for example in ROUTE_EXAMPLES
+    )
+
+    assert len(ROUTE_EXAMPLES) == 138
+    assert intent_counts == {"recommend": 50, "trade": 49, "support": 39}
+    assert all(count >= MIN_EXAMPLES_PER_INTENT for count in intent_counts.values())
+    assert all(
+        count >= MIN_EXAMPLES_PER_CAPABILITY for count in capability_counts.values()
+    )
+    assert {example.boundary for example in ROUTE_EXAMPLES if example.boundary} >= {
+        "recommend_vs_trade",
+        "trade_vs_support",
+        "trade_action_vs_support_rule",
+    }
+
+
+def test_semantic_route_evaluation_set_is_balanced_and_independent() -> None:
+    evaluation_counts = Counter(case.intent for case in SEMANTIC_ROUTE_EVALUATION_CASES)
+    route_texts = {example.text.casefold() for example in ROUTE_EXAMPLES}
+    evaluation_texts = [
+        case.message.casefold() for case in SEMANTIC_ROUTE_EVALUATION_CASES
+    ]
+
+    assert len(SEMANTIC_ROUTE_EVALUATION_CASES) == 60
+    assert evaluation_counts == {"recommend": 20, "trade": 20, "support": 20}
+    assert len(evaluation_texts) == len(set(evaluation_texts))
+    assert route_texts.isdisjoint(evaluation_texts)
+    assert (
+        sum(bool(case.previous_user) for case in SEMANTIC_ROUTE_EVALUATION_CASES) >= 12
+    )
 
 
 def test_high_confidence_semantic_route_bypasses_llm() -> None:
@@ -61,6 +105,7 @@ def test_zhipu_embedding_options_use_separate_key_and_compatible_url() -> None:
     assert options["model"] == "embedding-3"
     assert options["api_key"] == "embedding-test-key"
     assert options["base_url"] == ZHIPU_OPENAI_COMPATIBLE_BASE_URL
+    assert options["check_embedding_ctx_length"] is False
 
 
 def test_siliconflow_embedding_options_use_official_compatible_url() -> None:
@@ -75,6 +120,7 @@ def test_siliconflow_embedding_options_use_official_compatible_url() -> None:
 
     assert options["model"] == "BAAI/bge-m3"
     assert options["base_url"] == SILICONFLOW_OPENAI_COMPATIBLE_BASE_URL
+    assert options["check_embedding_ctx_length"] is False
 
 
 def test_low_confidence_semantic_route_uses_llm_function_calling() -> None:
@@ -149,7 +195,7 @@ def test_low_confidence_semantic_route_uses_llm_function_calling() -> None:
     assert model.bound.messages[-1] == ("human", "那现在还有库存吗")
 
 
-def test_router_tool_contract_separates_current_order_query_from_status_meaning() -> None:
+def test_router_tool_contract_separates_order_query_from_status_meaning() -> None:
     trade_description = ROUTING_TOOLS[1]["function"]["description"]  # type: ignore[index]
     support_description = ROUTING_TOOLS[2]["function"]["description"]  # type: ignore[index]
 
@@ -165,13 +211,13 @@ class FakeEmbeddingModel:
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         self.document_calls += 1
-        assert texts == [example for _, example in ROUTE_EXAMPLES]
+        assert texts == [example.text for example in ROUTE_EXAMPLES]
         vectors = {
             "recommend": [1.0, 0.0, 0.0],
             "trade": [0.0, 1.0, 0.0],
             "support": [0.0, 0.0, 1.0],
         }
-        return [vectors[intent] for intent, _ in ROUTE_EXAMPLES]
+        return [vectors[example.intent] for example in ROUTE_EXAMPLES]
 
     def embed_query(self, text: str) -> list[float]:
         self.queries.append(text)

@@ -5,6 +5,7 @@ from app.llm.chat_model import ZHIPU_OPENAI_COMPATIBLE_BASE_URL
 
 SILICONFLOW_OPENAI_COMPATIBLE_BASE_URL = "https://api.siliconflow.cn/v1"
 
+
 class EmbeddingModelUnavailableError(RuntimeError):
     pass
 
@@ -36,6 +37,7 @@ def resolve_embedding_model_options(settings: Settings) -> dict[str, Any]:
         "base_url": base_url,
         "request_timeout": settings.embedding_timeout_seconds,
         "max_retries": 2,
+        "check_embedding_ctx_length": False,
     }
 
 
@@ -47,6 +49,8 @@ def build_embedding_model(settings: Settings | None = None) -> Any:
     try:
         from langchain_openai import OpenAIEmbeddings
     except ImportError as exc:
-        raise EmbeddingModelUnavailableError("langchain-openai is not installed") from exc
+        raise EmbeddingModelUnavailableError(
+            "langchain-openai is not installed"
+        ) from exc
 
     return OpenAIEmbeddings(**resolve_embedding_model_options(resolved_settings))

@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.13.2`
+Current version: `0.14.0`
 
 Current route chain:
 
@@ -26,6 +26,7 @@ HTTP Request
 Added by version:
 
 ```text
+0.14.0: production semantic-route corpus, independent evaluation set, and BGE-M3 input compatibility
 0.1.0: FastAPI + LangGraph skeleton
 0.2.0: settings, request_id, logging, stable error response
 0.3.0: optional Elasticsearch search layer + lightweight RAG retrieval path
@@ -50,7 +51,7 @@ Added by version:
 0.10.0: stage 6 RecommendAgent query rewrite, ES/RAG retrieval, and LLM answer chain
 ```
 
-This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Stage 6 upgrades RecommendAgent to query rewrite -> ES retrieval -> context builder -> LLM answer -> references. Stage 7 upgrades SupportAgent to query rewrite -> rule retrieval -> optional owner-authorized Java order-status query -> LLM answer -> references. Stage 8 upgrades TradeAgent to query rewrite -> allow-listed Java Gateway GET queries -> context -> LLM answer -> references. Version 0.13.0 adds bounded Redis conversation memory, a cached embedding-based Semantic Router, high-confidence and margin gates, LLM routing through three restricted function tools, Structured Output compatibility fallback, and deterministic rule fallback. All three agent chains retain their shared contracts and safety boundaries. MCP, SSE, Human Confirmation, and business action tools are still future stages.
+This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Stage 6 upgrades RecommendAgent to query rewrite -> ES retrieval -> context builder -> LLM answer -> references. Stage 7 upgrades SupportAgent to query rewrite -> rule retrieval -> optional owner-authorized Java order-status query -> LLM answer -> references. Stage 8 upgrades TradeAgent to query rewrite -> allow-listed Java Gateway GET queries -> context -> LLM answer -> references. Version 0.14.0 supplies 138 validated semantic anchors, a separate 60-case quality suite, and provider-safe raw-text embedding requests. All three agent chains retain their shared contracts and safety boundaries. MCP, SSE, Human Confirmation, and business action tools are still future stages.
 
 Elasticsearch support is present but disabled by default. Set `ES_ENABLED=true` only after Elasticsearch is available and the indexes have data.
 
@@ -88,7 +89,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.13.2
+APP_VERSION=0.14.0
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false
@@ -177,6 +178,14 @@ current query + relevant Redis conversation turns
 ```
 
 Semantic routing and Redis memory are disabled until their providers are configured. Embeddings use a separate API key from the chat model. OpenAI, Zhipu, SiliconFlow, and custom OpenAI-compatible endpoints are supported. Conversation history participates in deterministic and semantic routing only for follow-up wording such as “那这个呢” or “还有吗”, which prevents an old topic from overriding an explicit new request. Embedding and Redis failures enter a short per-instance cooldown and fail open to the next routing layer instead of delaying every request.
+
+The semantic corpus contains 138 validated, capability-labelled route anchors. The independent 60-case evaluation set covers balanced intents, difficult intent boundaries, and contextual follow-ups. Run the live quality gate with the configured embedding provider:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.evaluate_semantic_router
+```
+
+The evaluator fails when top-1 accuracy is below 90%, when the configured acceptance gate has no coverage, or when accepted-route precision is below 98%. Threshold changes must be justified by this independent set and later rechecked against anonymized production traffic.
 
 SiliconFlow example:
 
