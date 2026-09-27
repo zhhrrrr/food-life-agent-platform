@@ -6,7 +6,6 @@ from app.core.config import Settings, get_settings
 from app.search.es_client import get_es_client
 from app.search.schemas import SearchDocument, SearchHit
 
-
 logger = logging.getLogger("food_agent.search.service")
 
 
@@ -51,7 +50,6 @@ class SearchService:
                             "content",
                             "category",
                             "tags",
-                            "metadata.*",
                         ],
                     }
                 },

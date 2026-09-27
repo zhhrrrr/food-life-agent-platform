@@ -198,11 +198,13 @@ def test_trade_gateway_client_uses_gateway_get_and_authorization(monkeypatch) ->
         headers: dict[str, str],
         params: dict[str, object] | None,
         timeout: float,
+        trust_env: bool,
     ) -> FakeResponse:
         assert url == "http://127.0.0.1:8080/api/trade/orders/12345"
         assert headers == {"authorization": "token-1"}
         assert params is None
         assert timeout == 5.0
+        assert trust_env is False
         return FakeResponse()
 
     monkeypatch.setattr("app.trade.gateway_client.httpx.get", fake_get)

@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.16.0`
+Current version: `0.16.1`
 
 Current route chain:
 
@@ -26,6 +26,7 @@ HTTP Request
 Added by version:
 
 ```text
+0.16.1: hardened direct Java HTTP calls and ES text-field retrieval
 0.16.0: narrowed ES documents to recommendation fields and removed stock-only sync work
 0.15.0: removed duplicate Support order reads and shared repeated chain fallback logic
 0.14.0: production semantic-route corpus, independent evaluation set, and BGE-M3 input compatibility
@@ -91,7 +92,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.15.0
+APP_VERSION=0.16.1
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false

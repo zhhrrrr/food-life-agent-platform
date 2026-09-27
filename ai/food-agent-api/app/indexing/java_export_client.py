@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
 
@@ -12,14 +12,14 @@ class JavaSearchExportError(Exception):
 
 
 class JavaSearchExportClient:
-    _ENDPOINTS = {
+    _ENDPOINTS: ClassVar[dict[str, tuple[str, str]]] = {
         "shops": ("business", "/api/internal/search/shops"),
         "packages": ("business", "/api/internal/search/packages"),
         "reviews": ("business", "/api/internal/search/reviews"),
         "activities": ("trade", "/api/trade/internal/search/activities"),
         "coupons": ("trade", "/api/trade/internal/search/coupons"),
     }
-    _DOCUMENT_ENDPOINTS = {
+    _DOCUMENT_ENDPOINTS: ClassVar[dict[str, tuple[str, str]]] = {
         "shops": ("business", "/api/internal/search/shops/{entity_id}"),
         "packages": ("business", "/api/internal/search/packages/{entity_id}"),
         "reviews": ("business", "/api/internal/search/reviews/{entity_id}"),
@@ -56,6 +56,7 @@ class JavaSearchExportClient:
                 self._join_url(base_url, path),
                 params=params or None,
                 timeout=self.timeout_seconds,
+                trust_env=False,
             )
             response.raise_for_status()
             payload = response.json()
@@ -78,6 +79,7 @@ class JavaSearchExportClient:
             response = httpx.get(
                 self._join_url(base_url, path),
                 timeout=self.timeout_seconds,
+                trust_env=False,
             )
             response.raise_for_status()
             payload = response.json()

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.16.1
+
+- Forced Java export and Trade Gateway HTTP calls to bypass environment proxies so loopback and private service addresses are reached directly.
+- Limited BM25 multi-match queries to text fields so numeric metadata cannot make Elasticsearch reject natural-language searches.
+
 ## 0.16.0
 
 - Reduced Elasticsearch business documents to search-oriented public projections: package and activity stock plus coupon supply counters are no longer indexed.

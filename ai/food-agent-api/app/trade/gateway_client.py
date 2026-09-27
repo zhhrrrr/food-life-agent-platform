@@ -194,6 +194,7 @@ class TradeGatewayClient:
                 headers=headers,
                 params=params,
                 timeout=self.timeout_seconds,
+                trust_env=False,
             )
         except httpx.HTTPError:
             logger.exception("trade_gateway_request_failed capability=%s path=%s", capability, path)
