@@ -8,16 +8,12 @@ import com.foodlife.trade.domain.order.coupon.model.CouponReleaseResult;
 import com.foodlife.trade.domain.order.coupon.model.CouponTemplateEntity;
 import com.foodlife.trade.domain.order.coupon.model.UserCouponEntity;
 import com.foodlife.trade.domain.order.coupon.repository.ICouponRepository;
-import com.foodlife.trade.domain.order.event.ITradeEventPublisher;
-import com.foodlife.trade.domain.order.event.TradeMqTopics;
 import com.foodlife.trade.domain.order.model.PackageTradeSnapshot;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 @Service
 public class CouponService {
@@ -28,11 +24,9 @@ public class CouponService {
     private static final int MAX_EXPIRE_LIMIT = 2000;
 
     private final ICouponRepository couponRepository;
-    private final ITradeEventPublisher tradeEventPublisher;
 
-    public CouponService(ICouponRepository couponRepository, ITradeEventPublisher tradeEventPublisher) {
+    public CouponService(ICouponRepository couponRepository) {
         this.couponRepository = couponRepository;
-        this.tradeEventPublisher = tradeEventPublisher;
     }
 
     public List<CouponTemplateEntity> listAvailableTemplates(Integer limit) {
@@ -72,9 +66,7 @@ public class CouponService {
         userCoupon.setReceiveTime(now);
         userCoupon.setCreateTime(now);
         userCoupon.setUpdateTime(now);
-        UserCouponEntity savedCoupon = couponRepository.saveUserCoupon(userCoupon);
-        publishSearchSync("coupons", templateId, null, "UPSERT");
-        return savedCoupon;
+        return couponRepository.saveUserCoupon(userCoupon);
     }
 
     public List<UserCouponEntity> listUserCoupons(Long userId, String couponStatus, Integer limit) {
@@ -272,15 +264,4 @@ public class CouponService {
         return value.trim();
     }
 
-    private void publishSearchSync(String scope, Long entityId, String entityType, String action) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("scope", scope);
-        payload.put("entityId", entityId);
-        payload.put("entityType", entityType);
-        payload.put("action", action);
-        tradeEventPublisher.publish(TradeMqTopics.SEARCH_SYNC_TOPIC,
-                TradeMqTopics.SEARCH_DOCUMENT_CHANGED,
-                scope + ":" + entityId + ":" + System.currentTimeMillis(),
-                payload);
-    }
 }

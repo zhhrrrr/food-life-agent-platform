@@ -29,15 +29,3 @@ def index_name_for_scope(settings: Settings, scope: str) -> str:
         "rules": settings.es_index_rule,
     }
     return names[scope]
-
-
-def index_name_for_source(settings: Settings, source: str) -> str:
-    names = {
-        settings.es_index_shop: settings.es_index_shop,
-        settings.es_index_package: settings.es_index_package,
-        settings.es_index_review: settings.es_index_review,
-        settings.es_index_activity: settings.es_index_activity,
-        settings.es_index_coupon: settings.es_index_coupon,
-        settings.es_index_rule: settings.es_index_rule,
-    }
-    return names[source]

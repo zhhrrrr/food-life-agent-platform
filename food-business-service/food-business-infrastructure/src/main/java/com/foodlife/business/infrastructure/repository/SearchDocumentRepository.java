@@ -182,7 +182,6 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
         metadata.put("shopName", shop == null ? null : shop.getName());
         metadata.put("price", mealPackage.getPrice());
         metadata.put("originalPrice", mealPackage.getOriginalPrice());
-        metadata.put("stock", mealPackage.getStock());
         metadata.put("sold", mealPackage.getSold());
         metadata.put("status", mealPackage.getStatus());
         metadata.put("useRule", mealPackage.getUseRule());

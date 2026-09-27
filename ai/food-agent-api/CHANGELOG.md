@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.16.0
+
+- Reduced Elasticsearch business documents to search-oriented public projections: package and activity stock plus coupon supply counters are no longer indexed.
+- Removed stock-only activity and coupon ES sync publications from transactional order and coupon paths, including their redundant database lookup and helper code.
+- Kept activity and coupon indexes for recommendation discovery while preserving Java Gateway as the only source for current stock, eligibility, user coupons, teams, and orders.
+- Removed the unused Elasticsearch index-name identity mapper.
+
 ## 0.15.0
 
 - Removed SupportAgent's duplicate Java order-status client; concrete order reads now belong exclusively to TradeAgent through Java Gateway, while SupportAgent remains an ES-backed rule and FAQ chain.

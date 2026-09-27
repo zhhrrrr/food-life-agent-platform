@@ -107,7 +107,6 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
         metadata.put("targetCount", activity.getTargetCount());
         metadata.put("userTakeLimit", activity.getUserTakeLimit());
         metadata.put("activityPrice", activity.getGroupPrice());
-        metadata.put("stock", activity.getStock());
         metadata.put("validStartTime", activity.getValidStartTime());
         metadata.put("validEndTime", activity.getValidEndTime());
 
@@ -133,7 +132,6 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
         metadata.put("packageId", activity.getPackageId());
         metadata.put("userTakeLimit", activity.getUserTakeLimit());
         metadata.put("activityPrice", activity.getSeckillPrice());
-        metadata.put("stock", activity.getStock());
         metadata.put("validStartTime", activity.getValidStartTime());
         metadata.put("validEndTime", activity.getValidEndTime());
 
@@ -163,8 +161,6 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
         metadata.put("scopeShopId", coupon.getScopeShopId());
         metadata.put("scopePackageId", coupon.getScopePackageId());
         metadata.put("userReceiveLimit", coupon.getUserReceiveLimit());
-        metadata.put("totalStock", coupon.getTotalStock());
-        metadata.put("receivedCount", coupon.getReceivedCount());
         metadata.put("validStartTime", coupon.getValidStartTime());
         metadata.put("validEndTime", coupon.getValidEndTime());
 

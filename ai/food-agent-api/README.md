@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.15.0`
+Current version: `0.16.0`
 
 Current route chain:
 
@@ -26,6 +26,7 @@ HTTP Request
 Added by version:
 
 ```text
+0.16.0: narrowed ES documents to recommendation fields and removed stock-only sync work
 0.15.0: removed duplicate Support order reads and shared repeated chain fallback logic
 0.14.0: production semantic-route corpus, independent evaluation set, and BGE-M3 input compatibility
 0.1.0: FastAPI + LangGraph skeleton
@@ -52,7 +53,7 @@ Added by version:
 0.10.0: stage 6 RecommendAgent query rewrite, ES/RAG retrieval, and LLM answer chain
 ```
 
-This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Stage 6 upgrades RecommendAgent to query rewrite -> ES retrieval -> context builder -> LLM answer -> references. SupportAgent owns only ES-backed rules, status meanings, and FAQ answers. TradeAgent exclusively owns current order, price, stock, coupon, group-buy, and preview reads through allow-listed Java Gateway GET queries. Version 0.15.0 removes the legacy Support order client and centralizes shared chain fallback and trade-mutation policy logic. MCP, SSE, Human Confirmation, and business action tools are still future stages.
+This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Stage 6 upgrades RecommendAgent to query rewrite -> ES retrieval -> context builder -> LLM answer -> references. SupportAgent owns only ES-backed rules, status meanings, and FAQ answers. TradeAgent exclusively owns current order, price, stock, coupon, group-buy, and preview reads through allow-listed Java Gateway GET queries. Version 0.16.0 keeps ES package, activity, and coupon documents focused on recommendation discovery and excludes current stock and coupon supply counters. MCP, SSE, Human Confirmation, and business action tools are still future stages.
 
 Elasticsearch support is present but disabled by default. Set `ES_ENABLED=true` only after Elasticsearch is available and the indexes have data.
 
@@ -294,7 +295,7 @@ When ES returns matches, `POST /api/agent/chat` also includes:
 }
 ```
 
-RecommendAgent searches shop, package, review, activity, and coupon indexes. It can rewrite recommendation questions for shop/package recommendation, cuisine filtering, budget filtering, scene recommendation, review semantic search, and shop comparison before ES retrieval. When LLM is enabled, it generates an evidence-grounded answer from the retrieved context and keeps references. It does not create orders or change stock. SupportAgent searches only the platform rule index for refund, group-buy, payment, generic order-status meanings, and platform FAQ; it does not receive Authorization or query Java order APIs. If ES is disabled or no document matches, these agents return a clear no-evidence template instead of pretending to have generated an answer.
+RecommendAgent searches shop, package, review, activity, and coupon indexes. These indexes are search projections for discovery: they contain public descriptions, prices, scopes, validity windows, and popularity data, but no package/activity stock or coupon supply counters. RecommendAgent can rewrite questions for shop/package recommendation, cuisine filtering, budget filtering, scene recommendation, review semantic search, and shop comparison before ES retrieval. It must not claim current availability from ES. SupportAgent searches only the platform rule index for refund, group-buy, payment, generic order-status meanings, and platform FAQ; it does not receive Authorization or query Java order APIs. If ES is disabled or no document matches, these agents return a clear no-evidence template instead of pretending to have generated an answer.
 
 TradeAgent queries current price, stock, coupons, group-buy teams/orders, user orders, and read-only order previews through `JAVA_GATEWAY_BASE_URL`. Its Java client exposes only fixed GET methods and forwards the incoming Authorization header for protected user queries. Order preview composes the package trade snapshot, a pre-discount estimate in cents, and candidate user coupons without claiming a final payable amount, creating an order, or reserving stock. Create, cancel, pay, and refund requests are rejected before any Gateway call.
 

@@ -53,8 +53,6 @@ import com.foodlife.trade.domain.order.service.use.OrderUseService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -262,7 +260,6 @@ public class OrderDomainService {
 
         if (TradeTypeConstants.GROUP_BUY.equals(order.getTradeType())) {
             groupBuyRepository.cancelUnpaidGroupBuyOrder(order);
-            publishActivitySearchSync("GROUP_BUY", groupBuyRepository.queryOrderListByOrderIdAndUserId(order.getId(), userId).getActivityId(), "UPSERT");
             return buildCancelOrderResult(order);
         }
 
@@ -270,7 +267,6 @@ public class OrderDomainService {
             Long activityId = seckillRepository.querySeckillActivityId(order);
             seckillRepository.cancelUnpaidSeckillOrder(order);
             seckillStockRepository.releaseActivityStock(activityId, userId);
-            publishActivitySearchSync("SECKILL", activityId, "UPSERT");
             return buildCancelOrderResult(order);
         }
 
@@ -294,13 +290,7 @@ public class OrderDomainService {
 
     @Transactional(rollbackFor = Exception.class)
     public OrderRefundBehaviorEntity refundOrderMock(OrderRefundCommandEntity command) {
-        DiningOrderEntity orderBeforeRefund = command == null || command.getOrderId() == null || command.getUserId() == null
-                ? null
-                : orderRepository.findOrderByIdAndUserId(command.getOrderId(), command.getUserId());
         OrderRefundBehaviorEntity refund = orderRefundService.refundOrder(command);
-        if (refund.getActivityId() != null && orderBeforeRefund != null) {
-            publishActivitySearchSync(orderBeforeRefund.getTradeType(), refund.getActivityId(), "UPSERT");
-        }
         tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
                 TradeMqTopics.ORDER_REFUND_REQUESTED,
                 String.valueOf(refund.getOrderId()),
@@ -325,7 +315,6 @@ public class OrderDomainService {
     @Transactional(rollbackFor = Exception.class)
     public GroupBuyLockResult createGroupBuyOrder(GroupBuyLockOrderCommand command) {
         GroupBuyLockResult result = groupBuyLockOrderService.lockOrder(command);
-        publishActivitySearchSync("GROUP_BUY", result.getActivityId(), "UPSERT");
         tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
                 TradeMqTopics.ORDER_CREATED,
                 String.valueOf(result.getOrderId()),
@@ -345,7 +334,6 @@ public class OrderDomainService {
     @Transactional(rollbackFor = Exception.class)
     public SeckillOrderResult createSeckillOrder(SeckillOrderCommand command) {
         SeckillOrderResult result = seckillOrderService.createSeckillOrder(command);
-        publishActivitySearchSync("SECKILL", result.getActivityId(), "UPSERT");
         tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
                 TradeMqTopics.ORDER_CREATED,
                 String.valueOf(result.getOrderId()),
@@ -490,31 +478,6 @@ public class OrderDomainService {
 
     private String buildNormalStockOperationId(String orderNo, String action) {
         return "NORMAL_ORDER:" + orderNo + ":" + action;
-    }
-
-    private void publishActivitySearchSync(String activityType, Long activityId, String action) {
-        if (activityId == null) {
-            return;
-        }
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("scope", "activities");
-        payload.put("entityId", activityId);
-        payload.put("entityType", normalizeSearchActivityType(activityType));
-        payload.put("action", action);
-        tradeEventPublisher.publish(TradeMqTopics.SEARCH_SYNC_TOPIC,
-                TradeMqTopics.SEARCH_DOCUMENT_CHANGED,
-                "activities:" + normalizeSearchActivityType(activityType) + ":" + activityId + ":" + System.currentTimeMillis(),
-                payload);
-    }
-
-    private String normalizeSearchActivityType(String activityType) {
-        if (TradeTypeConstants.GROUP_BUY.equals(activityType)) {
-            return "GROUP_BUY";
-        }
-        if (TradeTypeConstants.SECKILL.equals(activityType)) {
-            return "SECKILL";
-        }
-        return activityType;
     }
 
     private CancelOrderResult buildCancelOrderResult(DiningOrderEntity order) {

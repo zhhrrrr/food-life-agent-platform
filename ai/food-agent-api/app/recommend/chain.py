@@ -182,6 +182,8 @@ def _answer_messages(
                 "Answer only from the provided ES/RAG context. "
                 "You can recommend shops, packages, cuisine matches, budget-friendly choices, "
                 "scene-based options, review-backed options, and compare shops. "
+                "Treat prices, activities, and coupons as discovery evidence. Do not claim current "
+                "stock, remaining supply, availability, or user eligibility from ES. "
                 "Do not create orders, lock stock, or claim unsupported facts. "
                 "Return only valid JSON with answer and used_reference_ids. "
                 "The answer should be concise, practical, and include why each option fits."
