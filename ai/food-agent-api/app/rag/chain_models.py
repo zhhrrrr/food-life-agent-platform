@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any, TypeVar
 
 from pydantic import BaseModel, Field, field_validator
@@ -56,6 +57,12 @@ class AgentChainResult(BaseModel):
     references: list[dict[str, object]] = Field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class GroundedAnswerResult:
+    answer: AgentAnswer
+    used_fallback: bool
+
+
 def merge_capabilities(
     primary: list[Capability],
     required: list[Capability],
@@ -94,7 +101,7 @@ def invoke_grounded_answer(
     operation: str,
     logger: logging.Logger,
     chat_model: Any | None = None,
-) -> AgentAnswer:
+) -> GroundedAnswerResult:
     fallback = AgentAnswer(
         answer=fallback_answer,
         used_reference_ids=reference_ids,
@@ -108,8 +115,12 @@ def invoke_grounded_answer(
         logger=logger,
         chat_model=chat_model,
     )
-    return validate_answer_references(
+    validated = validate_answer_references(
         answer,
         available_reference_ids=reference_ids,
         fallback=fallback,
+    )
+    return GroundedAnswerResult(
+        answer=validated,
+        used_fallback=validated is fallback,
     )

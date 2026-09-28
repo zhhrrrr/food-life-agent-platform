@@ -1,0 +1,2 @@
+-r requirements.txt
+milvus-lite==3.2.1

@@ -12,7 +12,7 @@ from app.rag.chain_models import (
     merge_capabilities,
     select_references,
 )
-from app.rag.context_builder import build_context
+from app.rag.context_builder import RagContext, build_context, build_template_answer
 from app.rag.retriever import RagRetriever
 
 logger = logging.getLogger("food_agent.support.chain")
@@ -63,19 +63,23 @@ class SupportChain:
             retrieval.hits,
             max_chars=self.settings.rag_context_max_chars,
         )
-        answer = invoke_grounded_answer(
+        generation = invoke_grounded_answer(
             settings=self.settings,
             messages=_answer_messages(message, rewrite, evidence.prompt),
-            fallback_answer=_template_answer(evidence.prompt),
+            fallback_answer=_template_answer(evidence),
             reference_ids=[hit.id for hit in evidence.hits],
             operation="support_answer",
             logger=logger,
             chat_model=self.chat_model,
         )
+        answer = generation.answer
         reference_dicts = [reference.model_dump() for reference in evidence.references]
         return AgentChainResult(
             response=answer.answer,
-            rag_mode=f"support_agent_{retrieval.mode}_llm",
+            rag_mode=(
+                f"support_agent_{retrieval.mode}_"
+                f"{'template' if generation.used_fallback else 'llm'}"
+            ),
             query=message,
             rewritten_query=rewrite.search_query,
             capabilities=list(rewrite.capabilities),
@@ -129,8 +133,8 @@ def _fallback_rewrite(message: str) -> SupportQueryRewrite:
     )
 
 
-def _template_answer(context: str) -> str:
-    return f"根据平台规则，可以参考：\n{context}"
+def _template_answer(context: RagContext) -> str:
+    return build_template_answer("根据平台规则，可以参考：", context)
 
 
 def _no_evidence_message() -> str:

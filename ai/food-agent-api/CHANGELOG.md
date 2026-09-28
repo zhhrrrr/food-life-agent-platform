@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.19.2
+
+- Added a separate local dependency profile for running Milvus Lite as a Windows gRPC development service.
+- Documented the configuration boundary between local Milvus Lite and production Milvus Standalone or Distributed.
+- Added a local-only explicit-flush switch to avoid unsupported blocking flush-state polling in the Windows Milvus Lite gRPC server.
+- Replaced raw evidence-block fallback responses with bounded, user-facing evidence summaries.
+- Distinguished template fallbacks from successful LLM answers in RecommendAgent and SupportAgent `rag_mode` values.
+- Added load-state recovery before Milvus search and reconciliation reads so aliases recover after a vector-service restart.
+
 ## 0.19.1
 
 - Unified retrieval scope selection so Elasticsearch indexes and Milvus collections are derived from one business-scope decision.

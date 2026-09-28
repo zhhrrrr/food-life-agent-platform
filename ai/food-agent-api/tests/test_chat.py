@@ -45,7 +45,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = Settings()
 
-    assert settings.app_version == "0.19.1"
+    assert settings.app_version == "0.19.2"
     assert settings.es_enabled is False
     assert settings.milvus_enabled is False
     assert settings.es_index_shop == "food_shop_index"
@@ -387,7 +387,9 @@ def test_recommend_chain_uses_rag_hits_with_template_fallback() -> None:
     ).run("\u63a8\u8350\u5ddd\u83dc")
 
     assert "\u6839\u636e\u68c0\u7d22\u7ed3\u679c" in result.response
-    assert result.rag_mode == "recommend_agent_bm25_llm"
+    assert "<evidence" not in result.response
+    assert "Shu Xiang" in result.response
+    assert result.rag_mode == "recommend_agent_bm25_template"
     assert result.rewritten_query == "\u63a8\u8350\u5ddd\u83dc"
     assert result.capabilities == ["shop_recommendation", "cuisine_filter"]
     assert result.references == [
@@ -585,6 +587,7 @@ def test_support_agent_uses_rag_hits(monkeypatch) -> None:
     result = support_agent_node({"message": "\u9000\u6b3e\u89c4\u5219"})
 
     assert "\u6839\u636e\u5e73\u53f0\u89c4\u5219" in str(result["response"])
+    assert "<evidence" not in str(result["response"])
     assert result["references"] == [
         {
             "id": "rule-1",
@@ -593,7 +596,7 @@ def test_support_agent_uses_rag_hits(monkeypatch) -> None:
             "score": 5.0,
         }
     ]
-    assert result["rag_mode"] == "support_agent_bm25_llm"
+    assert result["rag_mode"] == "support_agent_bm25_template"
 
 
 def test_support_chain_explains_generic_order_status_from_rules_only() -> None:

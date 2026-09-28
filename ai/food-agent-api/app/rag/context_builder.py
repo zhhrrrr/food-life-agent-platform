@@ -144,6 +144,23 @@ def build_context(hits: list[SearchHit], max_chars: int = 8000) -> RagContext:
     )
 
 
+def build_template_answer(
+    heading: str,
+    context: RagContext,
+    *,
+    max_items: int = 3,
+    max_content_chars: int = 240,
+) -> str:
+    lines = [heading]
+    for index, item in enumerate(context.items[:max_items], start=1):
+        title = str(item["title"]).strip()
+        content = " ".join(str(item["content"]).split())
+        if len(content) > max_content_chars:
+            content = f"{content[: max_content_chars - 3].rstrip()}..."
+        lines.append(f"{index}. {title}: {content}" if content else f"{index}. {title}")
+    return "\n".join(lines)
+
+
 def public_metadata(hit: SearchHit) -> dict[str, Any]:
     fields = next(
         (
@@ -196,4 +213,7 @@ def _build_evidence_block(hit: SearchHit, rank: int, max_chars: int) -> str:
     available_content_chars = max_chars - len(empty_content)
     if available_content_chars <= 1:
         return ""
-    return render(f"{content[: available_content_chars - 1]}…", "{}" if facts not in empty_content else facts)
+    return render(
+        f"{content[: available_content_chars - 3]}...",
+        "{}" if facts not in empty_content else facts,
+    )

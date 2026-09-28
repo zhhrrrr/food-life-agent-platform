@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.19.1"
+    app_version: str = "0.19.2"
     app_port: int = 8500
     log_level: str = "INFO"
     # 本地env 文件中配置的llm_router_enabled优先级高于此处的默认值
@@ -60,6 +60,7 @@ class Settings(BaseModel):
     milvus_consistency_level: str = "Strong"
     milvus_timeout_seconds: float = Field(default=10.0, gt=0)
     milvus_batch_size: int = Field(default=200, ge=1, le=1000)
+    milvus_flush_after_write: bool = True
     milvus_rebuild_keep_versions: int = Field(default=2, ge=1, le=10)
     rag_context_max_chars: int = Field(default=8000, ge=1000, le=30000)
     rag_hybrid_enabled: bool = False
@@ -334,6 +335,12 @@ def get_settings() -> Settings:
                 str(defaults.milvus_batch_size),
             )
         ),
+        milvus_flush_after_write=_get_value(
+            dotenv_values,
+            "MILVUS_FLUSH_AFTER_WRITE",
+            str(defaults.milvus_flush_after_write),
+        ).lower()
+        in {"1", "true", "yes", "on"},
         milvus_rebuild_keep_versions=int(
             _get_value(
                 dotenv_values,

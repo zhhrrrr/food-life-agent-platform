@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.19.1`
+Current version: `0.19.2`
 
 Current route chain:
 
@@ -26,6 +26,7 @@ HTTP Request
 Added by version:
 
 ```text
+0.19.2: local Milvus Lite development runtime with a production Milvus-compatible configuration boundary
 0.19.1: retrieval cleanup, evidence/reference consistency, and relevance floors
 0.19.0: independent Milvus vector store with dual-store rebuild, sync, and reconciliation
 0.18.0: BGE-M3 vector retrieval, BM25 hybrid search, RRF fusion, and BGE reranking
@@ -102,7 +103,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.19.1
+APP_VERSION=0.19.2
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false
@@ -151,6 +152,7 @@ MILVUS_METRIC_TYPE=COSINE
 MILVUS_CONSISTENCY_LEVEL=Strong
 MILVUS_TIMEOUT_SECONDS=10
 MILVUS_BATCH_SIZE=200
+MILVUS_FLUSH_AFTER_WRITE=true
 MILVUS_REBUILD_KEEP_VERSIONS=2
 RAG_CONTEXT_MAX_CHARS=8000
 RAG_HYBRID_ENABLED=false
@@ -315,6 +317,15 @@ docker compose -f deploy/milvus/docker-compose.yml up -d
 ```
 
 Milvus exposes its client endpoint on `127.0.0.1:19530` and health endpoint on `127.0.0.1:9091`. After the service is healthy, set `MILVUS_ENABLED=true`, restart the API, and run a full rebuild once to create and populate all vector collection aliases.
+
+For local Windows development without Docker, install the separate local profile and run Milvus Lite as an independent gRPC process:
+
+```powershell
+python -m pip install -r requirements-local.txt
+milvus-lite server --data-dir .runtime/milvus-lite-data --host 127.0.0.1 --port 19530
+```
+
+Keep `MILVUS_URI=http://127.0.0.1:19530`, set `MILVUS_ENABLED=true`, and set `MILVUS_FLUSH_AFTER_WRITE=false` for Milvus Lite because its Windows gRPC server does not reliably implement the blocking flush-state polling used by `pymilvus`. Milvus Lite persists inserts through its WAL. Milvus Lite is only the local development and retrieval-evaluation runtime. On the server, point the same `MILVUS_URI`, token, and database settings at Milvus Standalone, Milvus Distributed, or Zilliz Cloud and restore `MILVUS_FLUSH_AFTER_WRITE=true`; application retrieval and indexing code does not change.
 
 Incremental search sync is disabled by default. Enable it only after RabbitMQ, Elasticsearch, Milvus, and Java services are available:
 

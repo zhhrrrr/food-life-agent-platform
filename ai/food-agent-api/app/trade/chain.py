@@ -115,7 +115,7 @@ class TradeChain:
         facts = _facts(successful_results)
         context = _context_summary(facts)
         references = _references(successful_results)
-        answer = invoke_grounded_answer(
+        generation = invoke_grounded_answer(
             settings=self.settings,
             messages=_answer_messages(message, rewrite, context),
             fallback_answer=_template_answer(context),
@@ -124,6 +124,7 @@ class TradeChain:
             logger=logger,
             chat_model=self.chat_model,
         )
+        answer = generation.answer
         reference_dicts = [reference.model_dump() for reference in references]
         return TradeChainResult(
             response=answer.answer,

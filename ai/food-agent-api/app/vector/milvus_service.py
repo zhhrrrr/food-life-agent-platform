@@ -83,7 +83,8 @@ class MilvusVectorService:
                 timeout=self.settings.milvus_timeout_seconds,
             )
             indexed += int(result.get("insert_count", len(rows)))
-        client.flush(collection_name=collection, timeout=self.settings.milvus_timeout_seconds)
+        if self.settings.milvus_flush_after_write:
+            client.flush(collection_name=collection, timeout=self.settings.milvus_timeout_seconds)
         return indexed, len(materialized) - indexed
 
     def upsert_document(
@@ -117,7 +118,9 @@ class MilvusVectorService:
 
     def document_matches(self, collection: str, document: SearchDocument) -> bool:
         try:
-            rows = self._required_client().query(
+            client = self._required_client()
+            self._ensure_loaded(client, collection)
+            rows = client.query(
                 collection_name=collection,
                 ids=[document.id],
                 output_fields=["id", "content_hash"],
@@ -133,7 +136,9 @@ class MilvusVectorService:
             return False
 
     def list_document_ids(self, collection: str, batch_size: int = 1000) -> set[str]:
-        iterator = self._required_client().query_iterator(
+        client = self._required_client()
+        self._ensure_loaded(client, collection)
+        iterator = client.query_iterator(
             collection_name=collection,
             batch_size=max(1, min(batch_size, 1000)),
             output_fields=["id"],
@@ -162,6 +167,7 @@ class MilvusVectorService:
         expression = self._filter_expression(filters or SearchFilters())
         hits: list[SearchHit] = []
         for collection in dict.fromkeys(collections):
+            self._ensure_loaded(client, collection)
             result = client.search(
                 collection_name=collection,
                 data=[query_vector],
@@ -259,6 +265,18 @@ class MilvusVectorService:
         except Exception:  # noqa: BLE001 - a missing alias is reported by server code.
             return None
         return str(description.get("collection_name") or "") or None
+
+    def _ensure_loaded(self, client: Any, collection: str) -> None:
+        state = client.get_load_state(
+            collection_name=collection,
+            timeout=self.settings.milvus_timeout_seconds,
+        ).get("state")
+        if getattr(state, "name", state) == "Loaded":
+            return
+        client.load_collection(
+            collection_name=collection,
+            timeout=self.settings.milvus_timeout_seconds,
+        )
 
     @staticmethod
     def _row(document: SearchDocument, vector: list[float]) -> dict[str, Any]:

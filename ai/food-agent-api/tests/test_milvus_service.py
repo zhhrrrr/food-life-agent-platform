@@ -21,9 +21,12 @@ class FakeIterator:
 class FakeMilvusClient:
     def __init__(self) -> None:
         self.inserted: list[dict[str, Any]] = []
+        self.flush_count = 0
         self.search_request: dict[str, Any] | None = None
         self.aliases: dict[str, str] = {}
         self.create_request: dict[str, Any] | None = None
+        self.loaded = True
+        self.load_count = 0
 
     def create_collection(self, **kwargs: Any) -> None:
         self.create_request = kwargs
@@ -33,7 +36,7 @@ class FakeMilvusClient:
         return {"insert_count": len(kwargs["data"])}
 
     def flush(self, **kwargs: Any) -> None:
-        return None
+        self.flush_count += 1
 
     def search(self, **kwargs: Any) -> list[list[dict[str, Any]]]:
         self.search_request = kwargs
@@ -80,7 +83,11 @@ class FakeMilvusClient:
         self.aliases[alias] = collection_name
 
     def load_collection(self, **kwargs: Any) -> None:
-        return None
+        self.loaded = True
+        self.load_count += 1
+
+    def get_load_state(self, **kwargs: Any) -> dict[str, str]:
+        return {"state": "Loaded" if self.loaded else "NotLoad"}
 
 
 def _document() -> SearchDocument:
@@ -142,10 +149,31 @@ def test_milvus_rows_store_vectors_and_filterable_business_fields() -> None:
     assert row["price"] == 9900
     assert len(row["content_hash"]) == 64
     assert row["valid_start"] > 0
+    assert client.flush_count == 1
+
+
+def test_milvus_explicit_flush_can_be_disabled_for_lite() -> None:
+    client = FakeMilvusClient()
+    service = MilvusVectorService(
+        Settings(
+            milvus_enabled=True,
+            milvus_flush_after_write=False,
+            rag_embedding_dimensions=3,
+        ),
+        client=client,
+    )
+
+    assert service.index_documents(
+        "food_package_vectors_v1",
+        [_document()],
+        [[1.0, 0.0, 0.0]],
+    ) == (1, 0)
+    assert client.flush_count == 0
 
 
 def test_milvus_search_uses_alias_cosine_and_scalar_filters() -> None:
     client = FakeMilvusClient()
+    client.loaded = False
     service = MilvusVectorService(Settings(milvus_enabled=True), client=client)
 
     hits = service.search_many(
@@ -163,6 +191,7 @@ def test_milvus_search_uses_alias_cosine_and_scalar_filters() -> None:
     assert client.search_request["search_params"] == {"metric_type": "COSINE"}
     assert "price <= 10000" in client.search_request["filter"]
     assert "valid_end" in client.search_request["filter"]
+    assert client.load_count == 1
 
 
 def test_milvus_alias_promotes_new_collection_and_returns_previous() -> None:
