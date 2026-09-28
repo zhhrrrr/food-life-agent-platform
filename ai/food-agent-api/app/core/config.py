@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.18.0"
+    app_version: str = "0.19.0"
     app_port: int = 8500
     log_level: str = "INFO"
     # 本地env 文件中配置的llm_router_enabled优先级高于此处的默认值
@@ -47,6 +47,20 @@ class Settings(BaseModel):
     es_bulk_chunk_size: int = Field(default=200, ge=1, le=1000)
     es_rebuild_keep_versions: int = Field(default=2, ge=1, le=10)
     es_search_min_score: float = Field(default=0.1, ge=0.0)
+    milvus_enabled: bool = False
+    milvus_uri: str = "http://127.0.0.1:19530"
+    milvus_token: str = ""
+    milvus_database: str = "default"
+    milvus_collection_prefix: str = Field(
+        default="food",
+        pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
+    )
+    milvus_index_type: str = "AUTOINDEX"
+    milvus_metric_type: str = "COSINE"
+    milvus_consistency_level: str = "Strong"
+    milvus_timeout_seconds: float = Field(default=10.0, gt=0)
+    milvus_batch_size: int = Field(default=200, ge=1, le=1000)
+    milvus_rebuild_keep_versions: int = Field(default=2, ge=1, le=10)
     rag_context_max_chars: int = Field(default=8000, ge=1000, le=30000)
     rag_hybrid_enabled: bool = False
     rag_embedding_dimensions: int = Field(default=1024, ge=1, le=4096)
@@ -269,6 +283,60 @@ def get_settings() -> Settings:
                 dotenv_values,
                 "ES_SEARCH_MIN_SCORE",
                 str(defaults.es_search_min_score),
+            )
+        ),
+        milvus_enabled=_get_value(
+            dotenv_values,
+            "MILVUS_ENABLED",
+            str(defaults.milvus_enabled),
+        ).lower()
+        in {"1", "true", "yes", "on"},
+        milvus_uri=_get_value(dotenv_values, "MILVUS_URI", defaults.milvus_uri),
+        milvus_token=_get_value(dotenv_values, "MILVUS_TOKEN", defaults.milvus_token),
+        milvus_database=_get_value(
+            dotenv_values,
+            "MILVUS_DATABASE",
+            defaults.milvus_database,
+        ),
+        milvus_collection_prefix=_get_value(
+            dotenv_values,
+            "MILVUS_COLLECTION_PREFIX",
+            defaults.milvus_collection_prefix,
+        ),
+        milvus_index_type=_get_value(
+            dotenv_values,
+            "MILVUS_INDEX_TYPE",
+            defaults.milvus_index_type,
+        ),
+        milvus_metric_type=_get_value(
+            dotenv_values,
+            "MILVUS_METRIC_TYPE",
+            defaults.milvus_metric_type,
+        ),
+        milvus_consistency_level=_get_value(
+            dotenv_values,
+            "MILVUS_CONSISTENCY_LEVEL",
+            defaults.milvus_consistency_level,
+        ),
+        milvus_timeout_seconds=float(
+            _get_value(
+                dotenv_values,
+                "MILVUS_TIMEOUT_SECONDS",
+                str(defaults.milvus_timeout_seconds),
+            )
+        ),
+        milvus_batch_size=int(
+            _get_value(
+                dotenv_values,
+                "MILVUS_BATCH_SIZE",
+                str(defaults.milvus_batch_size),
+            )
+        ),
+        milvus_rebuild_keep_versions=int(
+            _get_value(
+                dotenv_values,
+                "MILVUS_REBUILD_KEEP_VERSIONS",
+                str(defaults.milvus_rebuild_keep_versions),
             )
         ),
         rag_context_max_chars=int(

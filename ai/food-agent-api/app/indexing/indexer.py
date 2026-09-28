@@ -6,9 +6,12 @@ from pydantic import BaseModel, Field
 from app.core.config import Settings, get_settings
 from app.indexing.java_export_client import JavaSearchExportClient
 from app.indexing.rule_document_source import list_rule_documents
+from app.rag.embedding import RagEmbeddingService
 from app.search.index_names import SEARCH_SCOPES, index_name_for_scope
 from app.search.schemas import SearchDocument
 from app.search.search_service import SearchService
+from app.vector.collection_names import collection_alias_for_scope
+from app.vector.milvus_service import MilvusVectorService
 
 logger = logging.getLogger("food_agent.indexing")
 
@@ -81,11 +84,18 @@ class SearchIndexer:
         self,
         export_client: JavaSearchExportClient | None = None,
         search_service: SearchService | None = None,
+        vector_service: MilvusVectorService | None = None,
+        embedding_service: RagEmbeddingService | None = None,
         settings: Settings | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.export_client = export_client or JavaSearchExportClient(settings=self.settings)
         self.search_service = search_service or SearchService(settings=self.settings)
+        self.vector_service = vector_service
+        self.embedding_service = embedding_service
+        if self.settings.milvus_enabled:
+            self.vector_service = self.vector_service or MilvusVectorService(self.settings)
+            self.embedding_service = self.embedding_service or RagEmbeddingService(self.settings)
 
     def rebuild(
         self,
@@ -101,26 +111,52 @@ class SearchIndexer:
                 page_size=page_size or self.settings.es_reconcile_page_size,
             )
             physical_index = self.search_service.create_rebuild_index(alias, scope)
+            collection_alias = collection_alias_for_scope(self.settings, scope)
+            physical_collection: str | None = None
             try:
+                if self.vector_service is not None:
+                    physical_collection = self.vector_service.create_rebuild_collection(
+                        collection_alias
+                    )
                 indexed, failed = self.search_service.index_documents(
                     index=physical_index,
                     documents=documents,
                 )
+                vector_indexed, vector_failed = self._index_vector_documents(
+                    physical_collection,
+                    documents,
+                )
                 self.search_service.refresh_index(physical_index)
                 stored = self.search_service.count_documents(physical_index)
-                if failed or indexed != len(documents) or stored != len(documents):
+                vector_stored = self._count_vector_documents(physical_collection, len(documents))
+                if (
+                    failed
+                    or vector_failed
+                    or indexed != len(documents)
+                    or vector_indexed != len(documents)
+                    or stored != len(documents)
+                    or vector_stored != len(documents)
+                ):
                     logger.error(
-                        "es_rebuild_validation_failed scope=%s fetched=%s indexed=%s stored=%s failed=%s",
+                        "search_rebuild_validation_failed scope=%s fetched=%s "
+                        "es_indexed=%s es_stored=%s es_failed=%s "
+                        "vector_indexed=%s vector_stored=%s vector_failed=%s",
                         scope,
                         len(documents),
                         indexed,
                         stored,
                         failed,
+                        vector_indexed,
+                        vector_stored,
+                        vector_failed,
                     )
                     self.search_service.discard_index(physical_index)
+                    self._discard_vector_collection(physical_collection)
                     validation_failures = max(
                         failed,
+                        vector_failed,
                         len(documents) - min(indexed, stored),
+                        len(documents) - min(vector_indexed, vector_stored),
                         1,
                     )
                     scope_results.append(
@@ -133,9 +169,18 @@ class SearchIndexer:
                         )
                     )
                     continue
-                self.search_service.promote_index(alias, physical_index)
+                previous_collection = self._promote_vector_collection(
+                    collection_alias,
+                    physical_collection,
+                )
+                try:
+                    self.search_service.promote_index(alias, physical_index)
+                except Exception:
+                    self._rollback_vector_alias(collection_alias, previous_collection)
+                    raise
             except Exception:
                 self.search_service.discard_index(physical_index)
+                self._discard_vector_collection(physical_collection)
                 raise
             try:
                 self.search_service.cleanup_old_indices(
@@ -145,6 +190,15 @@ class SearchIndexer:
                 )
             except Exception:
                 logger.exception("es_old_index_cleanup_failed scope=%s", scope)
+            try:
+                if self.vector_service is not None and physical_collection is not None:
+                    self.vector_service.cleanup_old_collections(
+                        collection_alias,
+                        current=physical_collection,
+                        keep=self.settings.milvus_rebuild_keep_versions,
+                    )
+            except Exception:
+                logger.exception("milvus_old_collection_cleanup_failed scope=%s", scope)
             scope_results.append(
                 IndexScopeResult(
                     scope=scope,
@@ -194,9 +248,10 @@ class SearchIndexer:
         normalized_action = action.upper()
 
         if normalized_action == "DELETE":
-            deleted = self.search_service.delete_document(
-                index=index,
-                document_id=self._document_id(scope, entity_id, entity_type),
+            deleted = self._delete_document(
+                scope,
+                index,
+                self._document_id(scope, entity_id, entity_type),
             )
             return IndexScopeResult(
                 scope=scope,
@@ -212,9 +267,10 @@ class SearchIndexer:
             entity_type=entity_type,
         )
         if document is None:
-            deleted = self.search_service.delete_document(
-                index=index,
-                document_id=self._document_id(scope, entity_id, entity_type),
+            deleted = self._delete_document(
+                scope,
+                index,
+                self._document_id(scope, entity_id, entity_type),
             )
             return IndexScopeResult(
                 scope=scope,
@@ -224,7 +280,7 @@ class SearchIndexer:
                 failed=0 if deleted else 1,
             )
 
-        indexed = self.search_service.index_document(index=index, document=document)
+        indexed = self._index_document(scope, index, document)
         return IndexScopeResult(
             scope=scope,
             index=index,
@@ -269,10 +325,15 @@ class SearchIndexer:
                 expected_ids.add(document.id)
                 result.checked += 1
                 existing = self.search_service.get_document(index=index, document_id=document.id)
-                if existing is not None and self._document_equal(existing, document):
+                vector_matches = self._vector_document_matches(scope, document)
+                if (
+                    existing is not None
+                    and self._document_equal(existing, document)
+                    and vector_matches
+                ):
                     result.unchanged += 1
                     continue
-                if self.search_service.index_document(index=index, document=document):
+                if self._index_document(scope, index, document):
                     result.upserted += 1
                 else:
                     result.failed += 1
@@ -282,13 +343,19 @@ class SearchIndexer:
             offset += page_size
 
         if prune_stale:
-            for document_id in self.search_service.list_document_ids(
+            stored_ids = self.search_service.list_document_ids(
                 index=index,
                 size=page_size,
-            ):
+            )
+            if self.vector_service is not None:
+                stored_ids |= self.vector_service.list_document_ids(
+                    collection_alias_for_scope(self.settings, scope),
+                    batch_size=page_size,
+                )
+            for document_id in stored_ids:
                 if document_id in expected_ids:
                     continue
-                if self.search_service.delete_document(index=index, document_id=document_id):
+                if self._delete_document(scope, index, document_id):
                     result.deleted += 1
                 else:
                     result.failed += 1
@@ -333,16 +400,88 @@ class SearchIndexer:
     def _normalize_page_size(page_size: int) -> int:
         return max(1, min(page_size, 1000))
 
-    def _document_equal(self, left: SearchDocument, right: SearchDocument) -> bool:
-        if self.settings.rag_hybrid_enabled and (
-            left.embedding is None
-            or len(left.embedding) != self.settings.rag_embedding_dimensions
-        ):
-            return False
+    @staticmethod
+    def _document_equal(left: SearchDocument, right: SearchDocument) -> bool:
         return json.dumps(left.model_dump(mode="json"), sort_keys=True, default=str) == json.dumps(
             right.model_dump(mode="json"),
             sort_keys=True,
             default=str,
+        )
+
+    def _index_vector_documents(
+        self,
+        collection: str | None,
+        documents: list[SearchDocument],
+    ) -> tuple[int, int]:
+        if self.vector_service is None:
+            return len(documents), 0
+        if collection is None or self.embedding_service is None:
+            return 0, len(documents)
+        vectors = self.embedding_service.embed_documents(documents)
+        return self.vector_service.index_documents(collection, documents, vectors)
+
+    def _count_vector_documents(self, collection: str | None, expected: int) -> int:
+        if self.vector_service is None:
+            return expected
+        if collection is None:
+            return 0
+        return self.vector_service.count_documents(collection)
+
+    def _promote_vector_collection(
+        self,
+        alias: str,
+        collection: str | None,
+    ) -> str | None:
+        if self.vector_service is None:
+            return None
+        if collection is None:
+            raise RuntimeError("Milvus rebuild collection is unavailable")
+        return self.vector_service.promote_collection(alias, collection)
+
+    def _rollback_vector_alias(self, alias: str, previous: str | None) -> None:
+        if self.vector_service is not None:
+            self.vector_service.rollback_alias(alias, previous)
+
+    def _discard_vector_collection(self, collection: str | None) -> None:
+        if self.vector_service is not None and collection is not None:
+            self.vector_service.discard_collection(collection)
+
+    def _index_document(
+        self,
+        scope: str,
+        index: str,
+        document: SearchDocument,
+    ) -> bool:
+        if self.vector_service is not None:
+            if self.embedding_service is None:
+                return False
+            try:
+                vector = self.embedding_service.embed_documents([document])[0]
+            except Exception:
+                logger.exception("document_embedding_failed scope=%s id=%s", scope, document.id)
+                return False
+            if not self.vector_service.upsert_document(
+                collection_alias_for_scope(self.settings, scope),
+                document,
+                vector,
+            ):
+                return False
+        return self.search_service.index_document(index=index, document=document)
+
+    def _delete_document(self, scope: str, index: str, document_id: str) -> bool:
+        if self.vector_service is not None and not self.vector_service.delete_document(
+            collection_alias_for_scope(self.settings, scope),
+            document_id,
+        ):
+            return False
+        return self.search_service.delete_document(index=index, document_id=document_id)
+
+    def _vector_document_matches(self, scope: str, document: SearchDocument) -> bool:
+        if self.vector_service is None:
+            return True
+        return self.vector_service.document_matches(
+            collection_alias_for_scope(self.settings, scope),
+            document,
         )
 
     @staticmethod

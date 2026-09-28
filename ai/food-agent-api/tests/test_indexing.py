@@ -110,6 +110,76 @@ class FakeSearchService:
         return set(self.documents.get(index, {}).keys())
 
 
+class FakeEmbeddingService:
+    def embed_documents(self, documents: list[SearchDocument]) -> list[list[float]]:
+        return [[1.0, 0.0, 0.0] for _ in documents]
+
+
+class FakeVectorService:
+    def __init__(self) -> None:
+        self.documents: dict[str, set[str]] = {}
+        self.matching_ids: set[str] = set()
+        self.created: list[tuple[str, str]] = []
+        self.promoted: list[tuple[str, str]] = []
+        self.discarded: list[str] = []
+        self.cleaned: list[tuple[str, str, int]] = []
+        self.upserts: list[tuple[str, str]] = []
+        self.deletes: list[tuple[str, str]] = []
+
+    def create_rebuild_collection(self, alias: str) -> str:
+        collection = f"{alias}_v1"
+        self.created.append((alias, collection))
+        return collection
+
+    def index_documents(
+        self,
+        collection: str,
+        documents: list[SearchDocument],
+        vectors: list[list[float]],
+    ) -> tuple[int, int]:
+        assert len(documents) == len(vectors)
+        self.documents[collection] = {document.id for document in documents}
+        return len(documents), 0
+
+    def count_documents(self, collection: str) -> int:
+        return len(self.documents.get(collection, set()))
+
+    def promote_collection(self, alias: str, collection: str) -> None:
+        self.promoted.append((alias, collection))
+        self.documents[alias] = set(self.documents.get(collection, set()))
+
+    def rollback_alias(self, alias: str, previous: str | None) -> None:
+        return None
+
+    def discard_collection(self, collection: str) -> None:
+        self.discarded.append(collection)
+
+    def cleanup_old_collections(self, alias: str, current: str, keep: int) -> None:
+        self.cleaned.append((alias, current, keep))
+
+    def upsert_document(
+        self,
+        collection: str,
+        document: SearchDocument,
+        vector: list[float],
+    ) -> bool:
+        self.upserts.append((collection, document.id))
+        self.documents.setdefault(collection, set()).add(document.id)
+        self.matching_ids.add(document.id)
+        return True
+
+    def delete_document(self, collection: str, document_id: str) -> bool:
+        self.deletes.append((collection, document_id))
+        self.documents.setdefault(collection, set()).discard(document_id)
+        return True
+
+    def document_matches(self, collection: str, document: SearchDocument) -> bool:
+        return document.id in self.matching_ids
+
+    def list_document_ids(self, collection: str, batch_size: int = 1000) -> set[str]:
+        return set(self.documents.get(collection, set()))
+
+
 def test_indexer_rebuilds_selected_scopes() -> None:
     settings = Settings()
     export_client = FakeExportClient()
@@ -138,6 +208,24 @@ def test_indexer_rebuilds_selected_scopes() -> None:
         ("food_shop_index", "food_shop_index_v1", 2),
         ("food_coupon_index", "food_coupon_index_v1", 2),
     ]
+
+
+def test_indexer_rebuilds_elasticsearch_and_milvus_before_promoting() -> None:
+    vector_service = FakeVectorService()
+    indexer = SearchIndexer(
+        export_client=FakeExportClient(),
+        search_service=FakeSearchService(),
+        vector_service=vector_service,  # type: ignore[arg-type]
+        embedding_service=FakeEmbeddingService(),  # type: ignore[arg-type]
+        settings=Settings(milvus_enabled=True, rag_embedding_dimensions=3),
+    )
+
+    result = indexer.rebuild(scopes=["shops"], page_size=50)
+
+    assert result.failed == 0
+    assert vector_service.created == [("food_shop_vectors", "food_shop_vectors_v1")]
+    assert vector_service.promoted == [("food_shop_vectors", "food_shop_vectors_v1")]
+    assert vector_service.cleaned == [("food_shop_vectors", "food_shop_vectors_v1", 2)]
 
 
 def test_indexer_rejects_unknown_scope() -> None:
@@ -232,6 +320,24 @@ def test_indexer_syncs_single_document() -> None:
     assert search_service.single_calls == [("food_activity_index", "activities-7")]
 
 
+def test_indexer_syncs_single_document_to_milvus_before_elasticsearch() -> None:
+    search_service = FakeSearchService()
+    vector_service = FakeVectorService()
+    indexer = SearchIndexer(
+        export_client=FakeExportClient(),
+        search_service=search_service,
+        vector_service=vector_service,  # type: ignore[arg-type]
+        embedding_service=FakeEmbeddingService(),  # type: ignore[arg-type]
+        settings=Settings(milvus_enabled=True, rag_embedding_dimensions=3),
+    )
+
+    result = indexer.sync_document(scope="activities", entity_id=7, entity_type="SECKILL")
+
+    assert result.failed == 0
+    assert vector_service.upserts == [("food_activity_vectors", "activities-7")]
+    assert search_service.single_calls == [("food_activity_index", "activities-7")]
+
+
 def test_indexer_deletes_missing_document() -> None:
     export_client = FakeExportClient()
     search_service = FakeSearchService()
@@ -246,6 +352,24 @@ def test_indexer_deletes_missing_document() -> None:
     assert result.fetched == 0
     assert result.indexed == 0
     assert result.failed == 0
+    assert search_service.delete_calls == [("food_coupon_index", "coupon-template-missing")]
+
+
+def test_indexer_deletes_document_from_milvus_and_elasticsearch() -> None:
+    search_service = FakeSearchService()
+    vector_service = FakeVectorService()
+    indexer = SearchIndexer(
+        export_client=FakeExportClient(),
+        search_service=search_service,
+        vector_service=vector_service,  # type: ignore[arg-type]
+        embedding_service=FakeEmbeddingService(),  # type: ignore[arg-type]
+        settings=Settings(milvus_enabled=True, rag_embedding_dimensions=3),
+    )
+
+    result = indexer.sync_document(scope="coupons", entity_id="missing")
+
+    assert result.failed == 0
+    assert vector_service.deletes == [("food_coupon_vectors", "coupon-template-missing")]
     assert search_service.delete_calls == [("food_coupon_index", "coupon-template-missing")]
 
 
@@ -335,7 +459,7 @@ def test_indexer_reconcile_keeps_unchanged_document() -> None:
     assert search_service.delete_calls == []
 
 
-def test_indexer_reconcile_repairs_missing_embedding() -> None:
+def test_indexer_reconcile_repairs_missing_milvus_vector() -> None:
     document = SearchDocument(
         id="shop-1",
         title="Hot Pot",
@@ -346,10 +470,13 @@ def test_indexer_reconcile_repairs_missing_embedding() -> None:
     export_client.documents_by_scope["shops"] = [document]
     search_service = FakeSearchService()
     search_service.documents["food_shop_index"] = {"shop-1": document}
+    vector_service = FakeVectorService()
     indexer = SearchIndexer(
         export_client=export_client,
         search_service=search_service,
-        settings=Settings(rag_hybrid_enabled=True, rag_embedding_dimensions=3),
+        vector_service=vector_service,  # type: ignore[arg-type]
+        embedding_service=FakeEmbeddingService(),  # type: ignore[arg-type]
+        settings=Settings(milvus_enabled=True, rag_embedding_dimensions=3),
     )
 
     result = indexer.reconcile(scopes=["shops"], page_size=100, prune_stale=False)
@@ -357,3 +484,4 @@ def test_indexer_reconcile_repairs_missing_embedding() -> None:
     assert result.upserted == 1
     assert result.unchanged == 0
     assert search_service.single_calls == [("food_shop_index", "shop-1")]
+    assert vector_service.upserts == [("food_shop_vectors", "shop-1")]

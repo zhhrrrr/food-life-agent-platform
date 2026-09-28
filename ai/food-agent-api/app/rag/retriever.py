@@ -10,6 +10,8 @@ from app.rag.reranker import RagReranker
 from app.search.index_names import recommend_indices_for_capabilities, support_indices
 from app.search.schemas import SearchFilters, SearchHit
 from app.search.search_service import SearchService
+from app.vector.collection_names import collection_aliases_for_indices
+from app.vector.milvus_service import MilvusVectorService
 
 logger = logging.getLogger("food_agent.rag.retriever")
 
@@ -33,16 +35,16 @@ class RagRetriever:
         settings: Settings | None = None,
         search_service: SearchService | None = None,
         embedding_service: RagEmbeddingService | None = None,
+        vector_service: MilvusVectorService | None = None,
         reranker: RagReranker | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.search_service = search_service or SearchService(self.settings)
-        self.embedding_service = embedding_service or getattr(
-            self.search_service,
-            "embedding_service",
-            None,
-        )
-        if self.settings.rag_hybrid_enabled and self.embedding_service is None:
+        self.embedding_service = embedding_service
+        self.vector_service = vector_service
+        if self.settings.rag_hybrid_enabled and self.settings.milvus_enabled:
+            self.vector_service = self.vector_service or MilvusVectorService(self.settings)
+        if self.vector_service is not None and self.embedding_service is None:
             self.embedding_service = RagEmbeddingService(self.settings)
         self.reranker = reranker or RagReranker(self.settings)
 
@@ -71,13 +73,13 @@ class RagRetriever:
         )
         rankings = [("bm25", lexical_hits)]
         vector_hits: list[SearchHit] = []
-        if self.settings.rag_hybrid_enabled and self.embedding_service is not None:
+        if self.vector_service is not None and self.embedding_service is not None:
             try:
                 query_vector = self.embedding_service.embed_query(
                     _embedding_query(query, original_query)
                 )
-                vector_hits = self.search_service.vector_search_many(
-                    indices,
+                vector_hits = self.vector_service.search_many(
+                    collection_aliases_for_indices(self.settings, indices),
                     query_vector,
                     size=candidate_size,
                     filters=filters,

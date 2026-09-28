@@ -6,7 +6,6 @@ from app.rag.fusion import reciprocal_rank_fusion
 from app.rag.reranker import RagReranker, RerankResult
 from app.rag.retriever import RagRetriever
 from app.search.schemas import SearchDocument, SearchHit
-from app.search.search_service import SearchService
 
 
 def _hit(document_id: str, score: float) -> SearchHit:
@@ -112,32 +111,6 @@ def test_reranker_uses_provider_order_and_score() -> None:
     assert client.request["json"]["return_documents"] is False
 
 
-def test_vector_search_uses_cosine_script_and_filters(monkeypatch) -> None:
-    class FakeElasticsearch:
-        request: dict[str, Any] | None = None
-
-        def search(self, **kwargs: Any) -> dict[str, Any]:
-            self.request = kwargs
-            return {"hits": {"hits": []}}
-
-    client = FakeElasticsearch()
-    monkeypatch.setattr("app.search.search_service.get_es_client", lambda: client)
-    service = SearchService(
-        Settings(es_enabled=True, rag_hybrid_enabled=False),
-    )
-
-    assert service.vector_search_many(
-        ["food_shop_index"],
-        [1.0, 0.0, 0.0],
-        size=10,
-    ) == []
-    assert client.request is not None
-    script_score = client.request["query"]["script_score"]
-    assert "cosineSimilarity" in script_score["script"]["source"]
-    assert script_score["script"]["params"]["query_vector"] == [1.0, 0.0, 0.0]
-    assert {"exists": {"field": "embedding"}} in script_score["query"]["bool"]["filter"]
-
-
 def test_retriever_runs_hybrid_rrf_and_rerank() -> None:
     class FakeEmbeddingService:
         def embed_query(self, text: str) -> list[float]:
@@ -145,12 +118,18 @@ def test_retriever_runs_hybrid_rrf_and_rerank() -> None:
             return [1.0, 0.0]
 
     class FakeSearchService:
-        embedding_service = FakeEmbeddingService()
-
         def search_many(self, *args: Any, **kwargs: Any) -> list[SearchHit]:
             return [_hit("shop-1", 8.0), _hit("shop-2", 4.0)]
 
-        def vector_search_many(self, *args: Any, **kwargs: Any) -> list[SearchHit]:
+    class FakeVectorService:
+        def search_many(self, *args: Any, **kwargs: Any) -> list[SearchHit]:
+            assert args[0] == [
+                "food_shop_vectors",
+                "food_package_vectors",
+                "food_review_vectors",
+                "food_activity_vectors",
+                "food_coupon_vectors",
+            ]
             assert args[1] == [1.0, 0.0]
             return [_hit("shop-2", 1.9), _hit("shop-3", 1.8)]
 
@@ -169,11 +148,14 @@ def test_retriever_runs_hybrid_rrf_and_rerank() -> None:
     result = RagRetriever(
         settings=Settings(
             rag_hybrid_enabled=True,
+            milvus_enabled=True,
             rag_rerank_enabled=True,
             rag_candidate_size=3,
             rag_embedding_dimensions=2,
         ),
         search_service=FakeSearchService(),  # type: ignore[arg-type]
+        embedding_service=FakeEmbeddingService(),  # type: ignore[arg-type]
+        vector_service=FakeVectorService(),  # type: ignore[arg-type]
         reranker=FakeReranker(),  # type: ignore[arg-type]
     ).retrieve(
         "recommend",

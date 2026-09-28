@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.19.0
+
+- Moved dense vectors and cosine retrieval out of Elasticsearch into independent Milvus collections.
+- Added versioned Milvus rebuild collections with validated counts, preloaded alias promotion, rollback, and bounded retention.
+- Extended full rebuild, RabbitMQ incremental sync, delete handling, and scheduled reconciliation to maintain both Elasticsearch and Milvus.
+- Added content hashes so reconciliation repairs stale vectors, not only missing vector IDs.
+- Kept Elasticsearch for BM25 and structured filters, then fused ES and Milvus candidates with RRF before reranking.
+- Added a Milvus Standalone Docker Compose deployment and BM25 degradation when Milvus is disabled or unavailable.
+
 ## 0.18.0
 
 - Added BGE-M3 document/query embeddings and Elasticsearch 7.17 `dense_vector` cosine retrieval.

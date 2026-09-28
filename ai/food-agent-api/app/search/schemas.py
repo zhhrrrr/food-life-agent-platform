@@ -10,7 +10,6 @@ class SearchDocument(BaseModel):
     source: str
     category: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
-    embedding: list[float] | None = Field(default=None, exclude=True)
 
 
 class SearchHit(BaseModel):

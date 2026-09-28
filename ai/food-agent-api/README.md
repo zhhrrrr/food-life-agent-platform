@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.18.0`
+Current version: `0.19.0`
 
 Current route chain:
 
@@ -17,8 +17,8 @@ HTTP Request
       -> Structured Output compatibility fallback
       -> deterministic rule fallback
 -> Recommend / Trade / Support Agent
--> Recommend query rewrite -> Embedding -> ES BM25 + vector retrieval -> RRF -> Rerank -> LLM answer
--> Support query rewrite -> Embedding -> ES rule BM25 + vector retrieval -> RRF -> Rerank -> LLM answer
+-> Recommend query rewrite -> ES BM25 + Milvus vector retrieval -> RRF -> Rerank -> LLM answer
+-> Support query rewrite -> ES rule BM25 + Milvus vector retrieval -> RRF -> Rerank -> LLM answer
 -> Trade query rewrite -> allow-listed Java Gateway GET queries -> LLM answer
 -> Response
 ```
@@ -26,6 +26,7 @@ HTTP Request
 Added by version:
 
 ```text
+0.19.0: independent Milvus vector store with dual-store rebuild, sync, and reconciliation
 0.18.0: BGE-M3 vector retrieval, BM25 hybrid search, RRF fusion, and BGE reranking
 0.17.0: production RAG index lifecycle, scoped retrieval, filtering, context, and citation validation
 0.16.1: hardened direct Java HTTP calls and ES text-field retrieval
@@ -56,9 +57,9 @@ Added by version:
 0.10.0: stage 6 RecommendAgent query rewrite, ES/RAG retrieval, and LLM answer chain
 ```
 
-This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. LangChain provides model integration while LangGraph orchestrates the agent flow. RecommendAgent and SupportAgent now run query rewrite -> BGE-M3 query embedding -> BM25 and vector retrieval -> reciprocal rank fusion -> BGE reranking -> bounded context -> LLM answer -> validated references. TradeAgent exclusively owns current order, price, stock, coupon, group-buy, and preview reads through allow-listed Java Gateway GET queries. ES package, activity, and coupon documents remain focused on recommendation discovery and exclude current stock and coupon supply counters. MCP, SSE, Human Confirmation, and business action tools are still future stages.
+This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python writes text projections to Elasticsearch and embeddings to independent Milvus collections. LangChain provides model integration while LangGraph orchestrates the agent flow. RecommendAgent and SupportAgent run query rewrite -> Elasticsearch BM25 plus Milvus vector retrieval -> reciprocal rank fusion -> BGE reranking -> bounded context -> LLM answer -> validated references. TradeAgent exclusively owns current order, price, stock, coupon, group-buy, and preview reads through allow-listed Java Gateway GET queries. Search projections remain focused on recommendation discovery and exclude current stock and coupon supply counters. MCP, SSE, Human Confirmation, and business action tools are still future stages.
 
-Elasticsearch support is present but disabled by default. Set `ES_ENABLED=true` only after Elasticsearch is available and the indexes have data.
+Elasticsearch and Milvus support are disabled by default. Enable each store only after its service is healthy; hybrid retrieval requires both `RAG_HYBRID_ENABLED=true` and `MILVUS_ENABLED=true`.
 
 Run the deterministic retrieval quality gate after rebuilding the indexes:
 
@@ -100,7 +101,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.18.0
+APP_VERSION=0.19.0
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false
@@ -139,6 +140,17 @@ ES_NUMBER_OF_REPLICAS=0
 ES_BULK_CHUNK_SIZE=200
 ES_REBUILD_KEEP_VERSIONS=2
 ES_SEARCH_MIN_SCORE=0.1
+MILVUS_ENABLED=false
+MILVUS_URI=http://127.0.0.1:19530
+MILVUS_TOKEN=
+MILVUS_DATABASE=default
+MILVUS_COLLECTION_PREFIX=food
+MILVUS_INDEX_TYPE=AUTOINDEX
+MILVUS_METRIC_TYPE=COSINE
+MILVUS_CONSISTENCY_LEVEL=Strong
+MILVUS_TIMEOUT_SECONDS=10
+MILVUS_BATCH_SIZE=200
+MILVUS_REBUILD_KEEP_VERSIONS=2
 RAG_CONTEXT_MAX_CHARS=8000
 RAG_HYBRID_ENABLED=false
 RAG_EMBEDDING_DIMENSIONS=1024
@@ -267,7 +279,7 @@ curl -X POST http://127.0.0.1:8500/api/agent/chat \
   -d "{\"message\":\"退款规则是什么\"}"
 ```
 
-Rebuild ES indexes from Java exports:
+Rebuild Elasticsearch indexes and Milvus collections from Java exports:
 
 ```bash
 curl -X POST http://127.0.0.1:8500/api/agent/indexes/rebuild \
@@ -275,7 +287,7 @@ curl -X POST http://127.0.0.1:8500/api/agent/indexes/rebuild \
   -d "{\"scopes\":[\"shops\",\"packages\",\"reviews\",\"activities\",\"coupons\"],\"page_size\":200}"
 ```
 
-Reconcile ES indexes against Java current-state exports:
+Reconcile Elasticsearch indexes and Milvus collections against Java current-state exports:
 
 ```bash
 curl -X POST http://127.0.0.1:8500/api/agent/indexes/reconcile \
@@ -291,20 +303,29 @@ curl -X POST http://127.0.0.1:8500/api/agent/indexes/rebuild \
   -d "{\"scopes\":[\"rules\"]}"
 ```
 
-Rules are not MySQL business rows. They use the same `SearchDocument` ES schema but come from the local platform rule document source until formal operations Markdown/config imports are added.
+Rules are not MySQL business rows. They use the same `SearchDocument` projection but come from the local platform rule document source until formal operations Markdown/config imports are added.
 
-Incremental ES sync is disabled by default. Enable it only after RabbitMQ, Elasticsearch, and Java services are available:
+Start the independent Milvus Standalone service from the repository root:
+
+```bash
+docker compose -f deploy/milvus/docker-compose.yml up -d
+```
+
+Milvus exposes its client endpoint on `127.0.0.1:19530` and health endpoint on `127.0.0.1:9091`. After the service is healthy, set `MILVUS_ENABLED=true`, restart the API, and run a full rebuild once to create and populate all vector collection aliases.
+
+Incremental search sync is disabled by default. Enable it only after RabbitMQ, Elasticsearch, Milvus, and Java services are available:
 
 ```text
 ES_ENABLED=true
+MILVUS_ENABLED=true
 ES_SYNC_CONSUMER_ENABLED=true
 ES_RECONCILE_ENABLED=true
 ES_RECONCILE_DISTRIBUTED_LOCK_ENABLED=true
 ```
 
-Scheduled ES reconciliation uses one timer thread per process and one Redis distributed lock per run. The flow is: timer waits for the interval, calls `_run_once()`, tries to acquire the Redis lock, skips the round if the lock is busy, runs `reconcile()` only after lock success, and releases the lock in `finally`.
+Scheduled search reconciliation uses one timer thread per process and one Redis distributed lock per run. The flow is: timer waits for the interval, calls `_run_once()`, tries to acquire the Redis lock, skips the round if the lock is busy, runs `reconcile()` only after lock success, and releases the lock in `finally`. Reconciliation compares the Java/MySQL current-state projection with Elasticsearch content and a Milvus content hash, then repairs missing, stale, or extra records in both stores.
 
-When ES returns matches, `POST /api/agent/chat` also includes:
+When retrieval returns matches, `POST /api/agent/chat` also includes:
 
 ```json
 {
@@ -320,9 +341,9 @@ When ES returns matches, `POST /api/agent/chat` also includes:
 }
 ```
 
-RecommendAgent searches shop, package, review, activity, and coupon indexes. These indexes are search projections for discovery: they contain public descriptions, prices, scopes, validity windows, and popularity data, but no package/activity stock or coupon supply counters. RecommendAgent can rewrite questions for shop/package recommendation, cuisine filtering, budget filtering, scene recommendation, review semantic search, and shop comparison before ES retrieval. It must not claim current availability from ES. SupportAgent searches only the platform rule index for refund, group-buy, payment, generic order-status meanings, and platform FAQ; it does not receive Authorization or query Java order APIs. If ES is disabled or no document matches, these agents return a clear no-evidence template instead of pretending to have generated an answer.
+RecommendAgent searches shop, package, review, activity, and coupon projections. They contain public descriptions, prices, scopes, validity windows, and popularity data, but no package/activity stock or coupon supply counters. RecommendAgent can rewrite questions for shop/package recommendation, cuisine filtering, budget filtering, scene recommendation, review semantic search, and shop comparison before retrieval. It must not claim current availability from search projections. SupportAgent searches only the platform rule projection for refund, group-buy, payment, generic order-status meanings, and platform FAQ; it does not receive Authorization or query Java order APIs. If no evidence matches, these agents return a clear no-evidence template instead of pretending to have generated an answer.
 
-When `RAG_HYBRID_ENABLED=true`, every indexed document receives an embedding generated from its title, category, and content. Each query independently retrieves BM25 and cosine-similarity candidates, combines their ranks through RRF, and then optionally calls the configured reranker when `RAG_RERANK_ENABLED=true`. If query embedding, vector search, or reranking fails, retrieval degrades to the available BM25/RRF results. Changing the embedding model or dimensions requires a full index rebuild.
+When both `RAG_HYBRID_ENABLED=true` and `MILVUS_ENABLED=true`, every document receives an embedding generated from its title, category, and content and stored only in Milvus. Each query retrieves BM25 candidates from Elasticsearch and cosine-similarity candidates from Milvus, combines their ranks through RRF, and optionally calls the configured reranker when `RAG_RERANK_ENABLED=true`. If query embedding, Milvus retrieval, or reranking fails, retrieval degrades to the available BM25/RRF results. Changing the embedding model or dimensions requires a full rebuild of the versioned Milvus collections.
 
 TradeAgent queries current price, stock, coupons, group-buy teams/orders, user orders, and read-only order previews through `JAVA_GATEWAY_BASE_URL`. Its Java client exposes only fixed GET methods and forwards the incoming Authorization header for protected user queries. Order preview composes the package trade snapshot, a pre-discount estimate in cents, and candidate user coupons without claiming a final payable amount, creating an order, or reserving stock. Create, cancel, pay, and refund requests are rejected before any Gateway call.
 

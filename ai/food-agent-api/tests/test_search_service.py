@@ -73,7 +73,6 @@ def test_index_definition_is_strict_and_uses_cjk_text_mapping() -> None:
         "packages",
         shards=1,
         replicas=0,
-        embedding_dimensions=1024,
     )
 
     assert definition["settings"] == {
@@ -87,10 +86,7 @@ def test_index_definition_is_strict_and_uses_cjk_text_mapping() -> None:
     assert mappings["properties"]["metadata"]["properties"]["price"] == {
         "type": "long"
     }
-    assert mappings["properties"]["embedding"] == {
-        "type": "dense_vector",
-        "dims": 1024,
-    }
+    assert "embedding" not in mappings["properties"]
 
 
 def test_promote_index_atomically_replaces_legacy_concrete_index(monkeypatch) -> None:

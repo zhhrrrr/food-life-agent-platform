@@ -13,7 +13,6 @@ def index_definition(
     scope: str,
     shards: int,
     replicas: int,
-    embedding_dimensions: int | None = None,
 ) -> dict[str, object]:
     properties: dict[str, object] = {
         "id": {"type": "keyword"},
@@ -27,11 +26,6 @@ def index_definition(
             "properties": _metadata_properties(scope),
         },
     }
-    if embedding_dimensions is not None:
-        properties["embedding"] = {
-            "type": "dense_vector",
-            "dims": embedding_dimensions,
-        }
     return {
         "settings": {
             "number_of_shards": shards,

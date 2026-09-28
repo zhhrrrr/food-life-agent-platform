@@ -1,0 +1,1 @@
+"""Independent vector-store integration."""
