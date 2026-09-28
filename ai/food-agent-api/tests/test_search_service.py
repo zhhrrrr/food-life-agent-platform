@@ -69,7 +69,12 @@ def test_search_combines_indices_queries_and_budget_in_one_request(monkeypatch) 
 
 
 def test_index_definition_is_strict_and_uses_cjk_text_mapping() -> None:
-    definition = index_definition("packages", shards=1, replicas=0)
+    definition = index_definition(
+        "packages",
+        shards=1,
+        replicas=0,
+        embedding_dimensions=1024,
+    )
 
     assert definition["settings"] == {
         "number_of_shards": 1,
@@ -81,6 +86,10 @@ def test_index_definition_is_strict_and_uses_cjk_text_mapping() -> None:
     assert mappings["properties"]["metadata"]["dynamic"] is False
     assert mappings["properties"]["metadata"]["properties"]["price"] == {
         "type": "long"
+    }
+    assert mappings["properties"]["embedding"] == {
+        "type": "dense_vector",
+        "dims": 1024,
     }
 
 

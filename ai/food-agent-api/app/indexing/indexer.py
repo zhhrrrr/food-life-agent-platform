@@ -333,8 +333,12 @@ class SearchIndexer:
     def _normalize_page_size(page_size: int) -> int:
         return max(1, min(page_size, 1000))
 
-    @staticmethod
-    def _document_equal(left: SearchDocument, right: SearchDocument) -> bool:
+    def _document_equal(self, left: SearchDocument, right: SearchDocument) -> bool:
+        if self.settings.rag_hybrid_enabled and (
+            left.embedding is None
+            or len(left.embedding) != self.settings.rag_embedding_dimensions
+        ):
+            return False
         return json.dumps(left.model_dump(mode="json"), sort_keys=True, default=str) == json.dumps(
             right.model_dump(mode="json"),
             sort_keys=True,

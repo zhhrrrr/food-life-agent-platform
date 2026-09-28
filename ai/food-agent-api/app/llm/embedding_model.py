@@ -43,9 +43,6 @@ def resolve_embedding_model_options(settings: Settings) -> dict[str, Any]:
 
 def build_embedding_model(settings: Settings | None = None) -> Any:
     resolved_settings = settings or get_settings()
-    if not resolved_settings.semantic_router_enabled:
-        raise EmbeddingModelUnavailableError("semantic router is disabled")
-
     try:
         from langchain_openai import OpenAIEmbeddings
     except ImportError as exc:

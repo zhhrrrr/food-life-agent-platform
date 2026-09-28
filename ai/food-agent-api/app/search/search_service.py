@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.core.config import Settings, get_settings
+from app.rag.embedding import RagEmbeddingService
 from app.search.es_client import get_es_client
 from app.search.index_schema import index_definition
 from app.search.schemas import SearchDocument, SearchFilters, SearchHit
@@ -18,8 +19,15 @@ logger = logging.getLogger("food_agent.search.service")
 
 class SearchService:
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        embedding_service: RagEmbeddingService | None = None,
+    ) -> None:
         self.settings = settings or get_settings()
+        self.embedding_service = embedding_service
+        if self.settings.rag_hybrid_enabled and self.embedding_service is None:
+            self.embedding_service = RagEmbeddingService(self.settings)
 
     def search_many(
         self,
@@ -68,6 +76,54 @@ class SearchService:
     ) -> list[SearchHit]:
         return self.search_many([index], query, size=size)
 
+    def vector_search_many(
+        self,
+        indices: Iterable[str],
+        query_vector: list[float],
+        *,
+        size: int,
+        filters: SearchFilters | None = None,
+    ) -> list[SearchHit]:
+        normalized_indices = list(dict.fromkeys(indices))
+        if not self.settings.es_enabled or not normalized_indices:
+            return []
+
+        client = get_es_client()
+        if client is None:
+            return []
+
+        filter_clauses = [
+            {"exists": {"field": "embedding"}},
+            *self._filter_clauses(filters or SearchFilters()),
+        ]
+        try:
+            result = client.search(
+                index=",".join(normalized_indices),
+                size=size,
+                query={
+                    "script_score": {
+                        "query": {"bool": {"filter": filter_clauses}},
+                        "script": {
+                            "source": (
+                                "cosineSimilarity(params.query_vector, "
+                                "'embedding') + 1.0"
+                            ),
+                            "params": {"query_vector": query_vector},
+                        },
+                    }
+                },
+                ignore_unavailable=True,
+                allow_no_indices=True,
+            )
+        except Exception:
+            logger.exception(
+                "es_vector_search_failed indices=%s dimensions=%s",
+                ",".join(normalized_indices),
+                len(query_vector),
+            )
+            return []
+        return [self._to_search_hit(raw_hit) for raw_hit in result["hits"]["hits"]]
+
     def create_rebuild_index(self, alias: str, scope: str) -> str:
         client = self._required_client()
         suffix = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
@@ -76,6 +132,11 @@ class SearchService:
             scope=scope,
             shards=self.settings.es_number_of_shards,
             replicas=self.settings.es_number_of_replicas,
+            embedding_dimensions=(
+                self.settings.rag_embedding_dimensions
+                if self.settings.rag_hybrid_enabled
+                else None
+            ),
         )
         client.indices.create(index=physical_index, **definition)
         return physical_index
@@ -140,10 +201,11 @@ class SearchService:
             return False
 
         try:
+            source = self._document_sources([document])[0]
             client.index(
                 index=index,
                 id=document.id,
-                document=document.model_dump(),
+                document=source,
             )
         except Exception:
             logger.exception(
@@ -170,16 +232,17 @@ class SearchService:
         if client is None:
             return 0, len(materialized)
 
-        actions = (
-            {
-                "_op_type": "index",
-                "_index": index,
-                "_id": document.id,
-                "_source": document.model_dump(mode="json"),
-            }
-            for document in materialized
-        )
         try:
+            sources = self._document_sources(materialized)
+            actions = (
+                {
+                    "_op_type": "index",
+                    "_index": index,
+                    "_id": document.id,
+                    "_source": source,
+                }
+                for document, source in zip(materialized, sources, strict=True)
+            )
             indexed, errors = es_bulk(
                 client,
                 actions,
@@ -191,6 +254,23 @@ class SearchService:
             logger.exception("es_bulk_index_failed index=%s", index)
             return 0, len(materialized)
         return int(indexed), len(errors)
+
+    def _document_sources(
+        self,
+        documents: list[SearchDocument],
+    ) -> list[dict[str, Any]]:
+        sources = [document.model_dump(mode="json") for document in documents]
+        if not self.settings.rag_hybrid_enabled:
+            return sources
+        if self.embedding_service is None:
+            raise RuntimeError("RAG embedding service is unavailable")
+
+        vectors = self.embedding_service.embed_documents(documents)
+        if len(vectors) != len(sources):
+            raise ValueError("embedding count does not match document count")
+        for source, vector in zip(sources, vectors, strict=True):
+            source["embedding"] = vector
+        return sources
 
     def delete_document(self, index: str, document_id: str) -> bool:
         if not self.settings.es_enabled:

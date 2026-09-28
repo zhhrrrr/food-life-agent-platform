@@ -333,3 +333,27 @@ def test_indexer_reconcile_keeps_unchanged_document() -> None:
     assert result.deleted == 0
     assert search_service.single_calls == []
     assert search_service.delete_calls == []
+
+
+def test_indexer_reconcile_repairs_missing_embedding() -> None:
+    document = SearchDocument(
+        id="shop-1",
+        title="Hot Pot",
+        content="Dinner",
+        source="food_shop_index",
+    )
+    export_client = FakeExportClient()
+    export_client.documents_by_scope["shops"] = [document]
+    search_service = FakeSearchService()
+    search_service.documents["food_shop_index"] = {"shop-1": document}
+    indexer = SearchIndexer(
+        export_client=export_client,
+        search_service=search_service,
+        settings=Settings(rag_hybrid_enabled=True, rag_embedding_dimensions=3),
+    )
+
+    result = indexer.reconcile(scopes=["shops"], page_size=100, prune_stale=False)
+
+    assert result.upserted == 1
+    assert result.unchanged == 0
+    assert search_service.single_calls == [("food_shop_index", "shop-1")]

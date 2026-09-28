@@ -74,7 +74,7 @@ class RecommendChain:
                     "暂未从 ES 检索到可用于推荐的商家、套餐、评价、活动或优惠券依据，"
                     "建议先同步相关业务文档后再进行推荐。"
                 ),
-                rag_mode="recommend_agent_llm_rag",
+                rag_mode=f"recommend_agent_{retrieval.mode}_no_hit",
                 query=message,
                 rewritten_query=rewrite.search_query,
                 capabilities=list(rewrite.capabilities),
@@ -90,7 +90,7 @@ class RecommendChain:
 
         return AgentChainResult(
             response=answer.answer,
-            rag_mode="recommend_agent_llm_rag",
+            rag_mode=f"recommend_agent_{retrieval.mode}_llm",
             query=message,
             rewritten_query=rewrite.search_query,
             capabilities=list(rewrite.capabilities),

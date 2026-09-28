@@ -9,7 +9,29 @@ TEXT_WITH_KEYWORD_FIELD = {
 }
 
 
-def index_definition(scope: str, shards: int, replicas: int) -> dict[str, object]:
+def index_definition(
+    scope: str,
+    shards: int,
+    replicas: int,
+    embedding_dimensions: int | None = None,
+) -> dict[str, object]:
+    properties: dict[str, object] = {
+        "id": {"type": "keyword"},
+        "title": TEXT_WITH_KEYWORD_FIELD,
+        "content": TEXT_FIELD,
+        "source": {"type": "keyword"},
+        "category": TEXT_WITH_KEYWORD_FIELD,
+        "metadata": {
+            "type": "object",
+            "dynamic": False,
+            "properties": _metadata_properties(scope),
+        },
+    }
+    if embedding_dimensions is not None:
+        properties["embedding"] = {
+            "type": "dense_vector",
+            "dims": embedding_dimensions,
+        }
     return {
         "settings": {
             "number_of_shards": shards,
@@ -17,18 +39,7 @@ def index_definition(scope: str, shards: int, replicas: int) -> dict[str, object
         },
         "mappings": {
             "dynamic": "strict",
-            "properties": {
-                "id": {"type": "keyword"},
-                "title": TEXT_WITH_KEYWORD_FIELD,
-                "content": TEXT_FIELD,
-                "source": {"type": "keyword"},
-                "category": TEXT_WITH_KEYWORD_FIELD,
-                "metadata": {
-                    "type": "object",
-                    "dynamic": False,
-                    "properties": _metadata_properties(scope),
-                },
-            },
+            "properties": properties,
         },
     }
 

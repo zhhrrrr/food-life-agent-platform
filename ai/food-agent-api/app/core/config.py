@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.17.0"
+    app_version: str = "0.18.0"
     app_port: int = 8500
     log_level: str = "INFO"
     # 本地env 文件中配置的llm_router_enabled优先级高于此处的默认值
@@ -48,6 +48,16 @@ class Settings(BaseModel):
     es_rebuild_keep_versions: int = Field(default=2, ge=1, le=10)
     es_search_min_score: float = Field(default=0.1, ge=0.0)
     rag_context_max_chars: int = Field(default=8000, ge=1000, le=30000)
+    rag_hybrid_enabled: bool = False
+    rag_embedding_dimensions: int = Field(default=1024, ge=1, le=4096)
+    rag_embedding_batch_size: int = Field(default=32, ge=1, le=128)
+    rag_candidate_size: int = Field(default=25, ge=1, le=100)
+    rag_rrf_k: int = Field(default=60, ge=1, le=1000)
+    rag_rerank_enabled: bool = False
+    rag_rerank_model: str = "BAAI/bge-reranker-v2-m3"
+    rag_rerank_base_url: str = ""
+    rag_rerank_api_key: str = ""
+    rag_rerank_timeout_seconds: float = Field(default=10.0, gt=0)
     rabbitmq_url: str = "amqp://guest:guest@127.0.0.1:5672/%2F"
     redis_url: str = "redis://127.0.0.1:6379/0"
     es_sync_consumer_enabled: bool = False
@@ -266,6 +276,64 @@ def get_settings() -> Settings:
                 dotenv_values,
                 "RAG_CONTEXT_MAX_CHARS",
                 str(defaults.rag_context_max_chars),
+            )
+        ),
+        rag_hybrid_enabled=_get_value(
+            dotenv_values,
+            "RAG_HYBRID_ENABLED",
+            str(defaults.rag_hybrid_enabled),
+        ).lower()
+        in {"1", "true", "yes", "on"},
+        rag_embedding_dimensions=int(
+            _get_value(
+                dotenv_values,
+                "RAG_EMBEDDING_DIMENSIONS",
+                str(defaults.rag_embedding_dimensions),
+            )
+        ),
+        rag_embedding_batch_size=int(
+            _get_value(
+                dotenv_values,
+                "RAG_EMBEDDING_BATCH_SIZE",
+                str(defaults.rag_embedding_batch_size),
+            )
+        ),
+        rag_candidate_size=int(
+            _get_value(
+                dotenv_values,
+                "RAG_CANDIDATE_SIZE",
+                str(defaults.rag_candidate_size),
+            )
+        ),
+        rag_rrf_k=int(
+            _get_value(dotenv_values, "RAG_RRF_K", str(defaults.rag_rrf_k))
+        ),
+        rag_rerank_enabled=_get_value(
+            dotenv_values,
+            "RAG_RERANK_ENABLED",
+            str(defaults.rag_rerank_enabled),
+        ).lower()
+        in {"1", "true", "yes", "on"},
+        rag_rerank_model=_get_value(
+            dotenv_values,
+            "RAG_RERANK_MODEL",
+            defaults.rag_rerank_model,
+        ),
+        rag_rerank_base_url=_get_value(
+            dotenv_values,
+            "RAG_RERANK_BASE_URL",
+            defaults.rag_rerank_base_url,
+        ),
+        rag_rerank_api_key=_get_value(
+            dotenv_values,
+            "RAG_RERANK_API_KEY",
+            defaults.rag_rerank_api_key,
+        ),
+        rag_rerank_timeout_seconds=float(
+            _get_value(
+                dotenv_values,
+                "RAG_RERANK_TIMEOUT_SECONDS",
+                str(defaults.rag_rerank_timeout_seconds),
             )
         ),
         rabbitmq_url=_get_value(dotenv_values, "RABBITMQ_URL", defaults.rabbitmq_url),

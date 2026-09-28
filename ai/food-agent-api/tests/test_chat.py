@@ -42,7 +42,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = get_settings()
 
-    assert settings.app_version == "0.17.0"
+    assert settings.app_version == "0.18.0"
     assert settings.es_enabled is False
     assert settings.es_index_shop == "food_shop_index"
     assert Settings().llm_router_enabled is False
@@ -56,6 +56,7 @@ def test_chat_routes_to_recommend_agent() -> None:
     data = response.json()
     assert data["intent"] == "recommend"
     assert data["agent"] == "recommend"
+    assert data["rag_mode"] == "recommend_agent_bm25_no_hit"
     assert (
         "\u6682\u672a\u4ece ES \u68c0\u7d22\u5230\u53ef\u7528\u4e8e\u63a8\u8350"
         in data["response"]
@@ -282,7 +283,7 @@ def test_rag_retriever_searches_recommend_indices() -> None:
                 "food_coupon_index",
             ],
             "query": "\u5ddd\u83dc\u9986",
-            "size": 10,
+            "size": 25,
             "original_query": None,
             "filters": None,
         }
@@ -354,7 +355,7 @@ def test_recommend_chain_uses_rag_hits_with_template_fallback() -> None:
     ).run("\u63a8\u8350\u5ddd\u83dc")
 
     assert "\u6839\u636e\u68c0\u7d22\u7ed3\u679c" in result.response
-    assert result.rag_mode == "recommend_agent_llm_rag"
+    assert result.rag_mode == "recommend_agent_bm25_llm"
     assert result.rewritten_query == "\u63a8\u8350\u5ddd\u83dc"
     assert result.capabilities == ["shop_recommendation", "cuisine_filter"]
     assert result.references == [
@@ -560,7 +561,7 @@ def test_support_agent_uses_rag_hits(monkeypatch) -> None:
             "score": 5.0,
         }
     ]
-    assert result["rag_mode"] == "support_agent_llm_rag"
+    assert result["rag_mode"] == "support_agent_bm25_llm"
 
 
 def test_support_chain_explains_generic_order_status_from_rules_only() -> None:

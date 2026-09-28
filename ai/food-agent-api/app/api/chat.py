@@ -32,6 +32,7 @@ class ChatResponse(BaseModel):
     response: str
     router_source: str
     router_confidence: float
+    rag_mode: str
     references: list[Reference] = Field(default_factory=list)
 
 
@@ -68,12 +69,13 @@ def chat(chat_request: ChatRequest, request: Request) -> ChatResponse:
     latency_ms = (time.perf_counter() - start_time) * 1000
     logger.info(
         "agent_chat_completed request_id=%s conversation_id=%s intent=%s "
-        "agent=%s router_source=%s latency_ms=%.2f",
+        "agent=%s router_source=%s rag_mode=%s latency_ms=%.2f",
         request_id,
         conversation_id,
         result["intent"],
         result["agent"],
         result["router_source"],
+        result.get("rag_mode", ""),
         latency_ms,
     )
 
@@ -84,5 +86,6 @@ def chat(chat_request: ChatRequest, request: Request) -> ChatResponse:
         response=result["response"],
         router_source=result["router_source"],
         router_confidence=result["router_confidence"],
+        rag_mode=result.get("rag_mode", ""),
         references=result.get("references", []),
     )

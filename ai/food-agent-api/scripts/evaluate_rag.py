@@ -31,20 +31,43 @@ def evaluate(path: Path, top_k: int) -> dict[str, Any]:
         )
         actual_ids = [hit.id for hit in retrieval.hits]
         expected_ids = set(case["expected_ids"])
-        passed = bool(expected_ids.intersection(actual_ids))
+        matched_ids = expected_ids.intersection(actual_ids)
+        recall = len(matched_ids) / len(expected_ids) if expected_ids else 0.0
+        relevant_ranks = [
+            rank
+            for rank, document_id in enumerate(actual_ids, start=1)
+            if document_id in expected_ids
+        ]
+        reciprocal_rank = 1.0 / min(relevant_ranks) if relevant_ranks else 0.0
+        passed = bool(matched_ids)
         results.append(
             {
                 "id": case["id"],
                 "passed": passed,
+                "mode": retrieval.mode,
+                "recall": recall,
+                "reciprocal_rank": reciprocal_rank,
                 "actual_ids": actual_ids,
             }
         )
 
     passed_count = sum(1 for result in results if result["passed"])
+    mean_recall = (
+        sum(float(result["recall"]) for result in results) / len(results)
+        if results
+        else 0.0
+    )
+    mean_reciprocal_rank = (
+        sum(float(result["reciprocal_rank"]) for result in results) / len(results)
+        if results
+        else 0.0
+    )
     return {
         "cases": len(results),
         "passed": passed_count,
-        "recall_at_k": passed_count / len(results) if results else 0.0,
+        "hit_rate_at_k": passed_count / len(results) if results else 0.0,
+        "recall_at_k": mean_recall,
+        "mrr_at_k": mean_reciprocal_rank,
         "top_k": top_k,
         "results": results,
     }

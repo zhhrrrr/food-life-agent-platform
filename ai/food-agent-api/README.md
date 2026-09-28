@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.17.0`
+Current version: `0.18.0`
 
 Current route chain:
 
@@ -17,8 +17,8 @@ HTTP Request
       -> Structured Output compatibility fallback
       -> deterministic rule fallback
 -> Recommend / Trade / Support Agent
--> Recommend query rewrite -> ES BM25 retrieval -> LLM answer
--> Support query rewrite -> ES rule retrieval -> LLM answer
+-> Recommend query rewrite -> Embedding -> ES BM25 + vector retrieval -> RRF -> Rerank -> LLM answer
+-> Support query rewrite -> Embedding -> ES rule BM25 + vector retrieval -> RRF -> Rerank -> LLM answer
 -> Trade query rewrite -> allow-listed Java Gateway GET queries -> LLM answer
 -> Response
 ```
@@ -26,6 +26,7 @@ HTTP Request
 Added by version:
 
 ```text
+0.18.0: BGE-M3 vector retrieval, BM25 hybrid search, RRF fusion, and BGE reranking
 0.17.0: production RAG index lifecycle, scoped retrieval, filtering, context, and citation validation
 0.16.1: hardened direct Java HTTP calls and ES text-field retrieval
 0.16.0: narrowed ES documents to recommendation fields and removed stock-only sync work
@@ -55,7 +56,7 @@ Added by version:
 0.10.0: stage 6 RecommendAgent query rewrite, ES/RAG retrieval, and LLM answer chain
 ```
 
-This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Stage 6 upgrades RecommendAgent to query rewrite -> ES retrieval -> context builder -> LLM answer -> references. SupportAgent owns only ES-backed rules, status meanings, and FAQ answers. TradeAgent exclusively owns current order, price, stock, coupon, group-buy, and preview reads through allow-listed Java Gateway GET queries. Version 0.17.0 adds strict ES mappings, atomic versioned-index rebuilds, paginated reconciliation, filtered and diversified retrieval, bounded evidence context, citation validation, and retrieval evaluation. ES package, activity, and coupon documents remain focused on recommendation discovery and exclude current stock and coupon supply counters. MCP, SSE, Human Confirmation, and business action tools are still future stages.
+This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. LangChain provides model integration while LangGraph orchestrates the agent flow. RecommendAgent and SupportAgent now run query rewrite -> BGE-M3 query embedding -> BM25 and vector retrieval -> reciprocal rank fusion -> BGE reranking -> bounded context -> LLM answer -> validated references. TradeAgent exclusively owns current order, price, stock, coupon, group-buy, and preview reads through allow-listed Java Gateway GET queries. ES package, activity, and coupon documents remain focused on recommendation discovery and exclude current stock and coupon supply counters. MCP, SSE, Human Confirmation, and business action tools are still future stages.
 
 Elasticsearch support is present but disabled by default. Set `ES_ENABLED=true` only after Elasticsearch is available and the indexes have data.
 
@@ -99,7 +100,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.17.0
+APP_VERSION=0.18.0
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false
@@ -139,6 +140,16 @@ ES_BULK_CHUNK_SIZE=200
 ES_REBUILD_KEEP_VERSIONS=2
 ES_SEARCH_MIN_SCORE=0.1
 RAG_CONTEXT_MAX_CHARS=8000
+RAG_HYBRID_ENABLED=false
+RAG_EMBEDDING_DIMENSIONS=1024
+RAG_EMBEDDING_BATCH_SIZE=32
+RAG_CANDIDATE_SIZE=25
+RAG_RRF_K=60
+RAG_RERANK_ENABLED=false
+RAG_RERANK_MODEL=BAAI/bge-reranker-v2-m3
+RAG_RERANK_BASE_URL=https://api.siliconflow.cn/v1
+RAG_RERANK_API_KEY=
+RAG_RERANK_TIMEOUT_SECONDS=10
 RABBITMQ_URL=amqp://guest:guest@127.0.0.1:5672/%2F
 REDIS_URL=redis://127.0.0.1:6379/0
 ES_SYNC_CONSUMER_ENABLED=false
@@ -297,6 +308,7 @@ When ES returns matches, `POST /api/agent/chat` also includes:
 
 ```json
 {
+  "rag_mode": "recommend_agent_hybrid_rrf_rerank_llm",
   "references": [
     {
       "id": "shop-1",
@@ -309,6 +321,8 @@ When ES returns matches, `POST /api/agent/chat` also includes:
 ```
 
 RecommendAgent searches shop, package, review, activity, and coupon indexes. These indexes are search projections for discovery: they contain public descriptions, prices, scopes, validity windows, and popularity data, but no package/activity stock or coupon supply counters. RecommendAgent can rewrite questions for shop/package recommendation, cuisine filtering, budget filtering, scene recommendation, review semantic search, and shop comparison before ES retrieval. It must not claim current availability from ES. SupportAgent searches only the platform rule index for refund, group-buy, payment, generic order-status meanings, and platform FAQ; it does not receive Authorization or query Java order APIs. If ES is disabled or no document matches, these agents return a clear no-evidence template instead of pretending to have generated an answer.
+
+When `RAG_HYBRID_ENABLED=true`, every indexed document receives an embedding generated from its title, category, and content. Each query independently retrieves BM25 and cosine-similarity candidates, combines their ranks through RRF, and then optionally calls the configured reranker when `RAG_RERANK_ENABLED=true`. If query embedding, vector search, or reranking fails, retrieval degrades to the available BM25/RRF results. Changing the embedding model or dimensions requires a full index rebuild.
 
 TradeAgent queries current price, stock, coupons, group-buy teams/orders, user orders, and read-only order previews through `JAVA_GATEWAY_BASE_URL`. Its Java client exposes only fixed GET methods and forwards the incoming Authorization header for protected user queries. Order preview composes the package trade snapshot, a pre-discount estimate in cents, and candidate user coupons without claiming a final payable amount, creating an order, or reserving stock. Create, cancel, pay, and refund requests are rejected before any Gateway call.
 

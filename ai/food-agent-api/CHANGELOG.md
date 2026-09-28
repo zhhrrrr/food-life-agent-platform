@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.18.0
+
+- Added BGE-M3 document/query embeddings and Elasticsearch 7.17 `dense_vector` cosine retrieval.
+- Added parallel BM25 and vector candidate channels with application-level reciprocal rank fusion.
+- Added SiliconFlow BGE reranking with validated result indices and BM25/RRF degradation on provider failure.
+- Added configurable candidate sizing, embedding dimensions/batches, RRF rank constant, and reranker provider settings.
+- Exposed the executed retrieval mode in agent state and expanded evaluation with hit rate, recall, and MRR.
+
 ## 0.17.0
 
 - Added strict per-scope Elasticsearch mappings with CJK text analysis and typed business metadata.

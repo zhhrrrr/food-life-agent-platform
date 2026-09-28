@@ -60,7 +60,7 @@ class SupportChain:
         if not retrieval.has_hits:
             return AgentChainResult(
                 response=_no_evidence_message(),
-                rag_mode="support_agent_llm_rag",
+                rag_mode=f"support_agent_{retrieval.mode}_no_hit",
                 query=message,
                 rewritten_query=rewrite.search_query,
                 capabilities=list(rewrite.capabilities),
@@ -75,7 +75,7 @@ class SupportChain:
         reference_dicts = [reference.model_dump() for reference in references]
         return AgentChainResult(
             response=answer.answer,
-            rag_mode="support_agent_llm_rag",
+            rag_mode=f"support_agent_{retrieval.mode}_llm",
             query=message,
             rewritten_query=rewrite.search_query,
             capabilities=list(rewrite.capabilities),
