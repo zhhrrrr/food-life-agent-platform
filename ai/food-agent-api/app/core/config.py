@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.19.2"
+    app_version: str = "0.19.3"
     app_port: int = 8500
     log_level: str = "INFO"
     # 本地env 文件中配置的llm_router_enabled优先级高于此处的默认值
@@ -74,7 +74,7 @@ class Settings(BaseModel):
     rag_rerank_base_url: str = ""
     rag_rerank_api_key: str = ""
     rag_rerank_timeout_seconds: float = Field(default=10.0, gt=0)
-    rag_rerank_min_score: float = Field(default=0.1, ge=0.0, le=1.0)
+    rag_rerank_min_score: float = Field(default=0.2, ge=0.0, le=1.0)
     rabbitmq_url: str = "amqp://guest:guest@127.0.0.1:5672/%2F"
     redis_url: str = "redis://127.0.0.1:6379/0"
     es_sync_consumer_enabled: bool = False

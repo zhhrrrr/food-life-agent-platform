@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.19.2`
+Current version: `0.19.3`
 
 Current route chain:
 
@@ -26,6 +26,7 @@ HTTP Request
 Added by version:
 
 ```text
+0.19.3: calibrated final evidence threshold and out-of-domain RAG rejection evaluation
 0.19.2: local Milvus Lite development runtime with a production Milvus-compatible configuration boundary
 0.19.1: retrieval cleanup, evidence/reference consistency, and relevance floors
 0.19.0: independent Milvus vector store with dual-store rebuild, sync, and reconciliation
@@ -66,8 +67,10 @@ Elasticsearch and Milvus support are disabled by default. Enable each store only
 Run the deterministic retrieval quality gate after rebuilding the indexes:
 
 ```bash
-python scripts/evaluate_rag.py --min-recall 0.9
+python scripts/evaluate_rag.py --min-recall 0.9 --min-rejection-rate 1.0
 ```
+
+The evaluation set contains positive retrieval cases and out-of-domain negative cases. A release passes only when positive recall and negative rejection rate both meet their configured gates.
 
 ## Requirements
 
@@ -103,7 +106,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.19.2
+APP_VERSION=0.19.3
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false
@@ -166,7 +169,7 @@ RAG_RERANK_MODEL=BAAI/bge-reranker-v2-m3
 RAG_RERANK_BASE_URL=https://api.siliconflow.cn/v1
 RAG_RERANK_API_KEY=
 RAG_RERANK_TIMEOUT_SECONDS=10
-RAG_RERANK_MIN_SCORE=0.1
+RAG_RERANK_MIN_SCORE=0.2
 RABBITMQ_URL=amqp://guest:guest@127.0.0.1:5672/%2F
 REDIS_URL=redis://127.0.0.1:6379/0
 ES_SYNC_CONSUMER_ENABLED=false

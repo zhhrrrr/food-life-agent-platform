@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.19.3
+
+- Raised the final reranker evidence floor to `0.2` after positive and out-of-domain score calibration.
+- Added negative retrieval cases and an explicit rejection-rate release gate to the RAG evaluator.
+- Kept low-confidence retrieval on the existing no-evidence response path instead of generating an unsupported answer.
+
 ## 0.19.2
 
 - Added a separate local dependency profile for running Milvus Lite as a Windows gRPC development service.

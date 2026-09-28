@@ -10,3 +10,6 @@
 {"id":"support-group-timeout","agent":"support","query":"\u62fc\u56e2\u8d85\u65f6\u5904\u7406","capabilities":["group_buy_rule"],"expected_ids":["rule-group-buy-timeout"]}
 {"id":"support-review-publish","agent":"support","query":"\u8bc4\u4ef7\u53d1\u5e03\u89c4\u5219","capabilities":["platform_faq"],"expected_ids":["rule-shop-review-publish"]}
 {"id":"support-es-lock","agent":"support","query":"ES \u5bf9\u8d26\u5206\u5e03\u5f0f\u9501","capabilities":["platform_faq"],"expected_ids":["rule-es-sync-lock"]}
+{"id":"reject-recommend-physics","agent":"recommend","query":"\u91cf\u5b50\u529b\u5b66\u4e2d\u7684\u859b\u5b9a\u8c14\u65b9\u7a0b\u600e\u4e48\u6c42\u89e3","capabilities":["shop_recommendation"],"expected_ids":[],"should_reject":true}
+{"id":"reject-recommend-weather","agent":"recommend","query":"\u660e\u5929\u5929\u6c14\u600e\u4e48\u6837","capabilities":["shop_recommendation"],"expected_ids":[],"should_reject":true}
+{"id":"reject-support-code","agent":"support","query":"\u5e2e\u6211\u5199\u4e00\u6bb5 Java \u5feb\u901f\u6392\u5e8f","capabilities":["platform_faq"],"expected_ids":[],"should_reject":true}

@@ -112,6 +112,40 @@ def test_reranker_uses_provider_order_and_score() -> None:
     assert client.request["json"]["return_documents"] is False
 
 
+def test_reranker_rejects_all_low_confidence_evidence() -> None:
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, Any]:
+            return {
+                "results": [
+                    {"index": 0, "relevance_score": 0.19},
+                    {"index": 1, "relevance_score": 0.05},
+                ]
+            }
+
+    class FakeHttpClient:
+        def post(self, url: str, **kwargs: Any) -> FakeResponse:
+            return FakeResponse()
+
+    result = RagReranker(
+        Settings(
+            rag_rerank_enabled=True,
+            rag_rerank_min_score=0.2,
+            rag_rerank_api_key="test-key",
+        ),
+        http_client=FakeHttpClient(),
+    ).rerank(
+        "unrelated question",
+        [_hit("shop-1", 0.03), _hit("shop-2", 0.02)],
+        size=2,
+    )
+
+    assert result.applied is True
+    assert result.hits == []
+
+
 def test_retriever_runs_hybrid_rrf_and_rerank() -> None:
     class FakeEmbeddingService:
         def embed_query(self, text: str) -> list[float]:
