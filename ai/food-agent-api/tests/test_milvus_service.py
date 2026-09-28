@@ -2,7 +2,7 @@ from typing import Any
 
 from app.core.config import Settings
 from app.search.schemas import SearchDocument, SearchFilters
-from app.vector.collection_names import collection_aliases_for_indices
+from app.vector.collection_names import collection_aliases_for_scopes
 from app.vector.milvus_service import MilvusVectorService
 
 
@@ -37,17 +37,30 @@ class FakeMilvusClient:
 
     def search(self, **kwargs: Any) -> list[list[dict[str, Any]]]:
         self.search_request = kwargs
-        return [[{
-            "id": "package-1",
-            "distance": 0.91,
-            "entity": {
+        return [[
+            {
                 "id": "package-1",
-                "title": "Two-person dinner",
-                "content": "Hot pot set",
-                "source": "food_package_index",
-                "metadata": {"price": 9900},
+                "distance": 0.91,
+                "entity": {
+                    "id": "package-1",
+                    "title": "Two-person dinner",
+                    "content": "Hot pot set",
+                    "source": "food_package_index",
+                    "metadata": {"price": 9900},
+                },
             },
-        }]]
+            {
+                "id": "package-noise",
+                "distance": 0.1,
+                "entity": {
+                    "id": "package-noise",
+                    "title": "Noise",
+                    "content": "Unrelated",
+                    "source": "food_package_index",
+                    "metadata": {},
+                },
+            },
+        ]]
 
     def query(self, **kwargs: Any) -> list[dict[str, str]]:
         return []
@@ -143,6 +156,7 @@ def test_milvus_search_uses_alias_cosine_and_scalar_filters() -> None:
     )
 
     assert hits[0].id == "package-1"
+    assert [hit.id for hit in hits] == ["package-1"]
     assert hits[0].score == 0.91
     assert client.search_request is not None
     assert client.search_request["collection_name"] == "food_package_vectors"
@@ -162,10 +176,10 @@ def test_milvus_alias_promotes_new_collection_and_returns_previous() -> None:
     assert client.aliases["food_shop_vectors"] == "food_shop_vectors_v2"
 
 
-def test_collection_aliases_follow_selected_elasticsearch_scopes() -> None:
-    aliases = collection_aliases_for_indices(
+def test_collection_aliases_follow_selected_scopes() -> None:
+    aliases = collection_aliases_for_scopes(
         Settings(),
-        ["food_review_index", "food_shop_index", "food_review_index"],
+        ["reviews", "shops", "reviews"],
     )
 
     assert aliases == ["food_review_vectors", "food_shop_vectors"]

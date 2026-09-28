@@ -13,20 +13,11 @@ def collection_alias_for_scope(settings: Settings, scope: str) -> str:
     return f"{settings.milvus_collection_prefix}_{suffixes[scope]}"
 
 
-def collection_aliases_for_indices(
+def collection_aliases_for_scopes(
     settings: Settings,
-    indices: list[str],
+    scopes: list[str],
 ) -> list[str]:
-    scopes_by_index = {
-        settings.es_index_shop: "shops",
-        settings.es_index_package: "packages",
-        settings.es_index_review: "reviews",
-        settings.es_index_activity: "activities",
-        settings.es_index_coupon: "coupons",
-        settings.es_index_rule: "rules",
-    }
     return [
-        collection_alias_for_scope(settings, scopes_by_index[index])
-        for index in dict.fromkeys(indices)
-        if index in scopes_by_index
+        collection_alias_for_scope(settings, scope)
+        for scope in dict.fromkeys(scopes)
     ]

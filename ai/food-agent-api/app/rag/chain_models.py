@@ -1,6 +1,11 @@
-from typing import TypeVar
+import logging
+from collections.abc import Sequence
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, Field, field_validator
+
+from app.core.config import Settings
+from app.llm.structured_output import invoke_structured_output_with_fallback
 
 Capability = TypeVar("Capability", bound=str)
 
@@ -78,3 +83,33 @@ def validate_answer_references(
     if not used or not used.issubset(available):
         return fallback
     return answer
+
+
+def invoke_grounded_answer(
+    *,
+    settings: Settings,
+    messages: Sequence[tuple[str, str]],
+    fallback_answer: str,
+    reference_ids: list[str],
+    operation: str,
+    logger: logging.Logger,
+    chat_model: Any | None = None,
+) -> AgentAnswer:
+    fallback = AgentAnswer(
+        answer=fallback_answer,
+        used_reference_ids=reference_ids,
+    )
+    answer = invoke_structured_output_with_fallback(
+        settings=settings,
+        schema=AgentAnswer,
+        messages=messages,
+        fallback=fallback,
+        operation=operation,
+        logger=logger,
+        chat_model=chat_model,
+    )
+    return validate_answer_references(
+        answer,
+        available_reference_ids=reference_ids,
+        fallback=fallback,
+    )

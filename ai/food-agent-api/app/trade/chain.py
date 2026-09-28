@@ -8,9 +8,9 @@ from pydantic import Field
 from app.core.config import Settings, get_settings
 from app.llm.structured_output import invoke_structured_output_with_fallback
 from app.rag.chain_models import (
-    AgentAnswer,
     AgentChainResult,
     QueryRewriteBase,
+    invoke_grounded_answer,
     merge_capabilities,
     select_references,
 )
@@ -115,7 +115,15 @@ class TradeChain:
         facts = _facts(successful_results)
         context = _context_summary(facts)
         references = _references(successful_results)
-        answer = self.generate_answer(message, rewrite, context, references)
+        answer = invoke_grounded_answer(
+            settings=self.settings,
+            messages=_answer_messages(message, rewrite, context),
+            fallback_answer=_template_answer(context),
+            reference_ids=[reference.id for reference in references],
+            operation="trade_answer",
+            logger=logger,
+            chat_model=self.chat_model,
+        )
         reference_dicts = [reference.model_dump() for reference in references]
         return TradeChainResult(
             response=answer.answer,
@@ -150,27 +158,6 @@ class TradeChain:
                     list(fallback.capabilities),
                 )
             }
-        )
-
-    def generate_answer(
-        self,
-        message: str,
-        rewrite: TradeQueryRewrite,
-        context: str,
-        references: list[Reference],
-    ) -> AgentAnswer:
-        fallback = AgentAnswer(
-            answer=_template_answer(context),
-            used_reference_ids=[reference.id for reference in references],
-        )
-        return invoke_structured_output_with_fallback(
-            settings=self.settings,
-            schema=AgentAnswer,
-            messages=_answer_messages(message, rewrite, context),
-            fallback=fallback,
-            operation="trade_answer",
-            logger=logger,
-            chat_model=self.chat_model,
         )
 
     def _query_facts(

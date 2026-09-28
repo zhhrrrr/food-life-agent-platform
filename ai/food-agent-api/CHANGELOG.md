@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.19.1
+
+- Unified retrieval scope selection so Elasticsearch indexes and Milvus collections are derived from one business-scope decision.
+- Removed unused single-index search and skipped RRF when only one retrieval channel returns candidates.
+- Unified prompt context, API context, and references so truncated evidence can never be cited.
+- Shared grounded-answer invocation and reference validation across RecommendAgent, SupportAgent, and TradeAgent.
+- Added configurable vector and reranker relevance floors to reject low-confidence evidence.
+- Reused ChatModel, EmbeddingModel, and reranker HTTP clients instead of rebuilding connection pools per request.
+- Updated RAG prompts and fallback messages to describe hybrid retrieval instead of an Elasticsearch-only path.
+
 ## 0.19.0
 
 - Moved dense vectors and cosine retrieval out of Elasticsearch into independent Milvus collections.

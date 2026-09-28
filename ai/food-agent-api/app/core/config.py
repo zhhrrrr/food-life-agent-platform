@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.19.0"
+    app_version: str = "0.19.1"
     app_port: int = 8500
     log_level: str = "INFO"
     # 本地env 文件中配置的llm_router_enabled优先级高于此处的默认值
@@ -66,12 +66,14 @@ class Settings(BaseModel):
     rag_embedding_dimensions: int = Field(default=1024, ge=1, le=4096)
     rag_embedding_batch_size: int = Field(default=32, ge=1, le=128)
     rag_candidate_size: int = Field(default=25, ge=1, le=100)
+    rag_vector_min_score: float = Field(default=0.2, ge=-1.0, le=1.0)
     rag_rrf_k: int = Field(default=60, ge=1, le=1000)
     rag_rerank_enabled: bool = False
     rag_rerank_model: str = "BAAI/bge-reranker-v2-m3"
     rag_rerank_base_url: str = ""
     rag_rerank_api_key: str = ""
     rag_rerank_timeout_seconds: float = Field(default=10.0, gt=0)
+    rag_rerank_min_score: float = Field(default=0.1, ge=0.0, le=1.0)
     rabbitmq_url: str = "amqp://guest:guest@127.0.0.1:5672/%2F"
     redis_url: str = "redis://127.0.0.1:6379/0"
     es_sync_consumer_enabled: bool = False
@@ -373,6 +375,13 @@ def get_settings() -> Settings:
                 str(defaults.rag_candidate_size),
             )
         ),
+        rag_vector_min_score=float(
+            _get_value(
+                dotenv_values,
+                "RAG_VECTOR_MIN_SCORE",
+                str(defaults.rag_vector_min_score),
+            )
+        ),
         rag_rrf_k=int(
             _get_value(dotenv_values, "RAG_RRF_K", str(defaults.rag_rrf_k))
         ),
@@ -402,6 +411,13 @@ def get_settings() -> Settings:
                 dotenv_values,
                 "RAG_RERANK_TIMEOUT_SECONDS",
                 str(defaults.rag_rerank_timeout_seconds),
+            )
+        ),
+        rag_rerank_min_score=float(
+            _get_value(
+                dotenv_values,
+                "RAG_RERANK_MIN_SCORE",
+                str(defaults.rag_rerank_min_score),
             )
         ),
         rabbitmq_url=_get_value(dotenv_values, "RABBITMQ_URL", defaults.rabbitmq_url),

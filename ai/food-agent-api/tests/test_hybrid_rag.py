@@ -92,6 +92,7 @@ def test_reranker_uses_provider_order_and_score() -> None:
     reranker = RagReranker(
         Settings(
             rag_rerank_enabled=True,
+            rag_rerank_min_score=0.5,
             rag_rerank_api_key="test-key",
             rag_rerank_base_url="https://example.test/v1",
         ),
@@ -104,7 +105,7 @@ def test_reranker_uses_provider_order_and_score() -> None:
     )
 
     assert result.applied is True
-    assert [hit.id for hit in result.hits] == ["shop-2", "shop-1"]
+    assert [hit.id for hit in result.hits] == ["shop-2"]
     assert result.hits[0].score == 0.9
     assert result.hits[0].retrieval_scores["rerank"] == 0.9
     assert client.request is not None
@@ -167,3 +168,32 @@ def test_retriever_runs_hybrid_rrf_and_rerank() -> None:
     assert result.mode == "hybrid_rrf_rerank"
     assert result.candidate_counts == {"bm25": 2, "vector": 2, "fused": 3}
     assert [hit.id for hit in result.hits] == ["shop-2", "shop-1"]
+
+
+def test_retriever_skips_rrf_when_only_vector_channel_has_hits() -> None:
+    class FakeEmbeddingService:
+        def embed_query(self, text: str) -> list[float]:
+            return [1.0, 0.0]
+
+    class EmptySearchService:
+        def search_many(self, *args: Any, **kwargs: Any) -> list[SearchHit]:
+            return []
+
+    class FakeVectorService:
+        def search_many(self, *args: Any, **kwargs: Any) -> list[SearchHit]:
+            return [_hit("shop-1", 0.88)]
+
+    result = RagRetriever(
+        settings=Settings(
+            rag_hybrid_enabled=True,
+            milvus_enabled=True,
+            rag_embedding_dimensions=2,
+        ),
+        search_service=EmptySearchService(),  # type: ignore[arg-type]
+        embedding_service=FakeEmbeddingService(),  # type: ignore[arg-type]
+        vector_service=FakeVectorService(),  # type: ignore[arg-type]
+    ).retrieve("recommend", "quiet dinner", size=3)
+
+    assert result.mode == "vector"
+    assert result.hits[0].score == 0.88
+    assert result.candidate_counts == {"bm25": 0, "vector": 1, "fused": 1}

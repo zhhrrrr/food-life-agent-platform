@@ -3,24 +3,14 @@ from app.core.config import Settings
 MYSQL_SEARCH_SCOPES = ("shops", "packages", "reviews", "activities", "coupons")
 DOCUMENT_SEARCH_SCOPES = ("rules",)
 SEARCH_SCOPES = MYSQL_SEARCH_SCOPES + DOCUMENT_SEARCH_SCOPES
+RECOMMEND_SEARCH_SCOPES = MYSQL_SEARCH_SCOPES
 
 
-def recommend_indices(settings: Settings) -> list[str]:
-    return [
-        settings.es_index_shop,
-        settings.es_index_package,
-        settings.es_index_review,
-        settings.es_index_activity,
-        settings.es_index_coupon,
-    ]
-
-
-def recommend_indices_for_capabilities(
-    settings: Settings,
+def recommend_scopes_for_capabilities(
     capabilities: list[str] | None,
 ) -> list[str]:
     if not capabilities:
-        return recommend_indices(settings)
+        return list(RECOMMEND_SEARCH_SCOPES)
 
     scopes_by_capability = {
         "shop_recommendation": ("shops", "packages", "reviews"),
@@ -37,15 +27,12 @@ def recommend_indices_for_capabilities(
         for scope in scopes_by_capability.get(capability, ())
     ]
     if not scopes:
-        return recommend_indices(settings)
-    return [
-        index_name_for_scope(settings, scope)
-        for scope in dict.fromkeys(scopes)
-    ]
+        return list(RECOMMEND_SEARCH_SCOPES)
+    return list(dict.fromkeys(scopes))
 
 
-def support_indices(settings: Settings) -> list[str]:
-    return [settings.es_index_rule]
+def index_names_for_scopes(settings: Settings, scopes: list[str]) -> list[str]:
+    return [index_name_for_scope(settings, scope) for scope in scopes]
 
 
 def index_name_for_scope(settings: Settings, scope: str) -> str:

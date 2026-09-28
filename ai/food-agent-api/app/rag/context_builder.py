@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 from html import escape
 from typing import Any
 
@@ -89,26 +90,20 @@ _MONEY_FIELDS = {
 }
 
 
-def build_context_items(hits: list[SearchHit]) -> list[dict[str, object]]:
-    return [
-        {
-            "rank": index,
-            "id": hit.id,
-            "title": hit.title,
-            "source": hit.source,
-            "content": hit.content,
-            "score": hit.score,
-            "metadata": public_metadata(hit),
-        }
-        for index, hit in enumerate(hits, start=1)
-    ]
+@dataclass(frozen=True)
+class RagContext:
+    prompt: str
+    hits: list[SearchHit]
+    items: list[dict[str, object]]
+    references: list[Reference]
 
 
-def build_context_summary(hits: list[SearchHit], max_chars: int = 8000) -> str:
+def build_context(hits: list[SearchHit], max_chars: int = 8000) -> RagContext:
     if not hits:
-        return ""
+        return RagContext(prompt="", hits=[], items=[], references=[])
 
     blocks: list[str] = []
+    included_hits: list[SearchHit] = []
     used_chars = 0
     for index, hit in enumerate(hits, start=1):
         remaining = max_chars - used_chars
@@ -120,20 +115,33 @@ def build_context_summary(hits: list[SearchHit], max_chars: int = 8000) -> str:
         if len(block) > remaining:
             break
         blocks.append(block)
+        included_hits.append(hit)
         used_chars += len(block) + 1
-    return "\n".join(blocks)
-
-
-def build_references(hits: list[SearchHit]) -> list[Reference]:
-    return [
-        Reference(
-            id=hit.id,
-            title=hit.title,
-            source=hit.source,
-            score=hit.score,
-        )
-        for hit in hits
-    ]
+    return RagContext(
+        prompt="\n".join(blocks),
+        hits=included_hits,
+        items=[
+            {
+                "rank": index,
+                "id": hit.id,
+                "title": hit.title,
+                "source": hit.source,
+                "content": hit.content,
+                "score": hit.score,
+                "metadata": public_metadata(hit),
+            }
+            for index, hit in enumerate(included_hits, start=1)
+        ],
+        references=[
+            Reference(
+                id=hit.id,
+                title=hit.title,
+                source=hit.source,
+                score=hit.score,
+            )
+            for hit in included_hits
+        ],
+    )
 
 
 def public_metadata(hit: SearchHit) -> dict[str, Any]:

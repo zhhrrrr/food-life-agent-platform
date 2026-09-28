@@ -173,7 +173,13 @@ class MilvusVectorService:
                 consistency_level=self.settings.milvus_consistency_level,
                 timeout=self.settings.milvus_timeout_seconds,
             )
-            hits.extend(self._to_search_hit(raw) for raw in (result[0] if result else []))
+            hits.extend(
+                hit
+                for hit in (
+                    self._to_search_hit(raw) for raw in (result[0] if result else [])
+                )
+                if hit.score >= self.settings.rag_vector_min_score
+            )
         return sorted(hits, key=lambda hit: hit.score, reverse=True)[:size]
 
     def count_documents(self, collection: str) -> int:

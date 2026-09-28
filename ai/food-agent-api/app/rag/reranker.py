@@ -1,4 +1,6 @@
 import logging
+import math
+from functools import lru_cache
 from typing import Any
 
 import httpx
@@ -67,12 +69,17 @@ class RagReranker:
         except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
             logger.warning("rag_rerank_failed error=%s", type(exc).__name__)
             return RerankResult(hits=hits[:size])
-        return RerankResult(hits=reranked[:size], applied=True)
+        relevant = [
+            hit
+            for hit in reranked
+            if hit.retrieval_scores.get("rerank", -1.0)
+            >= self.settings.rag_rerank_min_score
+        ]
+        return RerankResult(hits=relevant[:size], applied=True)
 
     def _post(self, url: str, **kwargs: Any) -> Any:
-        if self.http_client is not None:
-            return self.http_client.post(url, **kwargs)
-        return httpx.post(
+        client = self.http_client or _shared_http_client()
+        return client.post(
             url,
             timeout=self.settings.rag_rerank_timeout_seconds,
             **kwargs,
@@ -90,6 +97,8 @@ class RagReranker:
         for result in results:
             index = int(result["index"])
             score = float(result["relevance_score"])
+            if not math.isfinite(score) or not 0.0 <= score <= 1.0:
+                raise ValueError("rerank response contains an invalid relevance score")
             if index < 0 or index >= len(hits) or index in used_indices:
                 raise ValueError("rerank response contains an invalid document index")
             used_indices.add(index)
@@ -111,3 +120,8 @@ class RagReranker:
 
 def _rerank_text(hit: SearchHit) -> str:
     return f"{hit.title}\n{hit.content}"[:12000]
+
+
+@lru_cache(maxsize=1)
+def _shared_http_client() -> httpx.Client:
+    return httpx.Client()

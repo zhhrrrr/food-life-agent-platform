@@ -19,8 +19,8 @@ def test_search_uses_only_text_fields(monkeypatch) -> None:
     client = FakeElasticsearch()
     monkeypatch.setattr("app.search.search_service.get_es_client", lambda: client)
 
-    hits = SearchService(Settings(es_enabled=True)).search(
-        index="food_shop_index",
+    hits = SearchService(Settings(es_enabled=True)).search_many(
+        ["food_shop_index"],
         query="hot pot dinner",
     )
 

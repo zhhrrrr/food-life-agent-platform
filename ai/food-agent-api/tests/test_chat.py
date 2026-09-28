@@ -18,13 +18,16 @@ from app.rag.chain_models import (
     select_references,
     validate_answer_references,
 )
-from app.rag.context_builder import build_context_summary, build_references
+from app.rag.context_builder import build_context
 from app.rag.retriever import RagRetriever, RetrievalResult
 from app.recommend.chain import (
     RecommendChain,
     RecommendQueryRewrite,
 )
-from app.search.index_names import recommend_indices_for_capabilities
+from app.search.index_names import (
+    index_names_for_scopes,
+    recommend_scopes_for_capabilities,
+)
 from app.search.schemas import SearchHit
 from app.support.chain import SupportChain, SupportQueryRewrite
 
@@ -42,7 +45,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = Settings()
 
-    assert settings.app_version == "0.19.0"
+    assert settings.app_version == "0.19.1"
     assert settings.es_enabled is False
     assert settings.milvus_enabled is False
     assert settings.es_index_shop == "food_shop_index"
@@ -59,7 +62,7 @@ def test_chat_routes_to_recommend_agent() -> None:
     assert data["agent"] == "recommend"
     assert data["rag_mode"] == "recommend_agent_bm25_no_hit"
     assert (
-        "\u6682\u672a\u4ece ES \u68c0\u7d22\u5230\u53ef\u7528\u4e8e\u63a8\u8350"
+        "\u6682\u672a\u4ece\u641c\u7d22\u7cfb\u7edf\u68c0\u7d22\u5230\u53ef\u7528\u4e8e\u63a8\u8350"
         in data["response"]
     )
     assert data["references"] == []
@@ -86,7 +89,7 @@ def test_chat_routes_to_support_agent() -> None:
     assert data["intent"] == "support"
     assert data["agent"] == "support"
     assert (
-        "\u6682\u672a\u4ece ES \u68c0\u7d22\u5230\u76f8\u5173\u5e73\u53f0\u89c4\u5219"
+        "\u6682\u672a\u4ece\u641c\u7d22\u7cfb\u7edf\u68c0\u7d22\u5230\u76f8\u5173\u5e73\u53f0\u89c4\u5219"
         in data["response"]
     )
     assert data["references"] == []
@@ -119,10 +122,10 @@ def test_context_builder_creates_summary_and_references() -> None:
         )
     ]
 
-    context = build_context_summary(hits)
-    references = build_references(hits)
+    context = build_context(hits)
+    references = context.references
 
-    assert context == (
+    assert context.prompt == (
         '<evidence rank="1" id="shop-1" source="food_shop_index">\n'
         "title: Shu Xiang\n"
         "content: Sichuan restaurant for team dinners.\n"
@@ -134,7 +137,7 @@ def test_context_builder_creates_summary_and_references() -> None:
 
 
 def test_context_builder_formats_public_money_metadata() -> None:
-    context = build_context_summary(
+    context = build_context(
         [
             SearchHit(
                 id="package-1",
@@ -147,13 +150,13 @@ def test_context_builder_formats_public_money_metadata() -> None:
         ]
     )
 
-    assert '"price":"168.00 CNY"' in context
-    assert '"shopName":"Shu Xiang"' in context
-    assert "stock" not in context
+    assert '"price":"168.00 CNY"' in context.prompt
+    assert '"shopName":"Shu Xiang"' in context.prompt
+    assert "stock" not in context.prompt
 
 
 def test_context_builder_preserves_evidence_boundary_when_truncated() -> None:
-    context = build_context_summary(
+    context = build_context(
         [
             SearchHit(
                 id="shop-1",
@@ -166,10 +169,35 @@ def test_context_builder_preserves_evidence_boundary_when_truncated() -> None:
         max_chars=300,
     )
 
-    assert len(context) <= 300
-    assert context.endswith("</evidence>")
-    assert "&lt;title&gt;" in context
-    assert "&lt;/evidence&gt;" in context
+    assert len(context.prompt) <= 300
+    assert context.prompt.endswith("</evidence>")
+    assert "&lt;title&gt;" in context.prompt
+    assert "&lt;/evidence&gt;" in context.prompt
+
+
+def test_context_builder_exposes_only_evidence_included_in_prompt() -> None:
+    context = build_context(
+        [
+            SearchHit(
+                id="shop-1",
+                title="First",
+                content="A" * 500,
+                source="food_shop_index",
+            ),
+            SearchHit(
+                id="shop-2",
+                title="Second",
+                content="B" * 500,
+                source="food_shop_index",
+            ),
+        ],
+        max_chars=300,
+    )
+
+    assert [hit.id for hit in context.hits] == ["shop-1"]
+    assert [reference.id for reference in context.references] == ["shop-1"]
+    assert [item["id"] for item in context.items] == ["shop-1"]
+    assert "shop-2" not in context.prompt
 
 
 def test_invalid_llm_reference_ids_use_grounded_fallback() -> None:
@@ -189,10 +217,12 @@ def test_invalid_llm_reference_ids_use_grounded_fallback() -> None:
 
 
 def test_recommend_capability_limits_retrieval_indices() -> None:
-    assert recommend_indices_for_capabilities(
-        Settings(),
-        ["review_semantic_search"],
-    ) == ["food_review_index", "food_shop_index"]
+    scopes = recommend_scopes_for_capabilities(["review_semantic_search"])
+    assert scopes == ["reviews", "shops"]
+    assert index_names_for_scopes(Settings(), scopes) == [
+        "food_review_index",
+        "food_shop_index",
+    ]
 
 
 def test_recommend_retrieval_diversifies_sources() -> None:
@@ -235,6 +265,7 @@ def test_recommend_retrieval_diversifies_sources() -> None:
         "shop-1",
         "package-1",
     ]
+    assert result.hits[0].score == 10
 
 
 class FakeSearchService:

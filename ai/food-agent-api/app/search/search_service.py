@@ -63,14 +63,6 @@ class SearchService:
 
         return [self._to_search_hit(raw_hit) for raw_hit in result["hits"]["hits"]]
 
-    def search(
-        self,
-        index: str,
-        query: str,
-        size: int = 3,
-    ) -> list[SearchHit]:
-        return self.search_many([index], query, size=size)
-
     def create_rebuild_index(self, alias: str, scope: str) -> str:
         client = self._required_client()
         suffix = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
@@ -288,6 +280,7 @@ class SearchService:
             content=str(source.get("content", "")),
             source=str(source.get("source", "")),
             score=float(raw_hit.get("_score") or 0.0),
+            retrieval_scores={"bm25": float(raw_hit.get("_score") or 0.0)},
             metadata=dict(source.get("metadata") or {}),
         )
 

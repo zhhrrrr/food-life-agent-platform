@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import Any
 
 from app.core.config import Settings, get_settings
@@ -34,10 +35,33 @@ def build_chat_model(settings: Settings | None = None) -> Any:
     if not resolved_settings.llm_router_enabled:
         raise ChatModelUnavailableError("LLM router is disabled")
     options = resolve_chat_model_options(resolved_settings)
+    return _cached_chat_model(
+        str(options["model"]),
+        str(options["api_key"]),
+        str(options["base_url"] or ""),
+        float(options["temperature"]),
+        float(options["timeout"]),
+    )
+
+
+@lru_cache(maxsize=4)
+def _cached_chat_model(
+    model: str,
+    api_key: str,
+    base_url: str,
+    temperature: float,
+    timeout: float,
+) -> Any:
 
     try:
         from langchain_openai import ChatOpenAI
     except ImportError as exc:
         raise ChatModelUnavailableError("langchain-openai is not installed") from exc
 
-    return ChatOpenAI(**options)
+    return ChatOpenAI(
+        model=model,
+        api_key=api_key,
+        base_url=base_url or None,
+        temperature=temperature,
+        timeout=timeout,
+    )

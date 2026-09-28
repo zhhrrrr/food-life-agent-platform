@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import Any
 
 from app.core.config import Settings, get_settings
@@ -43,6 +44,22 @@ def resolve_embedding_model_options(settings: Settings) -> dict[str, Any]:
 
 def build_embedding_model(settings: Settings | None = None) -> Any:
     resolved_settings = settings or get_settings()
+    options = resolve_embedding_model_options(resolved_settings)
+    return _cached_embedding_model(
+        str(options["model"]),
+        str(options["api_key"]),
+        str(options["base_url"] or ""),
+        float(options["request_timeout"]),
+    )
+
+
+@lru_cache(maxsize=4)
+def _cached_embedding_model(
+    model: str,
+    api_key: str,
+    base_url: str,
+    request_timeout: float,
+) -> Any:
     try:
         from langchain_openai import OpenAIEmbeddings
     except ImportError as exc:
@@ -50,4 +67,11 @@ def build_embedding_model(settings: Settings | None = None) -> Any:
             "langchain-openai is not installed"
         ) from exc
 
-    return OpenAIEmbeddings(**resolve_embedding_model_options(resolved_settings))
+    return OpenAIEmbeddings(
+        model=model,
+        api_key=api_key,
+        base_url=base_url or None,
+        request_timeout=request_timeout,
+        max_retries=2,
+        check_embedding_ctx_length=False,
+    )

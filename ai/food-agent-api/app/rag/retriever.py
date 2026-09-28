@@ -7,10 +7,13 @@ from app.core.config import Settings, get_settings
 from app.rag.embedding import RagEmbeddingService
 from app.rag.fusion import reciprocal_rank_fusion
 from app.rag.reranker import RagReranker
-from app.search.index_names import recommend_indices_for_capabilities, support_indices
+from app.search.index_names import (
+    index_names_for_scopes,
+    recommend_scopes_for_capabilities,
+)
 from app.search.schemas import SearchFilters, SearchHit
 from app.search.search_service import SearchService
-from app.vector.collection_names import collection_aliases_for_indices
+from app.vector.collection_names import collection_aliases_for_scopes
 from app.vector.milvus_service import MilvusVectorService
 
 logger = logging.getLogger("food_agent.rag.retriever")
@@ -19,7 +22,6 @@ logger = logging.getLogger("food_agent.rag.retriever")
 class RetrievalResult(BaseModel):
     agent: str
     query: str
-    indices: list[str] = Field(default_factory=list)
     hits: list[SearchHit] = Field(default_factory=list)
     mode: str = "bm25"
     candidate_counts: dict[str, int] = Field(default_factory=dict)
@@ -59,9 +61,10 @@ class RagRetriever:
         filters: SearchFilters | None = None,
     ) -> RetrievalResult:
         started = monotonic()
-        indices = self._indices_for_agent(agent, capabilities)
-        if not indices:
+        scopes = self._scopes_for_agent(agent, capabilities)
+        if not scopes:
             return RetrievalResult(agent=agent, query=query)
+        indices = index_names_for_scopes(self.settings, scopes)
 
         candidate_size = max(size, self.settings.rag_candidate_size)
         lexical_hits = self.search_service.search_many(
@@ -71,7 +74,6 @@ class RagRetriever:
             original_query=original_query,
             filters=filters,
         )
-        rankings = [("bm25", lexical_hits)]
         vector_hits: list[SearchHit] = []
         if self.vector_service is not None and self.embedding_service is not None:
             try:
@@ -79,7 +81,7 @@ class RagRetriever:
                     _embedding_query(query, original_query)
                 )
                 vector_hits = self.vector_service.search_many(
-                    collection_aliases_for_indices(self.settings, indices),
+                    collection_aliases_for_scopes(self.settings, scopes),
                     query_vector,
                     size=candidate_size,
                     filters=filters,
@@ -90,13 +92,13 @@ class RagRetriever:
                     agent,
                     type(exc).__name__,
                 )
-        if vector_hits:
-            rankings.append(("vector", vector_hits))
-
-        fused_hits = reciprocal_rank_fusion(
-            rankings,
-            rank_constant=self.settings.rag_rrf_k,
-        )
+        if lexical_hits and vector_hits:
+            fused_hits = reciprocal_rank_fusion(
+                [("bm25", lexical_hits), ("vector", vector_hits)],
+                rank_constant=self.settings.rag_rrf_k,
+            )
+        else:
+            fused_hits = lexical_hits or vector_hits
         rerank_result = self.reranker.rerank(
             original_query or query,
             fused_hits,
@@ -109,6 +111,7 @@ class RagRetriever:
             else reranked_hits[:size]
         )
         mode = _retrieval_mode(
+            has_lexical=bool(lexical_hits),
             has_vector=bool(vector_hits),
             rerank_applied=rerank_result.applied,
         )
@@ -127,7 +130,6 @@ class RagRetriever:
         return RetrievalResult(
             agent=agent,
             query=query,
-            indices=indices,
             hits=hits,
             mode=mode,
             candidate_counts={
@@ -137,15 +139,15 @@ class RagRetriever:
             },
         )
 
-    def _indices_for_agent(
-        self,
+    @staticmethod
+    def _scopes_for_agent(
         agent: str,
         capabilities: list[str] | None,
     ) -> list[str]:
         if agent == "recommend":
-            return recommend_indices_for_capabilities(self.settings, capabilities)
+            return recommend_scopes_for_capabilities(capabilities)
         if agent == "support":
-            return support_indices(self.settings)
+            return ["rules"]
         return []
 
     @staticmethod
@@ -178,6 +180,16 @@ def _embedding_query(query: str, original_query: str | None) -> str:
     return f"{query}\n{original_query}"
 
 
-def _retrieval_mode(*, has_vector: bool, rerank_applied: bool) -> str:
-    base = "hybrid_rrf" if has_vector else "bm25"
+def _retrieval_mode(
+    *,
+    has_lexical: bool,
+    has_vector: bool,
+    rerank_applied: bool,
+) -> str:
+    if has_lexical and has_vector:
+        base = "hybrid_rrf"
+    elif has_vector:
+        base = "vector"
+    else:
+        base = "bm25"
     return f"{base}_rerank" if rerank_applied else base

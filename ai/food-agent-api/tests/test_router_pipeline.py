@@ -1,5 +1,5 @@
 from collections import Counter
-from typing import Any
+from typing import Any, ClassVar
 
 from fastapi.testclient import TestClient
 
@@ -12,9 +12,10 @@ from app.graph.route_examples import (
 )
 from app.graph.router import ROUTING_TOOLS, route_intent
 from app.graph.semantic_router import SemanticRouteMatch, SemanticRouter
-from app.llm.chat_model import ZHIPU_OPENAI_COMPATIBLE_BASE_URL
+from app.llm.chat_model import ZHIPU_OPENAI_COMPATIBLE_BASE_URL, build_chat_model
 from app.llm.embedding_model import (
     SILICONFLOW_OPENAI_COMPATIBLE_BASE_URL,
+    build_embedding_model,
     resolve_embedding_model_options,
 )
 from app.main import app
@@ -123,6 +124,23 @@ def test_siliconflow_embedding_options_use_official_compatible_url() -> None:
     assert options["check_embedding_ctx_length"] is False
 
 
+def test_llm_clients_are_reused_for_identical_configuration() -> None:
+    chat_settings = Settings(
+        llm_router_enabled=True,
+        llm_model="cache-test-chat",
+        llm_api_key="cache-test-key",
+    )
+    embedding_settings = Settings(
+        embedding_model="cache-test-embedding",
+        embedding_api_key="cache-test-key",
+    )
+
+    assert build_chat_model(chat_settings) is build_chat_model(chat_settings)
+    assert build_embedding_model(embedding_settings) is build_embedding_model(
+        embedding_settings
+    )
+
+
 def test_low_confidence_semantic_route_uses_llm_function_calling() -> None:
     history = [
         ConversationTurn(
@@ -148,7 +166,7 @@ def test_low_confidence_semantic_route_uses_llm_function_calling() -> None:
             )
 
     class ToolResponse:
-        tool_calls = [
+        tool_calls: ClassVar[list[dict[str, object]]] = [
             {
                 "name": "route_trade",
                 "args": {
