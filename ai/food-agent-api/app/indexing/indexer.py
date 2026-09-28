@@ -1,4 +1,5 @@
 import json
+import logging
 
 from pydantic import BaseModel, Field
 
@@ -8,6 +9,8 @@ from app.indexing.rule_document_source import list_rule_documents
 from app.search.index_names import SEARCH_SCOPES, index_name_for_scope
 from app.search.schemas import SearchDocument
 from app.search.search_service import SearchService
+
+logger = logging.getLogger("food_agent.indexing")
 
 
 class IndexScopeResult(BaseModel):
@@ -87,21 +90,65 @@ class SearchIndexer:
     def rebuild(
         self,
         scopes: list[str] | None = None,
-        limit: int | None = None,
+        page_size: int | None = None,
     ) -> IndexRebuildResult:
         scope_results: list[IndexScopeResult] = []
 
         for scope in self._normalize_scopes(scopes):
-            index = index_name_for_scope(self.settings, scope)
-            documents = self._fetch_documents(scope=scope, limit=limit)
-            indexed, failed = self.search_service.index_documents(
-                index=index,
-                documents=documents,
+            alias = index_name_for_scope(self.settings, scope)
+            documents = self._fetch_all_documents(
+                scope=scope,
+                page_size=page_size or self.settings.es_reconcile_page_size,
             )
+            physical_index = self.search_service.create_rebuild_index(alias, scope)
+            try:
+                indexed, failed = self.search_service.index_documents(
+                    index=physical_index,
+                    documents=documents,
+                )
+                self.search_service.refresh_index(physical_index)
+                stored = self.search_service.count_documents(physical_index)
+                if failed or indexed != len(documents) or stored != len(documents):
+                    logger.error(
+                        "es_rebuild_validation_failed scope=%s fetched=%s indexed=%s stored=%s failed=%s",
+                        scope,
+                        len(documents),
+                        indexed,
+                        stored,
+                        failed,
+                    )
+                    self.search_service.discard_index(physical_index)
+                    validation_failures = max(
+                        failed,
+                        len(documents) - min(indexed, stored),
+                        1,
+                    )
+                    scope_results.append(
+                        IndexScopeResult(
+                            scope=scope,
+                            index=alias,
+                            fetched=len(documents),
+                            indexed=min(indexed, stored),
+                            failed=validation_failures,
+                        )
+                    )
+                    continue
+                self.search_service.promote_index(alias, physical_index)
+            except Exception:
+                self.search_service.discard_index(physical_index)
+                raise
+            try:
+                self.search_service.cleanup_old_indices(
+                    alias,
+                    current_index=physical_index,
+                    keep=self.settings.es_rebuild_keep_versions,
+                )
+            except Exception:
+                logger.exception("es_old_index_cleanup_failed scope=%s", scope)
             scope_results.append(
                 IndexScopeResult(
                     scope=scope,
-                    index=index,
+                    index=alias,
                     fetched=len(documents),
                     indexed=indexed,
                     failed=failed,
@@ -237,7 +284,7 @@ class SearchIndexer:
         if prune_stale:
             for document_id in self.search_service.list_document_ids(
                 index=index,
-                size=self.settings.es_reconcile_scan_size,
+                size=page_size,
             ):
                 if document_id in expected_ids:
                     continue
@@ -265,6 +312,22 @@ class SearchIndexer:
             limit=limit,
             offset=offset,
         )
+
+    def _fetch_all_documents(self, scope: str, page_size: int) -> list[SearchDocument]:
+        normalized_page_size = self._normalize_page_size(page_size)
+        documents: list[SearchDocument] = []
+        offset = 0
+        while True:
+            page = self._fetch_documents(
+                scope=scope,
+                limit=normalized_page_size,
+                offset=offset,
+            )
+            documents.extend(page)
+            if len(page) < normalized_page_size:
+                break
+            offset += normalized_page_size
+        return documents
 
     @staticmethod
     def _normalize_page_size(page_size: int) -> int:

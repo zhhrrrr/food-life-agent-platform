@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.16.1`
+Current version: `0.17.0`
 
 Current route chain:
 
@@ -26,6 +26,7 @@ HTTP Request
 Added by version:
 
 ```text
+0.17.0: production RAG index lifecycle, scoped retrieval, filtering, context, and citation validation
 0.16.1: hardened direct Java HTTP calls and ES text-field retrieval
 0.16.0: narrowed ES documents to recommendation fields and removed stock-only sync work
 0.15.0: removed duplicate Support order reads and shared repeated chain fallback logic
@@ -54,9 +55,15 @@ Added by version:
 0.10.0: stage 6 RecommendAgent query rewrite, ES/RAG retrieval, and LLM answer chain
 ```
 
-This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Stage 6 upgrades RecommendAgent to query rewrite -> ES retrieval -> context builder -> LLM answer -> references. SupportAgent owns only ES-backed rules, status meanings, and FAQ answers. TradeAgent exclusively owns current order, price, stock, coupon, group-buy, and preview reads through allow-listed Java Gateway GET queries. Version 0.16.0 keeps ES package, activity, and coupon documents focused on recommendation discovery and excludes current stock and coupon supply counters. MCP, SSE, Human Confirmation, and business action tools are still future stages.
+This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python pulls those endpoints and writes Elasticsearch. Stage 4 is a lightweight RAG retrieval chain. Stage 5 uses LangChain for LLM intent routing while LangGraph continues to orchestrate the agent flow. Stage 6 upgrades RecommendAgent to query rewrite -> ES retrieval -> context builder -> LLM answer -> references. SupportAgent owns only ES-backed rules, status meanings, and FAQ answers. TradeAgent exclusively owns current order, price, stock, coupon, group-buy, and preview reads through allow-listed Java Gateway GET queries. Version 0.17.0 adds strict ES mappings, atomic versioned-index rebuilds, paginated reconciliation, filtered and diversified retrieval, bounded evidence context, citation validation, and retrieval evaluation. ES package, activity, and coupon documents remain focused on recommendation discovery and exclude current stock and coupon supply counters. MCP, SSE, Human Confirmation, and business action tools are still future stages.
 
 Elasticsearch support is present but disabled by default. Set `ES_ENABLED=true` only after Elasticsearch is available and the indexes have data.
+
+Run the deterministic retrieval quality gate after rebuilding the indexes:
+
+```bash
+python scripts/evaluate_rag.py --min-recall 0.9
+```
 
 ## Requirements
 
@@ -92,7 +99,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.16.1
+APP_VERSION=0.17.0
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false
@@ -126,6 +133,12 @@ ES_INDEX_RULE=food_rule_index
 ES_INDEX_REVIEW=food_review_index
 ES_INDEX_ACTIVITY=food_activity_index
 ES_INDEX_COUPON=food_coupon_index
+ES_NUMBER_OF_SHARDS=1
+ES_NUMBER_OF_REPLICAS=0
+ES_BULK_CHUNK_SIZE=200
+ES_REBUILD_KEEP_VERSIONS=2
+ES_SEARCH_MIN_SCORE=0.1
+RAG_CONTEXT_MAX_CHARS=8000
 RABBITMQ_URL=amqp://guest:guest@127.0.0.1:5672/%2F
 REDIS_URL=redis://127.0.0.1:6379/0
 ES_SYNC_CONSUMER_ENABLED=false
@@ -139,7 +152,6 @@ ES_RECONCILE_LOCK_KEY=food-agent-api:es-reconciliation:lock
 ES_RECONCILE_LOCK_TTL_SECONDS=1800
 ES_RECONCILE_PAGE_SIZE=200
 ES_RECONCILE_PRUNE_STALE=true
-ES_RECONCILE_SCAN_SIZE=10000
 ```
 
 Zhipu GLM router example:
@@ -249,7 +261,7 @@ Rebuild ES indexes from Java exports:
 ```bash
 curl -X POST http://127.0.0.1:8500/api/agent/indexes/rebuild \
   -H "Content-Type: application/json" \
-  -d "{\"scopes\":[\"shops\",\"packages\",\"reviews\",\"activities\",\"coupons\"],\"limit\":200}"
+  -d "{\"scopes\":[\"shops\",\"packages\",\"reviews\",\"activities\",\"coupons\"],\"page_size\":200}"
 ```
 
 Reconcile ES indexes against Java current-state exports:

@@ -1,0 +1,12 @@
+{"id":"recommend-shop-hot-pot","agent":"recommend","query":"hot pot restaurant","capabilities":["shop_recommendation"],"expected_ids":["shop-1"]}
+{"id":"recommend-package-two-person","agent":"recommend","query":"two-person hot pot set","capabilities":["package_recommendation"],"expected_ids":["package-1"]}
+{"id":"recommend-package-four-person","agent":"recommend","query":"four-person hot pot set","capabilities":["package_recommendation"],"expected_ids":["package-2"]}
+{"id":"recommend-review-hot-pot","agent":"recommend","query":"Chengdu spicy hot pot review","capabilities":["review_semantic_search"],"expected_ids":["shop-1","review-12","review-11"]}
+{"id":"support-refund-window","agent":"support","query":"\u9000\u6b3e\u7533\u8bf7\u65f6\u6548","capabilities":["refund_rule"],"expected_ids":["rule-refund-apply-window"]}
+{"id":"support-refund-coupon","agent":"support","query":"\u9000\u6b3e\u540e\u4f18\u60e0\u5238\u8fd4\u8fd8","capabilities":["refund_rule"],"expected_ids":["rule-refund-coupon-return"]}
+{"id":"support-order-timeout","agent":"support","query":"\u8ba2\u5355\u8d85\u65f6\u5173\u95ed","capabilities":["order_status_explanation"],"expected_ids":["rule-order-timeout-close"]}
+{"id":"support-payment-callback","agent":"support","query":"\u652f\u4ed8\u56de\u8c03\u5e42\u7b49","capabilities":["payment_rule"],"expected_ids":["rule-payment-callback-idempotent"]}
+{"id":"support-coupon-scope","agent":"support","query":"\u4f18\u60e0\u5238\u9002\u7528\u8303\u56f4","capabilities":["platform_faq"],"expected_ids":["rule-coupon-use-scope"]}
+{"id":"support-group-timeout","agent":"support","query":"\u62fc\u56e2\u8d85\u65f6\u5904\u7406","capabilities":["group_buy_rule"],"expected_ids":["rule-group-buy-timeout"]}
+{"id":"support-review-publish","agent":"support","query":"\u8bc4\u4ef7\u53d1\u5e03\u89c4\u5219","capabilities":["platform_faq"],"expected_ids":["rule-shop-review-publish"]}
+{"id":"support-es-lock","agent":"support","query":"ES \u5bf9\u8d26\u5206\u5e03\u5f0f\u9501","capabilities":["platform_faq"],"expected_ids":["rule-es-sync-lock"]}

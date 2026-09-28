@@ -1,4 +1,92 @@
+import json
+from html import escape
+from typing import Any
+
 from app.search.schemas import Reference, SearchHit
+
+_METADATA_FIELDS_BY_ID_PREFIX = {
+    "shop-": (
+        "shopId",
+        "shopName",
+        "categoryName",
+        "area",
+        "address",
+        "avgPrice",
+        "score",
+        "openHours",
+    ),
+    "package-": (
+        "packageId",
+        "packageName",
+        "shopId",
+        "shopName",
+        "price",
+        "originalPrice",
+        "sold",
+        "status",
+        "useRule",
+    ),
+    "review-": (
+        "reviewId",
+        "reviewNo",
+        "shopId",
+        "shopName",
+        "packageId",
+        "packageName",
+        "score",
+        "createTime",
+    ),
+    "group-buy-activity-": (
+        "activityId",
+        "activityType",
+        "packageId",
+        "targetCount",
+        "userTakeLimit",
+        "activityPrice",
+        "validStartTime",
+        "validEndTime",
+    ),
+    "seckill-activity-": (
+        "activityId",
+        "activityType",
+        "packageId",
+        "userTakeLimit",
+        "activityPrice",
+        "validStartTime",
+        "validEndTime",
+    ),
+    "coupon-template-": (
+        "couponId",
+        "couponName",
+        "couponType",
+        "thresholdAmount",
+        "discountAmount",
+        "scopeType",
+        "scopeShopId",
+        "scopePackageId",
+        "userReceiveLimit",
+        "validStartTime",
+        "validEndTime",
+    ),
+    "rule-": (
+        "doc_type",
+        "domain",
+        "tags",
+        "source_type",
+        "language",
+        "version",
+        "effectiveStartTime",
+        "effectiveEndTime",
+    ),
+}
+_MONEY_FIELDS = {
+    "avgPrice",
+    "price",
+    "originalPrice",
+    "activityPrice",
+    "thresholdAmount",
+    "discountAmount",
+}
 
 
 def build_context_items(hits: list[SearchHit]) -> list[dict[str, object]]:
@@ -10,21 +98,30 @@ def build_context_items(hits: list[SearchHit]) -> list[dict[str, object]]:
             "source": hit.source,
             "content": hit.content,
             "score": hit.score,
-            "metadata": hit.metadata,
+            "metadata": public_metadata(hit),
         }
         for index, hit in enumerate(hits, start=1)
     ]
 
 
-def build_context_summary(hits: list[SearchHit]) -> str:
+def build_context_summary(hits: list[SearchHit], max_chars: int = 8000) -> str:
     if not hits:
         return ""
 
-    lines = []
+    blocks: list[str] = []
+    used_chars = 0
     for index, hit in enumerate(hits, start=1):
-        source = f" [{hit.source}]" if hit.source else ""
-        lines.append(f"{index}. {hit.title}{source}: {hit.content}")
-    return "\n".join(lines)
+        remaining = max_chars - used_chars
+        if remaining <= 0:
+            break
+        block = _build_evidence_block(hit, index, remaining)
+        if not block:
+            break
+        if len(block) > remaining:
+            break
+        blocks.append(block)
+        used_chars += len(block) + 1
+    return "\n".join(blocks)
 
 
 def build_references(hits: list[SearchHit]) -> list[Reference]:
@@ -37,3 +134,58 @@ def build_references(hits: list[SearchHit]) -> list[Reference]:
         )
         for hit in hits
     ]
+
+
+def public_metadata(hit: SearchHit) -> dict[str, Any]:
+    fields = next(
+        (
+            allowed
+            for prefix, allowed in _METADATA_FIELDS_BY_ID_PREFIX.items()
+            if hit.id.startswith(prefix)
+        ),
+        (),
+    )
+    return {
+        field: _display_value(field, hit.metadata[field])
+        for field in fields
+        if hit.metadata.get(field) is not None
+    }
+
+
+def _display_value(field: str, value: Any) -> Any:
+    if field in _MONEY_FIELDS and isinstance(value, int | float):
+        return f"{value / 100:.2f} CNY"
+    return value
+
+
+def _build_evidence_block(hit: SearchHit, rank: int, max_chars: int) -> str:
+    title = escape(hit.title, quote=False)
+    content = escape(hit.content, quote=False)
+    facts = escape(
+        json.dumps(public_metadata(hit), ensure_ascii=False, separators=(",", ":")),
+        quote=False,
+    )
+    opening = (
+        f'<evidence rank="{rank}" id="{escape(hit.id, quote=True)}" '
+        f'source="{escape(hit.source, quote=True)}">\n'
+    )
+
+    def render(body: str, metadata: str = facts) -> str:
+        return (
+            f"{opening}title: {title}\n"
+            f"content: {body}\n"
+            f"facts: {metadata}\n"
+            "</evidence>"
+        )
+
+    block = render(content)
+    if len(block) <= max_chars:
+        return block
+
+    empty_content = render("")
+    if len(empty_content) > max_chars:
+        empty_content = render("", "{}")
+    available_content_chars = max_chars - len(empty_content)
+    if available_content_chars <= 1:
+        return ""
+    return render(f"{content[: available_content_chars - 1]}…", "{}" if facts not in empty_content else facts)

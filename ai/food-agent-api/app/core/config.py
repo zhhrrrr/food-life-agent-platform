@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.16.1"
+    app_version: str = "0.17.0"
     app_port: int = 8500
     log_level: str = "INFO"
     # 本地env 文件中配置的llm_router_enabled优先级高于此处的默认值
@@ -42,6 +42,12 @@ class Settings(BaseModel):
     es_index_review: str = "food_review_index"
     es_index_activity: str = "food_activity_index"
     es_index_coupon: str = "food_coupon_index"
+    es_number_of_shards: int = Field(default=1, ge=1)
+    es_number_of_replicas: int = Field(default=0, ge=0)
+    es_bulk_chunk_size: int = Field(default=200, ge=1, le=1000)
+    es_rebuild_keep_versions: int = Field(default=2, ge=1, le=10)
+    es_search_min_score: float = Field(default=0.1, ge=0.0)
+    rag_context_max_chars: int = Field(default=8000, ge=1000, le=30000)
     rabbitmq_url: str = "amqp://guest:guest@127.0.0.1:5672/%2F"
     redis_url: str = "redis://127.0.0.1:6379/0"
     es_sync_consumer_enabled: bool = False
@@ -55,7 +61,6 @@ class Settings(BaseModel):
     es_reconcile_lock_ttl_seconds: int = 1800
     es_reconcile_page_size: int = 200
     es_reconcile_prune_stale: bool = True
-    es_reconcile_scan_size: int = 10000
 
 
 def _read_dotenv(path: Path) -> dict[str, str]:
@@ -221,6 +226,48 @@ def get_settings() -> Settings:
             defaults.es_index_activity,
         ),
         es_index_coupon=_get_value(dotenv_values, "ES_INDEX_COUPON", defaults.es_index_coupon),
+        es_number_of_shards=int(
+            _get_value(
+                dotenv_values,
+                "ES_NUMBER_OF_SHARDS",
+                str(defaults.es_number_of_shards),
+            )
+        ),
+        es_number_of_replicas=int(
+            _get_value(
+                dotenv_values,
+                "ES_NUMBER_OF_REPLICAS",
+                str(defaults.es_number_of_replicas),
+            )
+        ),
+        es_bulk_chunk_size=int(
+            _get_value(
+                dotenv_values,
+                "ES_BULK_CHUNK_SIZE",
+                str(defaults.es_bulk_chunk_size),
+            )
+        ),
+        es_rebuild_keep_versions=int(
+            _get_value(
+                dotenv_values,
+                "ES_REBUILD_KEEP_VERSIONS",
+                str(defaults.es_rebuild_keep_versions),
+            )
+        ),
+        es_search_min_score=float(
+            _get_value(
+                dotenv_values,
+                "ES_SEARCH_MIN_SCORE",
+                str(defaults.es_search_min_score),
+            )
+        ),
+        rag_context_max_chars=int(
+            _get_value(
+                dotenv_values,
+                "RAG_CONTEXT_MAX_CHARS",
+                str(defaults.rag_context_max_chars),
+            )
+        ),
         rabbitmq_url=_get_value(dotenv_values, "RABBITMQ_URL", defaults.rabbitmq_url),
         redis_url=_get_value(dotenv_values, "REDIS_URL", defaults.redis_url),
         es_sync_consumer_enabled=_get_value(
@@ -289,11 +336,4 @@ def get_settings() -> Settings:
             str(defaults.es_reconcile_prune_stale),
         ).lower()
         in {"1", "true", "yes", "on"},
-        es_reconcile_scan_size=int(
-            _get_value(
-                dotenv_values,
-                "ES_RECONCILE_SCAN_SIZE",
-                str(defaults.es_reconcile_scan_size),
-            )
-        ),
     )

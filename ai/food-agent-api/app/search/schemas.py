@@ -21,6 +21,11 @@ class SearchHit(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class SearchFilters(BaseModel):
+    max_price_cents: int | None = Field(default=None, ge=0)
+    active_only: bool = True
+
+
 class Reference(BaseModel):
     id: str
     title: str

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.17.0
+
+- Added strict per-scope Elasticsearch mappings with CJK text analysis and typed business metadata.
+- Replaced in-place rebuilds with paged export, Bulk indexing, count validation, atomic write-alias promotion, and bounded rollback index retention.
+- Replaced per-index search loops with one DFS multi-index request that combines original and rewritten queries, active-time filtering, status filtering, and validated budget constraints.
+- Made recommendation capabilities select relevant indexes and diversified candidate evidence across document sources.
+- Added source-specific context metadata allowlists, context size limits, untrusted-evidence prompting, and strict LLM reference ID validation.
+- Replaced the reconciliation ID scan limit with PIT and search-after pagination.
+
 ## 0.16.1
 
 - Forced Java export and Trade Gateway HTTP calls to bypass environment proxies so loopback and private service addresses are reached directly.

@@ -15,6 +15,35 @@ def recommend_indices(settings: Settings) -> list[str]:
     ]
 
 
+def recommend_indices_for_capabilities(
+    settings: Settings,
+    capabilities: list[str] | None,
+) -> list[str]:
+    if not capabilities:
+        return recommend_indices(settings)
+
+    scopes_by_capability = {
+        "shop_recommendation": ("shops", "packages", "reviews"),
+        "package_recommendation": ("packages", "shops", "activities", "coupons"),
+        "cuisine_filter": ("shops", "packages", "reviews"),
+        "budget_filter": ("packages", "shops", "activities", "coupons"),
+        "scene_recommendation": ("shops", "packages", "reviews"),
+        "review_semantic_search": ("reviews", "shops"),
+        "shop_comparison": ("shops", "packages", "reviews"),
+    }
+    scopes = [
+        scope
+        for capability in capabilities
+        for scope in scopes_by_capability.get(capability, ())
+    ]
+    if not scopes:
+        return recommend_indices(settings)
+    return [
+        index_name_for_scope(settings, scope)
+        for scope in dict.fromkeys(scopes)
+    ]
+
+
 def support_indices(settings: Settings) -> list[str]:
     return [settings.es_index_rule]
 

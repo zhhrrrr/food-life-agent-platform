@@ -63,7 +63,18 @@ def select_references(
     used_reference_ids: list[str],
 ) -> list[dict[str, object]]:
     if not used_reference_ids:
-        return references
+        return []
     used = set(used_reference_ids)
-    selected = [reference for reference in references if str(reference.get("id")) in used]
-    return selected or references
+    return [reference for reference in references if str(reference.get("id")) in used]
+
+
+def validate_answer_references(
+    answer: AgentAnswer,
+    available_reference_ids: list[str],
+    fallback: AgentAnswer,
+) -> AgentAnswer:
+    available = set(available_reference_ids)
+    used = set(answer.used_reference_ids)
+    if not used or not used.issubset(available):
+        return fallback
+    return answer

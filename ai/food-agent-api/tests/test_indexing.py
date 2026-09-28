@@ -54,6 +54,31 @@ class FakeSearchService:
         self.delete_calls: list[tuple[str, str]] = []
         self.documents: dict[str, dict[str, SearchDocument]] = {}
         self.ids_by_index: dict[str, set[str]] = {}
+        self.created: list[tuple[str, str, str]] = []
+        self.promoted: list[tuple[str, str]] = []
+        self.discarded: list[str] = []
+        self.cleaned: list[tuple[str, str, int]] = []
+        self.bulk_failure = False
+
+    def create_rebuild_index(self, alias: str, scope: str) -> str:
+        physical_index = f"{alias}_v1"
+        self.created.append((alias, scope, physical_index))
+        return physical_index
+
+    def promote_index(self, alias: str, physical_index: str) -> None:
+        self.promoted.append((alias, physical_index))
+
+    def discard_index(self, index: str) -> None:
+        self.discarded.append(index)
+
+    def cleanup_old_indices(self, alias: str, current_index: str, keep: int) -> None:
+        self.cleaned.append((alias, current_index, keep))
+
+    def refresh_index(self, index: str) -> None:
+        return None
+
+    def count_documents(self, index: str) -> int:
+        return len(self.documents.get(index, {}))
 
     def index_documents(
         self,
@@ -61,6 +86,8 @@ class FakeSearchService:
         documents: list[SearchDocument],
     ) -> tuple[int, int]:
         self.calls.append((index, [document.id for document in documents]))
+        if self.bulk_failure:
+            return 0, len(documents)
         self.documents.setdefault(index, {}).update({document.id: document for document in documents})
         return len(documents), 0
 
@@ -93,15 +120,23 @@ def test_indexer_rebuilds_selected_scopes() -> None:
         settings=settings,
     )
 
-    result = indexer.rebuild(scopes=["shops", "coupons"], limit=50)
+    result = indexer.rebuild(scopes=["shops", "coupons"], page_size=50)
 
     assert result.fetched == 2
     assert result.indexed == 2
     assert result.failed == 0
-    assert export_client.calls == [("shops", 50, None), ("coupons", 50, None)]
+    assert export_client.calls == [("shops", 50, 0), ("coupons", 50, 0)]
     assert search_service.calls == [
-        ("food_shop_index", ["shops-1"]),
-        ("food_coupon_index", ["coupons-1"]),
+        ("food_shop_index_v1", ["shops-1"]),
+        ("food_coupon_index_v1", ["coupons-1"]),
+    ]
+    assert search_service.promoted == [
+        ("food_shop_index", "food_shop_index_v1"),
+        ("food_coupon_index", "food_coupon_index_v1"),
+    ]
+    assert search_service.cleaned == [
+        ("food_shop_index", "food_shop_index_v1", 2),
+        ("food_coupon_index", "food_coupon_index_v1", 2),
     ]
 
 
@@ -120,6 +155,22 @@ def test_indexer_rejects_unknown_scope() -> None:
         raise AssertionError("expected ValueError")
 
 
+def test_indexer_does_not_switch_alias_when_bulk_validation_fails() -> None:
+    search_service = FakeSearchService()
+    search_service.bulk_failure = True
+    indexer = SearchIndexer(
+        export_client=FakeExportClient(),
+        search_service=search_service,
+        settings=Settings(),
+    )
+
+    result = indexer.rebuild(scopes=["shops"], page_size=50)
+
+    assert result.failed == 1
+    assert search_service.promoted == []
+    assert search_service.discarded == ["food_shop_index_v1"]
+
+
 def test_indexer_rebuilds_seeded_rule_documents_without_java_export() -> None:
     export_client = FakeExportClient()
     search_service = FakeSearchService()
@@ -129,24 +180,20 @@ def test_indexer_rebuilds_seeded_rule_documents_without_java_export() -> None:
         settings=Settings(),
     )
 
-    result = indexer.rebuild(scopes=["rules"], limit=3)
+    result = indexer.rebuild(scopes=["rules"], page_size=3)
 
-    assert result.fetched == 3
-    assert result.indexed == 3
+    assert result.fetched >= 3
+    assert result.indexed == result.fetched
     assert result.failed == 0
     assert export_client.calls == []
-    assert search_service.calls == [
-        (
-            "food_rule_index",
-            [
-                "rule-refund-apply-window",
-                "rule-refund-payment-route",
-                "rule-refund-coupon-return",
-            ],
-        )
+    assert search_service.calls[0][0] == "food_rule_index_v1"
+    assert search_service.calls[0][1][:3] == [
+        "rule-refund-apply-window",
+        "rule-refund-payment-route",
+        "rule-refund-coupon-return",
     ]
     assert (
-        search_service.documents["food_rule_index"]["rule-refund-apply-window"].metadata[
+        search_service.documents["food_rule_index_v1"]["rule-refund-apply-window"].metadata[
             "doc_type"
         ]
         == "platform_rule"

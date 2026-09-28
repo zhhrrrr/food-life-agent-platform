@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.core.errors import FoodAgentError
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/agent/indexes", tags=["indexes"])
 
 class RebuildIndexesRequest(BaseModel):
     scopes: list[str] | None = Field(default=None)
-    limit: int | None = Field(default=None, ge=1, le=1000)
+    page_size: int | None = Field(default=None, ge=1, le=1000)
 
 
 class RebuildIndexesResponse(BaseModel):
@@ -41,14 +41,14 @@ class ReconcileIndexesResponse(BaseModel):
 
 @router.post("/rebuild", response_model=RebuildIndexesResponse)
 def rebuild_indexes(
-    request: RebuildIndexesRequest | None = Body(default=None),
+    request: RebuildIndexesRequest | None = None,
 ) -> RebuildIndexesResponse:
     rebuild_request = request or RebuildIndexesRequest()
 
     try:
         result = SearchIndexer().rebuild(
             scopes=rebuild_request.scopes,
-            limit=rebuild_request.limit,
+            page_size=rebuild_request.page_size,
         )
     except ValueError as exc:
         raise FoodAgentError(code="INDEX_SCOPE_INVALID", message=str(exc)) from exc
@@ -61,7 +61,7 @@ def rebuild_indexes(
 
 @router.post("/reconcile", response_model=ReconcileIndexesResponse)
 def reconcile_indexes(
-    request: ReconcileIndexesRequest | None = Body(default=None),
+    request: ReconcileIndexesRequest | None = None,
 ) -> ReconcileIndexesResponse:
     reconcile_request = request or ReconcileIndexesRequest()
 
