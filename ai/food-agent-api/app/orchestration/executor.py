@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable, Mapping
-from concurrent.futures import Future, ThreadPoolExecutor, wait
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from time import monotonic
 
 from app.orchestration.models import (
     AgentTask,
@@ -26,7 +27,7 @@ class DynamicDagExecutor:
         max_parallel_tasks: int = 3,
         max_replans: int = 1,
     ) -> None:
-        self.registry = registry or CAPABILITY_REGISTRY
+        self.registry = registry if registry is not None else CAPABILITY_REGISTRY
         self.max_parallel_tasks = max(1, max_parallel_tasks)
         self.max_replans = max(0, max_replans)
 
@@ -163,31 +164,52 @@ class DynamicDagExecutor:
             ): task
             for task in tasks
         }
-        timeout = max(task.timeout_seconds for task in tasks)
-        done, pending = wait(future_by_task, timeout=timeout)
+        deadline_by_future = {
+            future: monotonic() + task.timeout_seconds
+            for future, task in future_by_task.items()
+        }
+        pending = set(future_by_task)
         wave_results: dict[str, TaskResult] = {}
-        for future in done:
-            task = future_by_task[future]
-            try:
-                wave_results[task.id] = future.result()
-            except Exception as exc:  # noqa: BLE001 - isolate worker failures
+        while pending:
+            now = monotonic()
+            expired = {
+                future
+                for future in pending
+                if deadline_by_future[future] <= now
+            }
+            for future in expired:
+                task = future_by_task[future]
+                future.cancel()
                 wave_results[task.id] = TaskResult(
                     task_id=task.id,
                     agent=task.agent,
                     status="failed",
-                    attempts=task.max_attempts,
-                    error=f"{type(exc).__name__}: {exc}",
+                    attempts=1,
+                    error=f"task timed out after {task.timeout_seconds:g}s",
                 )
-        for future in pending:
-            task = future_by_task[future]
-            future.cancel()
-            wave_results[task.id] = TaskResult(
-                task_id=task.id,
-                agent=task.agent,
-                status="failed",
-                attempts=1,
-                error=f"task timed out after {task.timeout_seconds:g}s",
+            pending -= expired
+            if not pending:
+                break
+
+            next_deadline = min(deadline_by_future[future] for future in pending)
+            done, _ = wait(
+                pending,
+                timeout=max(0.0, next_deadline - monotonic()),
+                return_when=FIRST_COMPLETED,
             )
+            for future in done:
+                pending.remove(future)
+                task = future_by_task[future]
+                try:
+                    wave_results[task.id] = future.result()
+                except Exception as exc:  # noqa: BLE001 - isolate worker failures
+                    wave_results[task.id] = TaskResult(
+                        task_id=task.id,
+                        agent=task.agent,
+                        status="failed",
+                        attempts=task.max_attempts,
+                        error=f"{type(exc).__name__}: {exc}",
+                    )
         executor.shutdown(wait=False, cancel_futures=True)
         return wave_results
 

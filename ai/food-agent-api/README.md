@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.20.0`
+Current version: `0.20.1`
 
 Current route chain:
 
@@ -28,6 +28,7 @@ HTTP Request
 Added by version:
 
 ```text
+0.20.1: removed the obsolete three-way router, tightened order-query routing, and enforced per-task DAG timeouts
 0.20.0: validated dynamic multi-agent DAG orchestration, GeneralAgent fallback, dependency artifacts, parallel execution, and bounded replanning
 0.19.3: calibrated final evidence threshold and out-of-domain RAG rejection evaluation
 0.19.2: local Milvus Lite development runtime with a production Milvus-compatible configuration boundary
@@ -109,7 +110,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.20.0
+APP_VERSION=0.20.1
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false

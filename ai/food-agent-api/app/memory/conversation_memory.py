@@ -38,14 +38,14 @@ class RedisConversationMemory:
             for value in values:
                 try:
                     turns.append(ConversationTurn.model_validate_json(value))
-                except Exception:
+                except Exception:  # noqa: BLE001 - skip malformed persisted turns
                     logger.warning(
                         "conversation_memory_skipped_invalid_turn conversation_id=%s",
                         conversation_id,
                     )
             self._retry_after = 0.0
             return turns[-self._max_turns :]
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - Redis outage must degrade safely
             self._mark_failure()
             logger.warning(
                 "conversation_memory_load_failed conversation_id=%s error=%s",
@@ -79,7 +79,7 @@ class RedisConversationMemory:
             pipeline.expire(key, self._ttl_seconds)
             pipeline.execute()
             self._retry_after = 0.0
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - Redis outage must not fail chat
             self._mark_failure()
             logger.warning(
                 "conversation_memory_append_failed conversation_id=%s error=%s",

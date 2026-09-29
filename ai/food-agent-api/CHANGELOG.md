@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.20.1
+
+- Removed the obsolete three-way Tool Calling router after dynamic planning became the only production orchestration entry point.
+- Preserved Semantic Router coverage directly against DynamicPlanner and removed tests for the retired path.
+- Prevented generic order-status explanations from triggering unnecessary TradeAgent queries while retaining concrete order lookups.
+- Enforced each DAG task's own timeout instead of applying the longest timeout to the entire parallel wave.
+- Reused one plan-agent calculation during response composition and removed the unnecessary lazy GeneralAgent wrapper.
+- Replaced deprecated FastAPI startup and shutdown decorators with one lifespan context.
+
 ## 0.20.0
 
 - Replaced the three-way LangGraph branch with a fixed orchestration control graph that executes validated runtime task DAGs.

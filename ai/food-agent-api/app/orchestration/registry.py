@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from app.agents.general_agent import general_agent_node
 from app.agents.recommend_agent import recommend_agent_node
 from app.agents.support_agent import support_agent_node
 from app.agents.trade_agent import trade_agent_node
@@ -17,19 +18,13 @@ class CapabilitySpec:
     handler: Worker
 
 
-def _general_handler(state: dict[str, object]) -> dict[str, object]:
-    from app.agents.general_agent import general_agent_node
-
-    return general_agent_node(state)
-
-
 CAPABILITY_REGISTRY: dict[str, CapabilitySpec] = {
     "recommend.retrieve": CapabilitySpec("recommend", recommend_agent_node),
     "recommend.rerank": CapabilitySpec("recommend", recommend_agent_node),
     "support.retrieve": CapabilitySpec("support", support_agent_node),
     "support.explain": CapabilitySpec("support", support_agent_node),
     "trade.query": CapabilitySpec("trade", trade_agent_node),
-    "general.respond": CapabilitySpec("general", _general_handler),
+    "general.respond": CapabilitySpec("general", general_agent_node),
 }
 
 

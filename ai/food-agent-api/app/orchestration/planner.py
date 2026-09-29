@@ -18,6 +18,7 @@ from app.orchestration.models import (
     AgentTask,
     ExecutionPlan,
     PlanDraft,
+    PlanSource,
     TaskResult,
 )
 from app.orchestration.registry import DEFAULT_CAPABILITY
@@ -65,7 +66,6 @@ SUPPORT_MARKERS = (
     "拼团规则",
 )
 TRADE_MARKERS = (
-    "订单",
     "库存",
     "实时价格",
     "当前价格",
@@ -92,7 +92,24 @@ ORDER_FACT_PATTERN = re.compile(
     r"(?:订单(?:号|ID|id|编号)?|order(?:\s*id|\s*no)?)\s*[:：]?\s*\d{1,19}",
     re.IGNORECASE,
 )
-ORDER_FACT_MARKERS = ("我的订单", "当前订单", "订单状态", "订单进度", "订单详情")
+ORDER_QUERY_MARKERS = (
+    "查询",
+    "查一下",
+    "查看",
+    "我的订单",
+    "当前订单",
+    "订单进度",
+    "订单详情",
+    "订单到哪",
+)
+ORDER_STATUS_EXPLANATION_MARKERS = (
+    "是什么意思",
+    "代表什么",
+    "怎么理解",
+    "怎么解释",
+    "状态说明",
+    "有哪些状态",
+)
 
 
 class DynamicPlanner:
@@ -244,7 +261,9 @@ def detect_domain_agents(message: str) -> list[AgentName]:
         agents.append("recommend")
     if any(marker.casefold() in message.casefold() for marker in SUPPORT_MARKERS):
         agents.append("support")
-    if any(marker.casefold() in message.casefold() for marker in TRADE_MARKERS):
+    if any(
+        marker.casefold() in message.casefold() for marker in TRADE_MARKERS
+    ) or _is_current_order_query(message):
         agents.append("trade")
     if detect_trade_mutation(message) and "trade" not in agents:
         agents.append("trade")
@@ -332,7 +351,7 @@ def _single_plan(
     agent: AgentName,
     confidence: float,
     reason: str,
-    source: str,
+    source: PlanSource,
 ) -> ExecutionPlan:
     return ExecutionPlan(
         run_id=uuid4().hex,
@@ -347,7 +366,7 @@ def _single_plan(
         ],
         confidence=confidence,
         reason=reason,
-        source=source,  # type: ignore[arg-type]
+        source=source,
     )
 
 
@@ -357,7 +376,7 @@ def _materialize_draft(
     goal: str,
     run_id: str,
     revision: int,
-    source: str,
+    source: PlanSource,
 ) -> ExecutionPlan:
     normalized_ids: dict[str, str] = {}
     used_ids: set[str] = set()
@@ -408,7 +427,7 @@ def _materialize_draft(
         tasks=tasks,
         confidence=draft.confidence,
         reason=draft.reason,
-        source=source,  # type: ignore[arg-type]
+        source=source,
     )
 
 
@@ -439,9 +458,22 @@ def _normalize_capability(agent: AgentName, capability: str) -> str:
 
 
 def _needs_order_facts(message: str) -> bool:
-    return bool(ORDER_FACT_PATTERN.search(message)) or any(
-        marker in message for marker in ORDER_FACT_MARKERS
-    )
+    return _is_current_order_query(message)
+
+
+def _is_current_order_query(message: str) -> bool:
+    lowered = message.casefold()
+    if "订单" not in message and "order" not in lowered:
+        return False
+    if ORDER_FACT_PATTERN.search(message):
+        return True
+    if "订单" in message and any(
+        marker in message for marker in ORDER_STATUS_EXPLANATION_MARKERS
+    ):
+        return False
+    if "规则" in message or "说明" in message:
+        return False
+    return any(marker in message for marker in ORDER_QUERY_MARKERS)
 
 
 def _planner_messages(

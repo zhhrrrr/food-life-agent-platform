@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from time import sleep
+
 from app.core.config import Settings
 from app.orchestration.executor import DynamicDagExecutor
 from app.orchestration.models import AgentTask, ExecutionPlan
@@ -40,6 +42,22 @@ def test_rules_planner_builds_trade_then_support_dag() -> None:
     ] == ["trade", "support"]
     task_by_agent = {task.agent: task for task in plan.tasks}
     assert task_by_agent["support"].depends_on == ["trade_facts"]
+
+
+def test_rules_planner_does_not_query_trade_for_generic_status_meaning() -> None:
+    planner = DynamicPlanner(settings=Settings(llm_router_enabled=False))
+
+    plan = planner.plan("待使用订单状态是什么意思")
+
+    assert [task.agent for task in plan.tasks] == ["support"]
+
+
+def test_rules_planner_routes_current_order_query_to_trade() -> None:
+    planner = DynamicPlanner(settings=Settings(llm_router_enabled=False))
+
+    plan = planner.plan("查询我的订单进度")
+
+    assert [task.agent for task in plan.tasks] == ["trade"]
 
 
 def test_llm_planner_normalizes_draft_before_strict_validation() -> None:
@@ -221,6 +239,43 @@ def test_executor_skips_dependents_after_required_failure() -> None:
     assert result.status == "failed"
     assert downstream_calls == 0
     assert [item.status for item in result.task_results] == ["failed", "skipped"]
+
+
+def test_executor_applies_each_task_timeout_independently() -> None:
+    def short_timeout_worker(state: dict[str, object]) -> dict[str, object]:
+        sleep(0.05)
+        return {"response": "too late"}
+
+    def healthy_worker(state: dict[str, object]) -> dict[str, object]:
+        sleep(0.06)
+        return {"response": "completed"}
+
+    registry = {
+        "recommend.retrieve": CapabilitySpec("recommend", short_timeout_worker),
+        "trade.query": CapabilitySpec("trade", healthy_worker),
+    }
+    plan = _plan(
+        AgentTask(
+            id="short",
+            agent="recommend",
+            capability="recommend.retrieve",
+            objective="must time out",
+            timeout_seconds=0.01,
+        ),
+        AgentTask(
+            id="healthy",
+            agent="trade",
+            capability="trade.query",
+            objective="must complete",
+            timeout_seconds=0.2,
+        ),
+    )
+
+    result = DynamicDagExecutor(registry=registry).execute(plan)
+
+    assert [item.status for item in result.task_results] == ["failed", "succeeded"]
+    assert "timed out" in result.task_results[0].error
+    assert result.status == "partial"
 
 
 def test_executor_applies_one_bounded_replan() -> None:

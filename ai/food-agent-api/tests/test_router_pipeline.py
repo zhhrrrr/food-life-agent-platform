@@ -1,5 +1,5 @@
 from collections import Counter
-from typing import Any, ClassVar
+from typing import Any
 
 from fastapi.testclient import TestClient
 
@@ -10,7 +10,6 @@ from app.graph.route_examples import (
     ROUTE_EXAMPLES,
     validate_route_examples,
 )
-from app.graph.router import ROUTING_TOOLS, route_intent
 from app.graph.semantic_router import SemanticRouteMatch, SemanticRouter
 from app.llm.chat_model import ZHIPU_OPENAI_COMPATIBLE_BASE_URL, build_chat_model
 from app.llm.embedding_model import (
@@ -20,6 +19,7 @@ from app.llm.embedding_model import (
 )
 from app.main import app
 from app.memory.conversation_memory import ConversationTurn, RedisConversationMemory
+from app.orchestration.planner import DynamicPlanner
 from evaluation.semantic_route_cases import SEMANTIC_ROUTE_EVALUATION_CASES
 
 
@@ -54,43 +54,39 @@ def test_semantic_route_evaluation_set_is_balanced_and_independent() -> None:
     assert evaluation_counts == {"recommend": 20, "trade": 20, "support": 20}
     assert len(evaluation_texts) == len(set(evaluation_texts))
     assert route_texts.isdisjoint(evaluation_texts)
-    assert (
-        sum(bool(case.previous_user) for case in SEMANTIC_ROUTE_EVALUATION_CASES) >= 12
-    )
+    assert sum(bool(case.previous_user) for case in SEMANTIC_ROUTE_EVALUATION_CASES) >= 12
 
 
-def test_high_confidence_semantic_route_bypasses_llm() -> None:
+def test_high_confidence_semantic_route_bypasses_llm_planner() -> None:
     class AcceptedSemanticRouter:
         def match(
             self,
             message: str,
             history: list[ConversationTurn],
         ) -> SemanticRouteMatch:
-            assert message == "帮我找一家适合约会的餐厅"
+            assert message == "\u5e2e\u6211\u627e\u4e00\u5bb6\u9002\u5408\u7ea6\u4f1a\u7684\u9910\u5385"
             assert history == []
             return SemanticRouteMatch(
                 intent="recommend",
                 score=0.93,
                 margin=0.18,
-                matched_example="想找适合约会而且环境安静的餐厅",
+                matched_example="\u60f3\u627e\u9002\u5408\u7ea6\u4f1a\u800c\u4e14\u73af\u5883\u5b89\u9759\u7684\u9910\u5385",
                 accepted=True,
             )
 
     class LlmMustNotRun:
-        def bind_tools(self, tools: object, **kwargs: object) -> object:
-            raise AssertionError("high-confidence semantic route must bypass LLM")
+        def with_structured_output(self, schema: object, **kwargs: object) -> object:
+            raise AssertionError("accepted semantic route must bypass the LLM planner")
 
-    result = route_intent(
-        "帮我找一家适合约会的餐厅",
+    plan = DynamicPlanner(
         settings=Settings(llm_router_enabled=True),
         semantic_router=AcceptedSemanticRouter(),  # type: ignore[arg-type]
         chat_model=LlmMustNotRun(),
-    )
+    ).plan("\u5e2e\u6211\u627e\u4e00\u5bb6\u9002\u5408\u7ea6\u4f1a\u7684\u9910\u5385")
 
-    assert result.intent == "recommend"
-    assert result.source == "semantic"
-    assert result.tool == "route_recommend"
-    assert result.semantic_score == 0.93
+    assert plan.source == "semantic"
+    assert plan.confidence == 0.93
+    assert plan.tasks[0].agent == "recommend"
 
 
 def test_zhipu_embedding_options_use_separate_key_and_compatible_url() -> None:
@@ -141,86 +137,6 @@ def test_llm_clients_are_reused_for_identical_configuration() -> None:
     )
 
 
-def test_low_confidence_semantic_route_uses_llm_function_calling() -> None:
-    history = [
-        ConversationTurn(
-            user="套餐 12 值得买吗",
-            assistant="我可以先帮你查询实时价格和库存。",
-            intent="recommend",
-        )
-    ]
-
-    class RejectedSemanticRouter:
-        def match(
-            self,
-            message: str,
-            received_history: list[ConversationTurn],
-        ) -> SemanticRouteMatch:
-            assert received_history == history
-            return SemanticRouteMatch(
-                intent="recommend",
-                score=0.75,
-                margin=0.01,
-                matched_example="预算两百元有什么双人套餐推荐",
-                accepted=False,
-            )
-
-    class ToolResponse:
-        tool_calls: ClassVar[list[dict[str, object]]] = [
-            {
-                "name": "route_trade",
-                "args": {
-                    "confidence": 0.94,
-                    "reason": "The user now asks for current stock.",
-                },
-            }
-        ]
-
-    class BoundModel:
-        def __init__(self) -> None:
-            self.messages: list[tuple[str, str]] = []
-
-        def invoke(self, messages: list[tuple[str, str]]) -> ToolResponse:
-            self.messages = messages
-            return ToolResponse()
-
-    class ToolCallingModel:
-        def __init__(self) -> None:
-            self.bound = BoundModel()
-            self.tools: object = None
-            self.tool_choice = ""
-
-        def bind_tools(self, tools: object, **kwargs: object) -> BoundModel:
-            self.tools = tools
-            self.tool_choice = str(kwargs.get("tool_choice"))
-            return self.bound
-
-    model = ToolCallingModel()
-    result = route_intent(
-        "那现在还有库存吗",
-        settings=Settings(llm_router_enabled=True, llm_api_key="test-key"),
-        semantic_router=RejectedSemanticRouter(),  # type: ignore[arg-type]
-        chat_model=model,
-        conversation_history=history,
-    )
-
-    assert result.intent == "trade"
-    assert result.source == "llm_tool"
-    assert result.tool == "route_trade"
-    assert model.tools == ROUTING_TOOLS
-    assert model.tool_choice == "required"
-    assert ("human", history[0].user) in model.bound.messages
-    assert model.bound.messages[-1] == ("human", "那现在还有库存吗")
-
-
-def test_router_tool_contract_separates_order_query_from_status_meaning() -> None:
-    trade_description = ROUTING_TOOLS[1]["function"]["description"]  # type: ignore[index]
-    support_description = ROUTING_TOOLS[2]["function"]["description"]  # type: ignore[index]
-
-    assert "concrete order/package/team ID" in trade_description
-    assert "Do not use this route" in support_description
-
-
 class FakeEmbeddingModel:
     def __init__(self, query_vector: list[float]) -> None:
         self.query_vector = query_vector
@@ -252,10 +168,15 @@ def test_semantic_router_scores_margin_uses_memory_and_caches_examples() -> None
         ),
         embedding_model=embeddings,
     )
-    history = [ConversationTurn(user="查询套餐 12 的价格", intent="trade")]
+    history = [
+        ConversationTurn(
+            user="\u67e5\u8be2\u5957\u9910 12 \u7684\u4ef7\u683c",
+            intent="trade",
+        )
+    ]
 
-    first = router.match("那库存呢", history)
-    second = router.match("还有优惠券吗", history)
+    first = router.match("\u90a3\u5e93\u5b58\u5462", history)
+    second = router.match("\u8fd8\u6709\u4f18\u60e0\u5238\u5417", history)
 
     assert first is not None
     assert first.intent == "trade"
@@ -263,8 +184,8 @@ def test_semantic_router_scores_margin_uses_memory_and_caches_examples() -> None
     assert first.margin > 0.8
     assert second is not None
     assert embeddings.document_calls == 1
-    assert "查询套餐 12 的价格" in embeddings.queries[0]
-    assert "那库存呢" in embeddings.queries[0]
+    assert "\u67e5\u8be2\u5957\u9910 12 \u7684\u4ef7\u683c" in embeddings.queries[0]
+    assert "\u90a3\u5e93\u5b58\u5462" in embeddings.queries[0]
 
 
 def test_semantic_router_rejects_ambiguous_margin() -> None:
@@ -277,7 +198,7 @@ def test_semantic_router_rejects_ambiguous_margin() -> None:
         embedding_model=FakeEmbeddingModel([1.0, 1.0, 0.0]),
     )
 
-    result = router.match("这个怎么样", [])
+    result = router.match("\u8fd9\u4e2a\u600e\u4e48\u6837", [])
 
     assert result is not None
     assert result.score > 0.7
@@ -303,8 +224,8 @@ def test_semantic_router_failure_enters_cooldown() -> None:
         embedding_model=embeddings,
     )
 
-    assert router.match("推荐川菜", []) is None
-    assert router.match("查询订单", []) is None
+    assert router.match("\u63a8\u8350\u5ddd\u83dc", []) is None
+    assert router.match("\u67e5\u8be2\u8ba2\u5355", []) is None
     assert embeddings.calls == 1
 
 
@@ -404,7 +325,7 @@ def test_chat_api_loads_and_appends_conversation_memory(monkeypatch) -> None:
 
         def load(self, conversation_id: str) -> list[ConversationTurn]:
             assert conversation_id == "conversation-1"
-            return [ConversationTurn(user="查询订单 12345", intent="trade")]
+            return [ConversationTurn(user="\u67e5\u8be2\u8ba2\u5355 12345", intent="trade")]
 
         def append(
             self,
@@ -421,7 +342,7 @@ def test_chat_api_loads_and_appends_conversation_memory(monkeypatch) -> None:
 
     response = TestClient(app).post(
         "/api/agent/chat",
-        json={"message": "那这个呢", "conversation_id": "conversation-1"},
+        json={"message": "\u90a3\u8fd9\u4e2a\u5462", "conversation_id": "conversation-1"},
     )
 
     assert response.status_code == 200
@@ -429,18 +350,20 @@ def test_chat_api_loads_and_appends_conversation_memory(monkeypatch) -> None:
     assert payload["conversation_id"] == "conversation-1"
     assert payload["intent"] == "trade"
     assert payload["router_source"] == "rules"
-    assert memory.appended[0][0:2] == ("conversation-1", "那这个呢")
+    assert memory.appended[0][0:2] == ("conversation-1", "\u90a3\u8fd9\u4e2a\u5462")
     assert memory.appended[0][3] == "trade"
 
 
 def test_rule_fallback_does_not_let_old_topic_override_explicit_new_query() -> None:
-    result = route_intent(
-        "推荐一家川菜馆",
-        settings=Settings(llm_router_enabled=False),
-        conversation_history=[
-            ConversationTurn(user="退款规则是什么", intent="support")
+    plan = DynamicPlanner(settings=Settings(llm_router_enabled=False)).plan(
+        "\u63a8\u8350\u4e00\u5bb6\u5ddd\u83dc\u9986",
+        history=[
+            ConversationTurn(
+                user="\u9000\u6b3e\u89c4\u5219\u662f\u4ec0\u4e48",
+                intent="support",
+            )
         ],
     )
 
-    assert result.intent == "recommend"
-    assert result.source == "rules"
+    assert plan.tasks[0].agent == "recommend"
+    assert plan.source == "rules"

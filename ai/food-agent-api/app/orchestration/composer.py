@@ -14,10 +14,7 @@ def compose_execution_result(execution: DagExecutionResult) -> dict[str, object]
     successful = [
         result for result in execution.task_results if result.status == "succeeded"
     ]
-    agents = []
-    for task in execution.plan.tasks:
-        if task.agent not in agents:
-            agents.append(task.agent)
+    agents = _plan_agents(execution)
     references = _deduplicate_references(successful)
 
     if len(successful) == 1:
@@ -43,7 +40,7 @@ def compose_execution_result(execution: DagExecutionResult) -> dict[str, object]
     return {
         "run_id": execution.plan.run_id,
         "plan_revision": execution.plan.revision,
-        "workflow": _workflow_name(execution),
+        "workflow": _workflow_name(agents),
         "intent": intent if agents else "general",
         "agent": intent if agents else "general",
         "agents": agents,
@@ -56,11 +53,11 @@ def compose_execution_result(execution: DagExecutionResult) -> dict[str, object]
     }
 
 
-def _unique_agents(results: list[TaskResult]) -> list[str]:
+def _plan_agents(execution: DagExecutionResult) -> list[str]:
     agents: list[str] = []
-    for result in results:
-        if result.agent not in agents:
-            agents.append(result.agent)
+    for task in execution.plan.tasks:
+        if task.agent not in agents:
+            agents.append(task.agent)
     return agents
 
 
@@ -82,11 +79,7 @@ def _deduplicate_references(results: list[TaskResult]) -> list[dict[str, object]
     return references
 
 
-def _workflow_name(execution: DagExecutionResult) -> str:
-    agents: list[str] = []
-    for task in execution.plan.tasks:
-        if task.agent not in agents:
-            agents.append(task.agent)
+def _workflow_name(agents: list[str]) -> str:
     if len(agents) <= 1:
         return f"{agents[0] if agents else 'general'}_only"
     return "dynamic_" + "_".join(agents)

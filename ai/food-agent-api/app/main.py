@@ -1,6 +1,7 @@
 import logging
 import time
 from collections.abc import Awaitable, Callable
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -15,14 +16,30 @@ from app.core.errors import (
     unhandled_error_handler,
 )
 from app.core.logging import configure_logging
-from app.sync.es_sync_consumer import start_es_sync_consumer, stop_es_sync_consumer
 from app.sync.es_reconciliation import start_es_reconciliation, stop_es_reconciliation
+from app.sync.es_sync_consumer import start_es_sync_consumer, stop_es_sync_consumer
 
 settings = get_settings()
 configure_logging(settings.log_level)
 logger = logging.getLogger("food_agent.api")
 
-app = FastAPI(title=settings.app_name, version=settings.app_version)
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    start_es_sync_consumer(settings)
+    start_es_reconciliation(settings)
+    try:
+        yield
+    finally:
+        stop_es_reconciliation()
+        stop_es_sync_consumer()
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    lifespan=lifespan,
+)
 app.add_exception_handler(FoodAgentError, food_agent_error_handler)
 app.add_exception_handler(Exception, unhandled_error_handler)
 
@@ -59,15 +76,3 @@ def health() -> dict[str, str]:
 
 app.include_router(chat_router)
 app.include_router(indexing_router)
-
-
-@app.on_event("startup")
-def startup() -> None:
-    start_es_sync_consumer(settings)
-    start_es_reconciliation(settings)
-
-
-@app.on_event("shutdown")
-def shutdown() -> None:
-    stop_es_reconciliation()
-    stop_es_sync_consumer()

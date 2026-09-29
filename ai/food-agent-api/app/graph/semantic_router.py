@@ -58,7 +58,7 @@ class SemanticRouter:
                 for example, vector in zip(ROUTE_EXAMPLES, route_vectors, strict=True)
             ]
             self._retry_after = 0.0
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - external embedding boundary
             self._retry_after = (
                 monotonic() + self.settings.semantic_router_failure_cooldown_seconds
             )

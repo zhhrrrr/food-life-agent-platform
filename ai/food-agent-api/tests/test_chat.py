@@ -6,7 +6,6 @@ from app.agents.recommend_agent import recommend_agent_node
 from app.agents.support_agent import support_agent_node
 from app.core.config import Settings, get_settings
 from app.graph.food_graph import run_food_agent
-from app.graph.router import IntentResult, route_intent, route_intent_by_rules
 from app.llm.chat_model import (
     ZHIPU_OPENAI_COMPATIBLE_BASE_URL,
     resolve_chat_model_options,
@@ -45,7 +44,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = Settings()
 
-    assert settings.app_version == "0.20.0"
+    assert settings.app_version == "0.20.1"
     assert settings.es_enabled is False
     assert settings.milvus_enabled is False
     assert settings.es_index_shop == "food_shop_index"
@@ -718,116 +717,6 @@ def test_food_graph_records_router_metadata() -> None:
     assert result["agent"] == "support"
     assert result["router_confidence"] == 0.65
     assert "rule matched support domain" in result["router_reason"]
-
-
-def test_rule_router_sends_support_questions_to_support_before_trade() -> None:
-    assert (
-        route_intent_by_rules("\u62fc\u56e2\u89c4\u5219\u662f\u4ec0\u4e48").intent
-        == "support"
-    )
-    assert route_intent_by_rules("\u7533\u8bf7\u9000\u6b3e").intent == "trade"
-
-
-def test_rule_router_separates_current_orders_from_status_meanings() -> None:
-    assert route_intent_by_rules("订单 12345 当前是什么状态").intent == "trade"
-    assert route_intent_by_rules("查询我的订单进度").intent == "trade"
-    assert route_intent_by_rules("待使用订单状态是什么意思").intent == "support"
-
-
-class FakeStructuredModel:
-    def __init__(self, result: IntentResult) -> None:
-        self.result = result
-        self.messages: list[tuple[str, str]] | None = None
-
-    def invoke(self, messages: list[tuple[str, str]]) -> IntentResult:
-        self.messages = messages
-        return self.result
-
-
-class FakeChatModel:
-    def __init__(self, result: IntentResult) -> None:
-        self.result = result
-        self.schema: object | None = None
-        self.structured_kwargs: dict[str, object] = {}
-        self.structured_model: FakeStructuredModel | None = None
-
-    def with_structured_output(
-        self, schema: object, **kwargs: object
-    ) -> FakeStructuredModel:
-        self.schema = schema
-        self.structured_kwargs = kwargs
-        self.structured_model = FakeStructuredModel(self.result)
-        return self.structured_model
-
-
-def test_route_intent_uses_llm_structured_output_when_enabled() -> None:
-    llm_result = IntentResult(
-        intent="support",
-        confidence=0.91,
-        reason="The user asks about refund policy.",
-    )
-    chat_model = FakeChatModel(llm_result)
-
-    result = route_intent(
-        "\u8fd9\u4e2a\u9000\u6b3e\u89c4\u5219\u600e\u4e48\u7b97",
-        settings=get_settings().model_copy(update={"llm_router_enabled": True}),
-        chat_model=chat_model,
-    )
-
-    assert result.intent == llm_result.intent
-    assert result.confidence == llm_result.confidence
-    assert result.reason == llm_result.reason
-    assert result.source == "llm_structured"
-    assert result.tool == "route_support"
-    assert chat_model.schema is IntentResult
-    assert chat_model.structured_model is not None
-    assert chat_model.structured_model.messages is not None
-    assert chat_model.structured_model.messages[-1] == (
-        "human",
-        "\u8fd9\u4e2a\u9000\u6b3e\u89c4\u5219\u600e\u4e48\u7b97",
-    )
-
-
-def test_route_intent_uses_json_mode_for_zhipu_provider() -> None:
-    llm_result = IntentResult(
-        intent="recommend",
-        confidence=0.95,
-        reason="The user asks for food recommendations.",
-    )
-    chat_model = FakeChatModel(llm_result)
-
-    result = route_intent(
-        "\u63a8\u8350\u5ddd\u83dc\u9986",
-        settings=get_settings().model_copy(
-            update={
-                "llm_router_enabled": True,
-                "llm_provider": "zhipu",
-            }
-        ),
-        chat_model=chat_model,
-    )
-
-    assert result.intent == llm_result.intent
-    assert result.confidence == llm_result.confidence
-    assert result.source == "llm_structured"
-    assert result.tool == "route_recommend"
-    assert chat_model.structured_kwargs == {"method": "json_mode"}
-
-
-def test_route_intent_falls_back_when_llm_fails() -> None:
-    class BrokenChatModel:
-        def with_structured_output(self, schema: object) -> object:
-            raise RuntimeError("llm unavailable")
-
-    result = route_intent(
-        "\u67e5\u8be2\u8ba2\u5355",
-        settings=get_settings().model_copy(update={"llm_router_enabled": True}),
-        chat_model=BrokenChatModel(),
-    )
-
-    assert result.intent == "trade"
-    assert result.confidence == 0.65
-    assert "fallback rule" in result.reason
 
 
 def test_zhipu_chat_model_options_use_openai_compatible_base_url() -> None:
