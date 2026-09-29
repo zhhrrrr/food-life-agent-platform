@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.25.0
+
+- Routed Agent traffic through Spring Cloud Gateway and added a trusted identity-secret boundary.
+- Protected manual index rebuild and reconciliation endpoints with an independent admin token.
+- Added liveness, configuration-readiness, HTTP/chat/tool Prometheus metrics, and `/metrics`.
+- Made the Python test suite independent from active local LLM, ES, Milvus, Redis, and MQ settings.
+
 ## 0.24.0
 
 - Added an optional MCP 2.x Streamable HTTP endpoint mounted into the existing FastAPI app.

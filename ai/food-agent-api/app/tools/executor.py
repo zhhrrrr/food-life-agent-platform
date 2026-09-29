@@ -4,6 +4,7 @@ import json
 
 from pydantic import ValidationError
 
+from app.core.metrics import TOOL_EXECUTIONS
 from app.tools.models import ToolCall, ToolContext, ToolExecution
 from app.tools.registry import ToolRegistry
 
@@ -28,7 +29,9 @@ class ToolExecutor:
             if key in seen:
                 continue
             seen.add(key)
-            executions.append(self._execute_one(call, context))
+            execution = self._execute_one(call, context)
+            TOOL_EXECUTIONS.labels(tool=call.name, status=execution.status).inc()
+            executions.append(execution)
         return executions
 
     def _execute_one(self, call: ToolCall, context: ToolContext) -> ToolExecution:

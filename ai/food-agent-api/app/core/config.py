@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.24.0"
+    app_version: str = "0.25.0"
     app_port: int = 8500
     log_level: str = "INFO"
     # 本地env 文件中配置的llm_router_enabled优先级高于此处的默认值
@@ -37,6 +37,9 @@ class Settings(BaseModel):
     mcp_internal_token: str = ""
     mcp_allowed_hosts: list[str] = Field(default_factory=list)
     mcp_allowed_origins: list[str] = Field(default_factory=list)
+    gateway_trusted_secret_header: str = "x-internal-secret"
+    gateway_trusted_secret: str = ""
+    agent_admin_token: str = ""
     session_memory_enabled: bool = False
     session_memory_ttl_seconds: int = Field(default=7200, ge=60)
     session_memory_max_turns: int = Field(default=8, ge=1, le=50)
@@ -274,6 +277,21 @@ def get_settings() -> Settings:
         ),
         mcp_allowed_hosts=_get_csv(dotenv_values, "MCP_ALLOWED_HOSTS"),
         mcp_allowed_origins=_get_csv(dotenv_values, "MCP_ALLOWED_ORIGINS"),
+        gateway_trusted_secret_header=_get_value(
+            dotenv_values,
+            "GATEWAY_TRUSTED_SECRET_HEADER",
+            defaults.gateway_trusted_secret_header,
+        ).lower(),
+        gateway_trusted_secret=_get_value(
+            dotenv_values,
+            "GATEWAY_TRUSTED_SECRET",
+            defaults.gateway_trusted_secret,
+        ),
+        agent_admin_token=_get_value(
+            dotenv_values,
+            "AGENT_ADMIN_TOKEN",
+            defaults.agent_admin_token,
+        ),
         session_memory_enabled=_get_value(
             dotenv_values,
             "SESSION_MEMORY_ENABLED",

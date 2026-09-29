@@ -6,6 +6,8 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.errors import FoodAgentError
+from app.core.metrics import CHAT_REQUESTS
+from app.core.security import trusted_user_id
 from app.graph.food_graph import run_food_agent
 from app.memory.long_term_memory import LongTermMemoryService
 from app.memory.session_memory import SessionMemoryService
@@ -52,7 +54,7 @@ def chat(chat_request: ChatRequest, request: Request) -> ChatResponse:
     request_id = getattr(request.state, "request_id", "")
     session_id = chat_request.session_id or uuid4().hex
     authorization = request.headers.get("authorization", "")
-    user_id = request.headers.get("x-user-id", "")
+    user_id = trusted_user_id(request.headers, session_memory.settings)
     start_time = time.perf_counter()
 
     try:
@@ -113,6 +115,10 @@ def chat(chat_request: ChatRequest, request: Request) -> ChatResponse:
         result.get("rag_mode", ""),
         latency_ms,
     )
+    CHAT_REQUESTS.labels(
+        intent=result["intent"],
+        execution_status=result["execution_status"],
+    ).inc()
 
     return ChatResponse(
         session_id=session_id,

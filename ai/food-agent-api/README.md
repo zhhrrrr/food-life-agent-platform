@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.24.0`
+Current version: `0.25.0`
 
 Current route chain:
 
@@ -29,9 +29,15 @@ Optional MCP access reuses the same read-only Trade Tool Registry and is mounted
 `/mcp/` only when `MCP_ENABLED=true`. MCP calls require `X-MCP-Internal-Token`;
 private user queries additionally forward `Authorization` to Java Gateway.
 
+Production traffic enters through Spring Cloud Gateway at `/api/agent/**`. The
+Gateway removes caller-supplied identity headers, validates the login token, and
+adds `X-Internal-Secret`; Python accepts `x-user-id` only when that secret matches.
+Operational endpoints are `/health/live`, `/health/ready`, and `/metrics`.
+
 Added by version:
 
 ```text
+0.25.0: trusted Gateway identity boundary, protected index administration, health probes, and Prometheus metrics
 0.24.0: optional authenticated MCP 2.x Streamable HTTP adapter over the native read-only tools
 0.23.0: native read-only Tool Runtime, validated TradeAgent Tool Calling, and deterministic fallback
 0.20.1: removed the obsolete three-way router, tightened order-query routing, and enforced per-task DAG timeouts
@@ -116,7 +122,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.24.0
+APP_VERSION=0.25.0
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false

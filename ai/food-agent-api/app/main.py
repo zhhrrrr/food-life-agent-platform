@@ -5,7 +5,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 
 from app.api.chat import router as chat_router
 from app.api.indexing import router as indexing_router
@@ -16,6 +16,7 @@ from app.core.errors import (
     unhandled_error_handler,
 )
 from app.core.logging import configure_logging
+from app.core.metrics import HTTP_DURATION, HTTP_REQUESTS, metrics_response
 from app.mcp.server import build_mcp_asgi_app, create_mcp_server
 from app.sync.es_reconciliation import start_es_reconciliation, stop_es_reconciliation
 from app.sync.es_sync_consumer import start_es_sync_consumer, stop_es_sync_consumer
@@ -72,6 +73,16 @@ async def request_context_middleware(
     latency_ms = (time.perf_counter() - start_time) * 1000
     response.headers["X-Request-Id"] = request_id
 
+    route = getattr(request.scope.get("route"), "path", "unmatched")
+    HTTP_REQUESTS.labels(
+        method=request.method,
+        route=route,
+        status=str(response.status_code),
+    ).inc()
+    HTTP_DURATION.labels(method=request.method, route=route).observe(
+        latency_ms / 1000
+    )
+
     logger.info(
         "http_request request_id=%s method=%s path=%s status_code=%s latency_ms=%.2f",
         request_id,
@@ -86,6 +97,42 @@ async def request_context_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/health/live")
+def liveness() -> dict[str, str]:
+    return {"status": "ok", "version": settings.app_version}
+
+
+@app.get("/health/ready")
+def readiness() -> JSONResponse:
+    checks = {
+        "gateway_identity": bool(settings.gateway_trusted_secret),
+        "llm": not settings.llm_router_enabled or bool(settings.llm_api_key),
+        "semantic_router": not settings.semantic_router_enabled
+        or bool(settings.embedding_api_key),
+        "hybrid_rag": not settings.rag_hybrid_enabled
+        or (
+            settings.es_enabled
+            and settings.milvus_enabled
+            and bool(settings.embedding_api_key)
+        ),
+        "mcp": not settings.mcp_enabled or bool(settings.mcp_internal_token),
+    }
+    ready = all(checks.values())
+    return JSONResponse(
+        status_code=200 if ready else 503,
+        content={
+            "status": "ready" if ready else "not_ready",
+            "version": settings.app_version,
+            "checks": checks,
+        },
+    )
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics() -> Response:
+    return metrics_response()
 
 
 app.include_router(chat_router)

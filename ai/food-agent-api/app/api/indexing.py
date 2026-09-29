@@ -1,14 +1,19 @@
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from app.core.errors import FoodAgentError
+from app.core.security import require_index_admin
 from app.indexing.indexer import IndexRebuildResult, IndexReconcileResult, SearchIndexer
 from app.indexing.java_export_client import JavaSearchExportError
 
 logger = logging.getLogger("food_agent.api.indexing")
-router = APIRouter(prefix="/api/agent/indexes", tags=["indexes"])
+router = APIRouter(
+    prefix="/api/agent/indexes",
+    tags=["indexes"],
+    dependencies=[Depends(require_index_admin)],
+)
 
 
 class RebuildIndexesRequest(BaseModel):
