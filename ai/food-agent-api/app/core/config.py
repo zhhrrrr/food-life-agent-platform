@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.23.0"
+    app_version: str = "0.24.0"
     app_port: int = 8500
     log_level: str = "INFO"
     # 本地env 文件中配置的llm_router_enabled优先级高于此处的默认值
@@ -32,6 +32,11 @@ class Settings(BaseModel):
     orchestration_max_parallel_tasks: int = Field(default=3, ge=1, le=10)
     orchestration_max_replans: int = Field(default=1, ge=0, le=3)
     orchestration_planner_timeout_seconds: float = Field(default=60.0, gt=0, le=180.0)
+    mcp_enabled: bool = False
+    mcp_mount_path: str = Field(default="/mcp", pattern=r"^/[A-Za-z0-9_-]+$")
+    mcp_internal_token: str = ""
+    mcp_allowed_hosts: list[str] = Field(default_factory=list)
+    mcp_allowed_origins: list[str] = Field(default_factory=list)
     session_memory_enabled: bool = False
     session_memory_ttl_seconds: int = Field(default=7200, ge=60)
     session_memory_max_turns: int = Field(default=8, ge=1, le=50)
@@ -122,6 +127,14 @@ def _read_dotenv(path: Path) -> dict[str, str]:
 
 def _get_value(dotenv_values: dict[str, str], key: str, default: str) -> str:
     return os.getenv(key, dotenv_values.get(key, default))
+
+
+def _get_csv(dotenv_values: dict[str, str], key: str) -> list[str]:
+    return [
+        item.strip()
+        for item in _get_value(dotenv_values, key, "").split(",")
+        if item.strip()
+    ]
 
 
 @lru_cache(maxsize=1)
@@ -243,6 +256,24 @@ def get_settings() -> Settings:
                 str(defaults.orchestration_planner_timeout_seconds),
             )
         ),
+        mcp_enabled=_get_value(
+            dotenv_values,
+            "MCP_ENABLED",
+            str(defaults.mcp_enabled),
+        ).lower()
+        in {"1", "true", "yes", "on"},
+        mcp_mount_path=_get_value(
+            dotenv_values,
+            "MCP_MOUNT_PATH",
+            defaults.mcp_mount_path,
+        ),
+        mcp_internal_token=_get_value(
+            dotenv_values,
+            "MCP_INTERNAL_TOKEN",
+            defaults.mcp_internal_token,
+        ),
+        mcp_allowed_hosts=_get_csv(dotenv_values, "MCP_ALLOWED_HOSTS"),
+        mcp_allowed_origins=_get_csv(dotenv_values, "MCP_ALLOWED_ORIGINS"),
         session_memory_enabled=_get_value(
             dotenv_values,
             "SESSION_MEMORY_ENABLED",

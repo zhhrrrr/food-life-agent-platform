@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.24.0
+
+- Added an optional MCP 2.x Streamable HTTP endpoint mounted into the existing FastAPI app.
+- Reused the native read-only Trade Tool Registry and Executor instead of duplicating business calls.
+- Required a constant-time checked internal MCP token and kept credentials out of tool schemas.
+- Added read-only MCP annotations, stateless transport, and configurable Host/Origin allowlists.
+
 ## 0.23.0
 
 - Added a native Tool Registry and bounded Tool Executor with strict Pydantic arguments.

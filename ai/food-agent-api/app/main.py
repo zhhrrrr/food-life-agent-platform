@@ -1,7 +1,7 @@
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -16,6 +16,7 @@ from app.core.errors import (
     unhandled_error_handler,
 )
 from app.core.logging import configure_logging
+from app.mcp.server import build_mcp_asgi_app, create_mcp_server
 from app.sync.es_reconciliation import start_es_reconciliation, stop_es_reconciliation
 from app.sync.es_sync_consumer import start_es_sync_consumer, stop_es_sync_consumer
 from app.sync.memory_sync_consumer import (
@@ -26,19 +27,26 @@ from app.sync.memory_sync_consumer import (
 settings = get_settings()
 configure_logging(settings.log_level)
 logger = logging.getLogger("food_agent.api")
+mcp_server = create_mcp_server(settings) if settings.mcp_enabled else None
+mcp_asgi_app = (
+    build_mcp_asgi_app(mcp_server, settings) if mcp_server is not None else None
+)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    start_es_sync_consumer(settings)
-    start_es_reconciliation(settings)
-    start_memory_sync_consumer(settings)
-    try:
-        yield
-    finally:
-        stop_memory_sync_consumer()
-        stop_es_reconciliation()
-        stop_es_sync_consumer()
+    async with AsyncExitStack() as stack:
+        if mcp_server is not None:
+            await stack.enter_async_context(mcp_server.session_manager.run())
+        start_es_sync_consumer(settings)
+        start_es_reconciliation(settings)
+        start_memory_sync_consumer(settings)
+        try:
+            yield
+        finally:
+            stop_memory_sync_consumer()
+            stop_es_reconciliation()
+            stop_es_sync_consumer()
 
 
 app = FastAPI(
@@ -82,3 +90,5 @@ def health() -> dict[str, str]:
 
 app.include_router(chat_router)
 app.include_router(indexing_router)
+if mcp_asgi_app is not None:
+    app.mount(settings.mcp_mount_path, mcp_asgi_app)

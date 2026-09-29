@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.23.0`
+Current version: `0.24.0`
 
 Current route chain:
 
@@ -25,9 +25,14 @@ HTTP Request
 -> Response
 ```
 
+Optional MCP access reuses the same read-only Trade Tool Registry and is mounted at
+`/mcp/` only when `MCP_ENABLED=true`. MCP calls require `X-MCP-Internal-Token`;
+private user queries additionally forward `Authorization` to Java Gateway.
+
 Added by version:
 
 ```text
+0.24.0: optional authenticated MCP 2.x Streamable HTTP adapter over the native read-only tools
 0.23.0: native read-only Tool Runtime, validated TradeAgent Tool Calling, and deterministic fallback
 0.20.1: removed the obsolete three-way router, tightened order-query routing, and enforced per-task DAG timeouts
 0.20.0: validated dynamic multi-agent DAG orchestration, GeneralAgent fallback, dependency artifacts, parallel execution, and bounded replanning
@@ -111,7 +116,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.23.0
+APP_VERSION=0.24.0
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false
