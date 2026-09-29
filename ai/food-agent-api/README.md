@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.19.3`
+Current version: `0.20.0`
 
 Current route chain:
 
@@ -10,13 +10,15 @@ Current route chain:
 HTTP Request
 -> FastAPI
 -> Redis Conversation Memory
--> LangGraph State
--> Semantic Router (Embedding cosine similarity + confidence/margin gates)
-   -> high confidence: direct agent route
-   -> low confidence/unavailable: LLM Router Function Calling
-      -> Structured Output compatibility fallback
-      -> deterministic rule fallback
--> Recommend / Trade / Support Agent
+-> LangGraph Orchestrator
+   -> high-confidence single domain: Semantic Router builds a one-task DAG
+   -> compound/uncertain request: one LLM Structured Plan call builds a dynamic DAG
+   -> unavailable/invalid plan: deterministic rule DAG
+-> strict capability, cycle, depth, task-count, and GeneralAgent-isolation validation
+-> dynamic DAG executor: parallel waves, dependencies, retries, timeouts, bounded replan
+-> Recommend / Trade / Support / General Agent workers
+-> structured upstream artifacts passed only to dependent workers
+-> deterministic single-response composer with partial-failure disclosure
 -> Recommend query rewrite -> Embedding + ES BM25 / Milvus vector retrieval -> RRF -> Rerank -> bounded Top-K context -> Prompt + Query -> LLM answer
 -> Support query rewrite -> Embedding + ES rule BM25 / Milvus vector retrieval -> RRF -> Rerank -> bounded Top-K context -> Prompt + Query -> LLM answer
 -> Trade query rewrite -> allow-listed Java Gateway GET queries -> LLM answer
@@ -26,6 +28,7 @@ HTTP Request
 Added by version:
 
 ```text
+0.20.0: validated dynamic multi-agent DAG orchestration, GeneralAgent fallback, dependency artifacts, parallel execution, and bounded replanning
 0.19.3: calibrated final evidence threshold and out-of-domain RAG rejection evaluation
 0.19.2: local Milvus Lite development runtime with a production Milvus-compatible configuration boundary
 0.19.1: retrieval cleanup, evidence/reference consistency, and relevance floors
@@ -60,7 +63,7 @@ Added by version:
 0.10.0: stage 6 RecommendAgent query rewrite, ES/RAG retrieval, and LLM answer chain
 ```
 
-This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python writes text projections to Elasticsearch and embeddings to independent Milvus collections. LangChain provides model integration while LangGraph orchestrates the agent flow. RecommendAgent and SupportAgent run query rewrite -> Elasticsearch BM25 plus Milvus vector retrieval -> reciprocal rank fusion -> BGE reranking -> bounded context -> LLM answer -> validated references. TradeAgent exclusively owns current order, price, stock, coupon, group-buy, and preview reads through allow-listed Java Gateway GET queries. Search projections remain focused on recommendation discovery and exclude current stock and coupon supply counters. MCP, SSE, Human Confirmation, and business action tools are still future stages.
+This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python writes text projections to Elasticsearch and embeddings to independent Milvus collections. LangChain provides model integration while LangGraph runs a fixed control graph around a validated runtime task DAG. RecommendAgent and SupportAgent run query rewrite -> Elasticsearch BM25 plus Milvus vector retrieval -> reciprocal rank fusion -> BGE reranking -> bounded context -> LLM answer -> validated references. TradeAgent exclusively owns current order, price, stock, coupon, group-buy, and preview reads through allow-listed Java Gateway GET queries. GeneralAgent has no business tools and handles greetings, clarification, capability guidance, and out-of-domain fallback. Search projections remain focused on recommendation discovery and exclude current stock and coupon supply counters. Durable background transport, SSE, Human Confirmation, and business action tools remain separate runtime stages.
 
 Elasticsearch and Milvus support are disabled by default. Enable each store only after its service is healthy; hybrid retrieval requires both `RAG_HYBRID_ENABLED=true` and `MILVUS_ENABLED=true`.
 
@@ -106,7 +109,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.19.3
+APP_VERSION=0.20.0
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false
@@ -125,6 +128,11 @@ EMBEDDING_TIMEOUT_SECONDS=10
 SEMANTIC_ROUTER_HIGH_THRESHOLD=0.74
 SEMANTIC_ROUTER_MIN_MARGIN=0.05
 SEMANTIC_ROUTER_FAILURE_COOLDOWN_SECONDS=30
+ORCHESTRATION_MAX_TASKS=12
+ORCHESTRATION_MAX_DEPTH=6
+ORCHESTRATION_MAX_PARALLEL_TASKS=3
+ORCHESTRATION_MAX_REPLANS=1
+ORCHESTRATION_PLANNER_TIMEOUT_SECONDS=60
 CONVERSATION_MEMORY_ENABLED=false
 CONVERSATION_MEMORY_TTL_SECONDS=86400
 CONVERSATION_MEMORY_MAX_TURNS=8
@@ -195,20 +203,20 @@ LLM_API_KEY=your-zhipu-api-key
 LLM_BASE_URL=https://api.z.ai/api/paas/v4/
 ```
 
-## LLM Router
+## Dynamic Planner
 
-The LLM router is disabled by default. When `LLM_ROUTER_ENABLED=true` and `LLM_API_KEY` is configured, LangChain calls the chat model with Pydantic Structured Output:
+The LLM planner is disabled by default. When `LLM_ROUTER_ENABLED=true` and `LLM_API_KEY` is configured, LangChain asks the chat model for a bounded task DAG using Pydantic Structured Output. Model drafts are normalized and then strictly validated against registered agents, capabilities, dependencies, and safety limits.
 
 ```python
-class IntentResult(BaseModel):
-    intent: Literal["recommend", "trade", "support"]
+class PlanDraft(BaseModel):
+    tasks: list[PlannedTask]
     confidence: float
     reason: str
 ```
 
-The default provider is `openai`. Set `LLM_PROVIDER=zhipu` to call Zhipu GLM through its OpenAI-compatible API. If `LLM_BASE_URL` is empty for `zhipu`, the service uses `https://api.z.ai/api/paas/v4/`. Zhipu routing uses LangChain structured output with JSON mode so OpenAI-compatible responses can be parsed into `IntentResult`.
+The default provider is `openai`. Set `LLM_PROVIDER=zhipu` to call Zhipu GLM through its OpenAI-compatible API. If `LLM_BASE_URL` is empty for `zhipu`, the service uses `https://api.z.ai/api/paas/v4/`. The longer planner timeout is isolated from ordinary answer calls through `ORCHESTRATION_PLANNER_TIMEOUT_SECONDS`.
 
-If the LLM provider is not configured, unavailable, or returns an invalid structure, the router falls back to the existing keyword rules.
+If the provider is unavailable or the normalized DAG fails validation, the planner falls back to a deterministic rule DAG.
 
 ## Semantic Router And Memory
 
@@ -217,10 +225,10 @@ The routing order is:
 ```text
 current query + relevant Redis conversation turns
 -> embedding similarity against versioned route examples
--> accept only when score >= high threshold and top-intent margin >= minimum margin
--> otherwise LLM Function Calling selects route_recommend / route_trade / route_support
--> Structured Output compatibility fallback
--> deterministic rule fallback
+-> high-confidence single domain: build a one-task DAG directly
+-> compound or uncertain request: one LLM Structured Plan call
+-> normalize the draft, then enforce the capability registry and DAG invariants
+-> deterministic rule DAG fallback
 ```
 
 Semantic routing and Redis memory are disabled until their providers are configured. Embeddings use a separate API key from the chat model. OpenAI, Zhipu, SiliconFlow, and custom OpenAI-compatible endpoints are supported. Conversation history participates in deterministic and semantic routing only for follow-up wording such as “那这个呢” or “还有吗”, which prevents an old topic from overriding an explicit new request. Embedding and Redis failures enter a short per-instance cooldown and fail open to the next routing layer instead of delaying every request.
@@ -245,9 +253,9 @@ SEMANTIC_ROUTER_HIGH_THRESHOLD=0.74
 SEMANTIC_ROUTER_MIN_MARGIN=0.05
 ```
 
-The three routing tools only select a LangGraph agent. They do not expose Java, order, payment, refund, or inventory write operations. Redis stores bounded, expiring `user`, `assistant`, and `intent` turns; Authorization is never stored.
+The planner can only use capabilities in the local registry. Trade remains a read-only Gateway worker, and GeneralAgent has no tools. Redis stores bounded, expiring `user`, `assistant`, and `intent` turns; Authorization is never stored.
 
-Each chat response returns `conversation_id`, `router_source`, and `router_confidence`. Send the same `conversation_id` in the next request to continue the conversation.
+Each chat response returns `conversation_id`, `run_id`, `plan_revision`, `workflow`, `agents`, `execution_status`, per-task status, `router_source`, and `router_confidence`. Send the same `conversation_id` in the next request to continue the conversation.
 
 ## Start Service
 

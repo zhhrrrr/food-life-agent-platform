@@ -45,7 +45,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = Settings()
 
-    assert settings.app_version == "0.19.3"
+    assert settings.app_version == "0.20.0"
     assert settings.es_enabled is False
     assert settings.milvus_enabled is False
     assert settings.es_index_shop == "food_shop_index"
@@ -61,6 +61,11 @@ def test_chat_routes_to_recommend_agent() -> None:
     data = response.json()
     assert data["intent"] == "recommend"
     assert data["agent"] == "recommend"
+    assert data["agents"] == ["recommend"]
+    assert data["workflow"] == "recommend_only"
+    assert data["execution_status"] == "completed"
+    assert data["plan_revision"] == 1
+    assert data["run_id"]
     assert data["rag_mode"] == "recommend_agent_bm25_no_hit"
     assert (
         "\u6682\u672a\u4ece\u641c\u7d22\u7cfb\u7edf\u68c0\u7d22\u5230\u53ef\u7528\u4e8e\u63a8\u8350"
@@ -77,6 +82,7 @@ def test_chat_routes_to_trade_agent() -> None:
     data = response.json()
     assert data["intent"] == "trade"
     assert data["agent"] == "trade"
+    assert data["agents"] == ["trade"]
     assert "Authorization" in data["response"]
     assert data["references"] == []
 
@@ -89,11 +95,42 @@ def test_chat_routes_to_support_agent() -> None:
     data = response.json()
     assert data["intent"] == "support"
     assert data["agent"] == "support"
+    assert data["agents"] == ["support"]
     assert (
         "\u6682\u672a\u4ece\u641c\u7d22\u7cfb\u7edf\u68c0\u7d22\u5230\u76f8\u5173\u5e73\u53f0\u89c4\u5219"
         in data["response"]
     )
     assert data["references"] == []
+
+
+def test_chat_executes_dynamic_multi_agent_dag() -> None:
+    response = client.post(
+        "/api/agent/chat",
+        json={"message": "推荐一个双人套餐，再查询实时库存"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["intent"] == "multi"
+    assert data["agent"] == "multi"
+    assert data["agents"] == ["recommend", "trade"]
+    assert data["workflow"] == "dynamic_recommend_trade"
+    assert [item["status"] for item in data["task_statuses"]] == [
+        "succeeded",
+        "succeeded",
+    ]
+
+
+def test_chat_routes_unrelated_request_to_general_agent() -> None:
+    response = client.post("/api/agent/chat", json={"message": "你好，你能做什么"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["intent"] == "general"
+    assert data["agent"] == "general"
+    assert data["agents"] == ["general"]
+    assert data["workflow"] == "general_only"
+    assert data["rag_mode"].startswith("general_agent_")
 
 
 def test_request_id_can_be_provided_by_client() -> None:
@@ -680,7 +717,7 @@ def test_food_graph_records_router_metadata() -> None:
     assert result["intent"] == "support"
     assert result["agent"] == "support"
     assert result["router_confidence"] == 0.65
-    assert "fallback rule" in result["router_reason"]
+    assert "rule matched support domain" in result["router_reason"]
 
 
 def test_rule_router_sends_support_questions_to_support_before_trade() -> None:

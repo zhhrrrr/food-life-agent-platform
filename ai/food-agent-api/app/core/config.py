@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.19.3"
+    app_version: str = "0.20.0"
     app_port: int = 8500
     log_level: str = "INFO"
     # 本地env 文件中配置的llm_router_enabled优先级高于此处的默认值
@@ -27,6 +27,11 @@ class Settings(BaseModel):
     semantic_router_high_threshold: float = Field(default=0.74, ge=0.0, le=1.0)
     semantic_router_min_margin: float = Field(default=0.05, ge=0.0, le=1.0)
     semantic_router_failure_cooldown_seconds: float = Field(default=30.0, ge=1.0, le=300.0)
+    orchestration_max_tasks: int = Field(default=12, ge=1, le=50)
+    orchestration_max_depth: int = Field(default=6, ge=1, le=20)
+    orchestration_max_parallel_tasks: int = Field(default=3, ge=1, le=10)
+    orchestration_max_replans: int = Field(default=1, ge=0, le=3)
+    orchestration_planner_timeout_seconds: float = Field(default=60.0, gt=0, le=180.0)
     conversation_memory_enabled: bool = False
     conversation_memory_ttl_seconds: int = Field(default=86400, ge=60)
     conversation_memory_max_turns: int = Field(default=8, ge=1, le=50)
@@ -190,6 +195,41 @@ def get_settings() -> Settings:
                 dotenv_values,
                 "SEMANTIC_ROUTER_FAILURE_COOLDOWN_SECONDS",
                 str(defaults.semantic_router_failure_cooldown_seconds),
+            )
+        ),
+        orchestration_max_tasks=int(
+            _get_value(
+                dotenv_values,
+                "ORCHESTRATION_MAX_TASKS",
+                str(defaults.orchestration_max_tasks),
+            )
+        ),
+        orchestration_max_depth=int(
+            _get_value(
+                dotenv_values,
+                "ORCHESTRATION_MAX_DEPTH",
+                str(defaults.orchestration_max_depth),
+            )
+        ),
+        orchestration_max_parallel_tasks=int(
+            _get_value(
+                dotenv_values,
+                "ORCHESTRATION_MAX_PARALLEL_TASKS",
+                str(defaults.orchestration_max_parallel_tasks),
+            )
+        ),
+        orchestration_max_replans=int(
+            _get_value(
+                dotenv_values,
+                "ORCHESTRATION_MAX_REPLANS",
+                str(defaults.orchestration_max_replans),
+            )
+        ),
+        orchestration_planner_timeout_seconds=float(
+            _get_value(
+                dotenv_values,
+                "ORCHESTRATION_PLANNER_TIMEOUT_SECONDS",
+                str(defaults.orchestration_planner_timeout_seconds),
             )
         ),
         conversation_memory_enabled=_get_value(

@@ -27,13 +27,19 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     conversation_id: str
+    run_id: str
+    plan_revision: int
+    workflow: str
+    execution_status: str
     intent: str
     agent: str
+    agents: list[str] = Field(default_factory=list)
     response: str
     router_source: str
     router_confidence: float
     rag_mode: str
     references: list[Reference] = Field(default_factory=list)
+    task_statuses: list[dict[str, object]] = Field(default_factory=list)
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -69,11 +75,14 @@ def chat(chat_request: ChatRequest, request: Request) -> ChatResponse:
     latency_ms = (time.perf_counter() - start_time) * 1000
     logger.info(
         "agent_chat_completed request_id=%s conversation_id=%s intent=%s "
-        "agent=%s router_source=%s rag_mode=%s latency_ms=%.2f",
+        "agent=%s workflow=%s execution_status=%s router_source=%s "
+        "rag_mode=%s latency_ms=%.2f",
         request_id,
         conversation_id,
         result["intent"],
         result["agent"],
+        result["workflow"],
+        result["execution_status"],
         result["router_source"],
         result.get("rag_mode", ""),
         latency_ms,
@@ -81,11 +90,26 @@ def chat(chat_request: ChatRequest, request: Request) -> ChatResponse:
 
     return ChatResponse(
         conversation_id=conversation_id,
+        run_id=result["run_id"],
+        plan_revision=result["plan_revision"],
+        workflow=result["workflow"],
+        execution_status=result["execution_status"],
         intent=result["intent"],
         agent=result["agent"],
+        agents=result.get("agents", []),
         response=result["response"],
         router_source=result["router_source"],
         router_confidence=result["router_confidence"],
         rag_mode=result.get("rag_mode", ""),
         references=result.get("references", []),
+        task_statuses=[
+            {
+                "task_id": item.get("task_id"),
+                "agent": item.get("agent"),
+                "status": item.get("status"),
+                "attempts": item.get("attempts", 0),
+                "error_code": "TASK_FAILED" if item.get("error") else "",
+            }
+            for item in result.get("task_results", [])
+        ],
     )

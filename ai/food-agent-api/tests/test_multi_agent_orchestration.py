@@ -1,0 +1,269 @@
+from __future__ import annotations
+
+from app.core.config import Settings
+from app.orchestration.executor import DynamicDagExecutor
+from app.orchestration.models import AgentTask, ExecutionPlan
+from app.orchestration.planner import DynamicPlanner
+from app.orchestration.registry import CapabilitySpec
+from app.orchestration.validator import PlanValidationError, validate_plan
+
+
+def _plan(*tasks: AgentTask, revision: int = 1) -> ExecutionPlan:
+    return ExecutionPlan(
+        run_id="run-12345678",
+        revision=revision,
+        goal="test dynamic DAG",
+        tasks=list(tasks),
+        confidence=0.9,
+        reason="test",
+        source="rules" if revision == 1 else "replan",
+    )
+
+
+def test_rules_planner_builds_recommend_then_trade_dag() -> None:
+    planner = DynamicPlanner(settings=Settings(llm_router_enabled=False))
+
+    plan = planner.plan("推荐一个双人套餐，再查询实时库存")
+
+    assert [task.agent for task in plan.tasks] == ["recommend", "trade"]
+    assert plan.tasks[1].depends_on == ["recommend_candidates"]
+    assert plan.source == "rules"
+
+
+def test_rules_planner_builds_trade_then_support_dag() -> None:
+    planner = DynamicPlanner(settings=Settings(llm_router_enabled=False))
+
+    plan = planner.plan("订单123为什么不能退款，退款规则是什么")
+
+    assert [task.agent for task in plan.tasks] == ["support", "trade"] or [
+        task.agent for task in plan.tasks
+    ] == ["trade", "support"]
+    task_by_agent = {task.agent: task for task in plan.tasks}
+    assert task_by_agent["support"].depends_on == ["trade_facts"]
+
+
+def test_llm_planner_normalizes_draft_before_strict_validation() -> None:
+    class StructuredModel:
+        def invoke(self, messages: list[tuple[str, str]]) -> dict[str, object]:
+            assert messages[-1][0] == "human"
+            return {
+                "confidence": 0.91,
+                "reason": "recommendation requires real-time verification",
+                "tasks": [
+                    {
+                        "id": "1",
+                        "agent": "recommend",
+                        "capability": "retrieve",
+                        "dependencies": [],
+                        "required": ["budget"],
+                    },
+                    {
+                        "id": "2",
+                        "agent": "trade",
+                        "capability": "query",
+                        "dependencies": ["1"],
+                        "required": ["package_id"],
+                    },
+                ],
+            }
+
+    class ChatModel:
+        def with_structured_output(
+            self, schema: object, **kwargs: object
+        ) -> StructuredModel:
+            return StructuredModel()
+
+    planner = DynamicPlanner(
+        settings=Settings(llm_router_enabled=True),
+        chat_model=ChatModel(),
+    )
+
+    plan = planner.plan("推荐一个双人套餐，再查询实时库存")
+
+    assert plan.source == "llm"
+    assert [task.id for task in plan.tasks] == ["recommend_1", "trade_2"]
+    assert [task.capability for task in plan.tasks] == [
+        "recommend.retrieve",
+        "trade.query",
+    ]
+    assert plan.tasks[1].depends_on == ["recommend_1"]
+    assert all(task.required is True for task in plan.tasks)
+
+
+def test_unrelated_request_routes_to_general_agent() -> None:
+    planner = DynamicPlanner(settings=Settings(llm_router_enabled=False))
+
+    plan = planner.plan("你好，你能做什么")
+
+    assert len(plan.tasks) == 1
+    assert plan.tasks[0].agent == "general"
+    assert plan.tasks[0].capability == "general.respond"
+
+
+def test_plan_validator_rejects_cycles_and_cross_agent_capabilities() -> None:
+    cyclic = _plan(
+        AgentTask(
+            id="first",
+            agent="recommend",
+            capability="recommend.retrieve",
+            objective="first",
+            depends_on=["second"],
+        ),
+        AgentTask(
+            id="second",
+            agent="support",
+            capability="support.retrieve",
+            objective="second",
+            depends_on=["first"],
+        ),
+    )
+    try:
+        validate_plan(cyclic)
+    except PlanValidationError as exc:
+        assert "cycle" in str(exc)
+    else:
+        raise AssertionError("cyclic plan must be rejected")
+
+    mismatched = _plan(
+        AgentTask(
+            id="wrong",
+            agent="trade",
+            capability="recommend.retrieve",
+            objective="wrong capability",
+        )
+    )
+    try:
+        validate_plan(mismatched)
+    except PlanValidationError as exc:
+        assert "does not belong" in str(exc)
+    else:
+        raise AssertionError("cross-agent capability must be rejected")
+
+
+def test_executor_passes_upstream_artifact_to_dependent_agent() -> None:
+    received_messages: list[str] = []
+
+    def recommend_worker(state: dict[str, object]) -> dict[str, object]:
+        return {
+            "response": "candidate",
+            "references": [
+                {"id": "package-42", "source": "food_package_index"}
+            ],
+        }
+
+    def trade_worker(state: dict[str, object]) -> dict[str, object]:
+        received_messages.append(str(state["message"]))
+        return {"response": "stock=8", "references": []}
+
+    registry = {
+        "recommend.retrieve": CapabilitySpec("recommend", recommend_worker),
+        "trade.query": CapabilitySpec("trade", trade_worker),
+    }
+    plan = _plan(
+        AgentTask(
+            id="recommend",
+            agent="recommend",
+            capability="recommend.retrieve",
+            objective="recommend a package",
+        ),
+        AgentTask(
+            id="trade",
+            agent="trade",
+            capability="trade.query",
+            objective="verify stock",
+            depends_on=["recommend"],
+        ),
+    )
+
+    result = DynamicDagExecutor(registry=registry).execute(plan)
+
+    assert result.status == "completed"
+    assert "package-42" in received_messages[0]
+    assert [item.status for item in result.task_results] == [
+        "succeeded",
+        "succeeded",
+    ]
+
+
+def test_executor_skips_dependents_after_required_failure() -> None:
+    downstream_calls = 0
+
+    def broken_worker(state: dict[str, object]) -> dict[str, object]:
+        raise RuntimeError("unavailable")
+
+    def downstream_worker(state: dict[str, object]) -> dict[str, object]:
+        nonlocal downstream_calls
+        downstream_calls += 1
+        return {"response": "must not run"}
+
+    registry = {
+        "recommend.retrieve": CapabilitySpec("recommend", broken_worker),
+        "trade.query": CapabilitySpec("trade", downstream_worker),
+    }
+    plan = _plan(
+        AgentTask(
+            id="recommend",
+            agent="recommend",
+            capability="recommend.retrieve",
+            objective="recommend",
+        ),
+        AgentTask(
+            id="trade",
+            agent="trade",
+            capability="trade.query",
+            objective="query",
+            depends_on=["recommend"],
+        ),
+    )
+
+    result = DynamicDagExecutor(registry=registry).execute(plan)
+
+    assert result.status == "failed"
+    assert downstream_calls == 0
+    assert [item.status for item in result.task_results] == ["failed", "skipped"]
+
+
+def test_executor_applies_one_bounded_replan() -> None:
+    calls = {"broken": 0, "replacement": 0}
+
+    def broken_worker(state: dict[str, object]) -> dict[str, object]:
+        calls["broken"] += 1
+        raise RuntimeError("failed")
+
+    def replacement_worker(state: dict[str, object]) -> dict[str, object]:
+        calls["replacement"] += 1
+        return {"response": "recovered"}
+
+    registry = {
+        "recommend.retrieve": CapabilitySpec("recommend", broken_worker),
+        "general.respond": CapabilitySpec("general", replacement_worker),
+    }
+    initial = _plan(
+        AgentTask(
+            id="broken",
+            agent="recommend",
+            capability="recommend.retrieve",
+            objective="broken",
+        )
+    )
+
+    def replan(plan: ExecutionPlan, results: list[object]) -> ExecutionPlan:
+        return _plan(
+            AgentTask(
+                id="replacement",
+                agent="general",
+                capability="general.respond",
+                objective="recover",
+            ),
+            revision=2,
+        )
+
+    result = DynamicDagExecutor(
+        registry=registry,
+        max_replans=1,
+    ).execute(initial, replanner=replan)  # type: ignore[arg-type]
+
+    assert result.status == "completed"
+    assert result.plan.revision == 2
+    assert result.replan_count == 1
+    assert calls == {"broken": 1, "replacement": 1}

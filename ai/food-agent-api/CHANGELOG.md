@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.20.0
+
+- Replaced the three-way LangGraph branch with a fixed orchestration control graph that executes validated runtime task DAGs.
+- Added Semantic Router single-task fast paths and one-call LLM structured planning for uncertain or compound requests.
+- Added strict capability ownership, missing-dependency, cycle, depth, task-count, repeated-agent, and GeneralAgent isolation validation.
+- Added dependency-aware parallel execution, bounded retries and timeouts, failed-branch skipping, partial results, and one bounded replan.
+- Added structured upstream result propagation so downstream agents can consume verified IDs, facts, and references.
+- Added a tool-free GeneralAgent for greetings, clarification, capability guidance, and out-of-domain fallback.
+- Extended chat responses with run, plan revision, workflow, participating agents, execution status, and per-task status metadata.
+- Kept TradeAgent on its existing read-only Java Gateway capability without adding transaction actions.
+
 ## 0.19.3
 
 - Raised the final reranker evidence floor to `0.2` after positive and out-of-domain score calibration.
