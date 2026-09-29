@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.22.0`
+Current version: `0.23.0`
 
 Current route chain:
 
@@ -21,13 +21,14 @@ HTTP Request
 -> deterministic single-response composer with partial-failure disclosure
 -> Recommend query rewrite -> Embedding + ES BM25 / Milvus vector retrieval -> RRF -> Rerank -> bounded Top-K context -> Prompt + Query -> LLM answer
 -> Support query rewrite -> Embedding + ES rule BM25 / Milvus vector retrieval -> RRF -> Rerank -> bounded Top-K context -> Prompt + Query -> LLM answer
--> Trade query rewrite -> allow-listed Java Gateway GET queries -> LLM answer
+-> Trade query rewrite -> bounded LLM Tool Calling -> validated read-only Tool Runtime -> allow-listed Java Gateway GET queries -> LLM answer
 -> Response
 ```
 
 Added by version:
 
 ```text
+0.23.0: native read-only Tool Runtime, validated TradeAgent Tool Calling, and deterministic fallback
 0.20.1: removed the obsolete three-way router, tightened order-query routing, and enforced per-task DAG timeouts
 0.20.0: validated dynamic multi-agent DAG orchestration, GeneralAgent fallback, dependency artifacts, parallel execution, and bounded replanning
 0.19.3: calibrated final evidence threshold and out-of-domain RAG rejection evaluation
@@ -110,7 +111,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.22.0
+APP_VERSION=0.23.0
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false

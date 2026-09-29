@@ -15,8 +15,13 @@ from app.rag.chain_models import (
     select_references,
 )
 from app.search.schemas import Reference
+from app.tools.executor import ToolExecutor
+from app.tools.models import ToolCall, ToolContext, ToolExecution
+from app.tools.registry import ToolRegistry
+from app.tools.trade_tools import build_trade_tool_registry
 from app.trade.gateway_client import GatewayQueryResult, TradeGatewayClient
 from app.trade.policy import detect_trade_mutation
+from app.trade.tool_selector import select_trade_tool_calls
 
 logger = logging.getLogger("food_agent.trade.chain")
 
@@ -70,12 +75,17 @@ class TradeChain:
         settings: Settings | None = None,
         gateway_client: TradeGatewayClient | None = None,
         chat_model: Any | None = None,
+        tool_registry: ToolRegistry | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.gateway_client = gateway_client or TradeGatewayClient(
             settings=self.settings
         )
         self.chat_model = chat_model
+        self.tool_registry = tool_registry or build_trade_tool_registry(
+            self.gateway_client
+        )
+        self.tool_executor = ToolExecutor(self.tool_registry)
 
     def run(
         self,
@@ -187,41 +197,51 @@ class TradeChain:
         )
         team_id = _extract_text(message, _TEAM_ID_PATTERNS)
         quantity = _extract_quantity(message)
+        required_calls: list[ToolCall] = []
         results: list[GatewayQueryResult] = []
 
-        package_result: GatewayQueryResult | None = None
         if capabilities.intersection({"price_query", "stock_query", "order_preview"}):
             if package_id is None:
-                package_result = _missing_parameter(
-                    "package_snapshot",
-                    "价格、库存或订单预览查询需要明确的套餐 ID。",
+                results.append(
+                    _missing_parameter(
+                        "package_snapshot",
+                        "价格、库存或订单预览查询需要明确的套餐 ID。",
+                    )
                 )
             else:
-                package_result = self.gateway_client.get_package_snapshot(package_id)
-            results.append(package_result)
+                required_calls.append(
+                    ToolCall(
+                        name="trade_get_package_snapshot",
+                        arguments={"package_id": package_id},
+                    )
+                )
 
-        coupon_result: GatewayQueryResult | None = None
         if "coupon_query" in capabilities or (
             "order_preview" in capabilities and authorization.strip()
         ):
             if _asks_for_my_coupons(message) or "order_preview" in capabilities:
-                coupon_result = self.gateway_client.list_my_coupons(authorization)
+                required_calls.append(ToolCall(name="trade_list_my_coupons"))
             else:
-                coupon_result = self.gateway_client.list_coupon_templates(authorization)
-            results.append(coupon_result)
+                required_calls.append(ToolCall(name="trade_list_coupon_templates"))
 
         if "group_buy_query" in capabilities:
             if _asks_for_my_group_buys(message):
-                results.append(
-                    self.gateway_client.list_my_group_buy_orders(authorization)
+                required_calls.append(
+                    ToolCall(name="trade_list_my_group_buy_orders")
                 )
             elif team_id:
-                results.append(
-                    self.gateway_client.get_group_buy_team(team_id, authorization)
+                required_calls.append(
+                    ToolCall(
+                        name="trade_get_group_buy_team",
+                        arguments={"team_id": team_id},
+                    )
                 )
             elif package_id is not None:
-                results.append(
-                    self.gateway_client.list_group_buy_teams(package_id, authorization)
+                required_calls.append(
+                    ToolCall(
+                        name="trade_list_group_buy_teams",
+                        arguments={"package_id": package_id},
+                    )
                 )
             else:
                 results.append(
@@ -233,9 +253,40 @@ class TradeChain:
 
         if "order_query" in capabilities:
             if order_id is not None:
-                results.append(self.gateway_client.get_order(order_id, authorization))
+                required_calls.append(
+                    ToolCall(
+                        name="trade_get_order",
+                        arguments={"order_id": order_id},
+                    )
+                )
             else:
-                results.append(self.gateway_client.list_orders(authorization))
+                required_calls.append(ToolCall(name="trade_list_my_orders"))
+
+        selected_calls = select_trade_tool_calls(
+            settings=self.settings,
+            registry=self.tool_registry,
+            message=message,
+            capabilities=capabilities,
+            required_calls=required_calls,
+            chat_model=self.chat_model,
+        )
+        executions = self.tool_executor.execute(
+            selected_calls,
+            ToolContext(authorization=authorization),
+        )
+        results.extend(
+            _tool_execution_result(execution, self.tool_registry)
+            for execution in executions
+        )
+
+        package_result = next(
+            (result for result in results if result.capability == "package_snapshot"),
+            None,
+        )
+        coupon_result = next(
+            (result for result in results if result.capability == "coupon_query"),
+            None,
+        )
 
         if (
             "order_preview" in capabilities
@@ -350,6 +401,36 @@ def _missing_parameter(capability: str, message: str) -> GatewayQueryResult:
     return GatewayQueryResult(
         capability=capability,
         status="missing_parameter",
+        message=message,
+    )
+
+
+def _tool_execution_result(
+    execution: ToolExecution,
+    registry: ToolRegistry,
+) -> GatewayQueryResult:
+    if execution.succeeded and isinstance(execution.result, GatewayQueryResult):
+        return execution.result
+
+    spec = registry.get(execution.call.name)
+    if execution.call.name == "trade_get_package_snapshot":
+        capability = "package_snapshot"
+    elif spec:
+        capability = min(spec.capabilities)
+    else:
+        capability = execution.call.name
+    if execution.status == "missing_authorization":
+        status = "missing_authorization"
+        message = "该查询需要登录用户的 Authorization。"
+    elif execution.status == "invalid_arguments":
+        status = "missing_parameter"
+        message = "工具参数不完整或格式不正确。"
+    else:
+        status = "unavailable"
+        message = "只读业务工具暂时不可用。"
+    return GatewayQueryResult(
+        capability=capability,
+        status=status,
         message=message,
     )
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.23.0
+
+- Added a native Tool Registry and bounded Tool Executor with strict Pydantic arguments.
+- Registered only allow-listed TradeAgent reads; no transaction mutation tool exists.
+- Added one LLM Tool Calling selection round with deterministic fallback and explicit-ID protection.
+- Enforced tool ownership, authorization, deduplication, and maximum-call boundaries before Java access.
+
 ## 0.22.0
 
 - Reduced orchestration to one real capability per Agent and removed duplicate pseudo-stages.
