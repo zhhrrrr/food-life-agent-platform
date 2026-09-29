@@ -13,7 +13,7 @@ logger = logging.getLogger("food_agent.agents.general")
 
 class GeneralAgentInput(TypedDict, total=False):
     message: str
-    conversation_history: list[object]
+    session_history: list[object]
 
 
 class GeneralAnswer(BaseModel):

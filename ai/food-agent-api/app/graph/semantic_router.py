@@ -9,9 +9,9 @@ from pydantic import BaseModel, Field
 from app.core.config import Settings, get_settings
 from app.graph.route_examples import ROUTE_EXAMPLES, RouteExample, SemanticIntent
 from app.llm.embedding_model import build_embedding_model
-from app.memory.conversation_memory import (
-    ConversationTurn,
-    should_use_conversation_history,
+from app.memory.session_memory import (
+    SessionTurn,
+    should_use_session_history,
 )
 
 logger = logging.getLogger("food_agent.graph.semantic_router")
@@ -40,7 +40,7 @@ class SemanticRouter:
     def match(
         self,
         message: str,
-        history: list[ConversationTurn] | None = None,
+        history: list[SessionTurn] | None = None,
     ) -> SemanticRouteMatch | None:
         if not self.settings.semantic_router_enabled:
             return None
@@ -91,9 +91,9 @@ class SemanticRouter:
 
 
 # 最后两轮对话
-def build_semantic_query(message: str, history: list[ConversationTurn]) -> str:
+def build_semantic_query(message: str, history: list[SessionTurn]) -> str:
     recent_history = history[-2:]
-    if not recent_history or not should_use_conversation_history(message):
+    if not recent_history or not should_use_session_history(message):
         return message
     previous = "\n".join(
         f"上一轮用户请求（{turn.intent or 'unknown'}）：{turn.user}"

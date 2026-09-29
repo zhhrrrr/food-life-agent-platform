@@ -18,6 +18,10 @@ from app.core.errors import (
 from app.core.logging import configure_logging
 from app.sync.es_reconciliation import start_es_reconciliation, stop_es_reconciliation
 from app.sync.es_sync_consumer import start_es_sync_consumer, stop_es_sync_consumer
+from app.sync.memory_sync_consumer import (
+    start_memory_sync_consumer,
+    stop_memory_sync_consumer,
+)
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -28,9 +32,11 @@ logger = logging.getLogger("food_agent.api")
 async def lifespan(_: FastAPI):
     start_es_sync_consumer(settings)
     start_es_reconciliation(settings)
+    start_memory_sync_consumer(settings)
     try:
         yield
     finally:
+        stop_memory_sync_consumer()
         stop_es_reconciliation()
         stop_es_sync_consumer()
 

@@ -110,7 +110,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.20.1
+APP_VERSION=0.21.0
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false
@@ -134,10 +134,19 @@ ORCHESTRATION_MAX_DEPTH=6
 ORCHESTRATION_MAX_PARALLEL_TASKS=3
 ORCHESTRATION_MAX_REPLANS=1
 ORCHESTRATION_PLANNER_TIMEOUT_SECONDS=60
-CONVERSATION_MEMORY_ENABLED=false
-CONVERSATION_MEMORY_TTL_SECONDS=86400
-CONVERSATION_MEMORY_MAX_TURNS=8
-CONVERSATION_MEMORY_KEY_PREFIX=food-agent-api:conversation:
+SESSION_MEMORY_ENABLED=false
+SESSION_MEMORY_TTL_SECONDS=7200
+SESSION_MEMORY_MAX_TURNS=8
+SESSION_MEMORY_KEY_PREFIX=food-agent-api:session:
+SESSION_SUMMARY_ENABLED=true
+SESSION_SUMMARY_TRIGGER_TURNS=8
+SESSION_SUMMARY_TRIGGER_CHARS=3000
+MEMORY_JAVA_TIMEOUT_SECONDS=3
+LONG_TERM_MEMORY_ENABLED=false
+LONG_TERM_MEMORY_TOP_K=3
+LONG_TERM_MEMORY_CANDIDATE_K=10
+LONG_TERM_MEMORY_MIN_SCORE=0.55
+LONG_TERM_MEMORY_COLLECTION=food_user_memory
 JAVA_GATEWAY_BASE_URL=http://127.0.0.1:8080
 JAVA_BUSINESS_BASE_URL=http://127.0.0.1:8201
 JAVA_TRADE_BASE_URL=http://127.0.0.1:8301
@@ -181,6 +190,8 @@ RAG_RERANK_TIMEOUT_SECONDS=10
 RAG_RERANK_MIN_SCORE=0.2
 RABBITMQ_URL=amqp://guest:guest@127.0.0.1:5672/%2F
 REDIS_URL=redis://127.0.0.1:6379/0
+MEMORY_SYNC_CONSUMER_ENABLED=false
+MEMORY_SYNC_QUEUE=food.agent.memory.sync.queue
 ES_SYNC_CONSUMER_ENABLED=false
 ES_SYNC_BUSINESS_QUEUE=food.business.search.sync.queue
 ES_SYNC_TRADE_QUEUE=food.trade.search.sync.queue
@@ -256,7 +267,17 @@ SEMANTIC_ROUTER_MIN_MARGIN=0.05
 
 The planner can only use capabilities in the local registry. Trade remains a read-only Gateway worker, and GeneralAgent has no tools. Redis stores bounded, expiring `user`, `assistant`, and `intent` turns; Authorization is never stored.
 
-Each chat response returns `conversation_id`, `run_id`, `plan_revision`, `workflow`, `agents`, `execution_status`, per-task status, `router_source`, and `router_confidence`. Send the same `conversation_id` in the next request to continue the conversation.
+Each chat response returns `session_id`, `run_id`, `plan_revision`, `workflow`, `agents`, `execution_status`, per-task status, `router_source`, `router_confidence`, and `memory_status`. Send the same `session_id` in the next request to continue the session.
+
+## Memory architecture
+
+- MySQL in `food-user-service` is the durable source for sessions, raw turns, historical summaries, stable user preferences, semantic events, and the memory Outbox.
+- Redis stores only the expiring hot session view under `food-agent-api:session:{user_id}:{session_id}`. A cache miss reloads MySQL through the authenticated Java Gateway API.
+- Summary generation starts after 8 unsummarized turns or 3000 characters. Updates use the session version for optimistic concurrency; raw turns remain durable.
+- Stable preferences have no automatic TTL and are replaced, deleted, or deduplicated by `(user_id, memory_type, memory_key)`.
+- Semantic events expire after 180 days. Events with the same user, type, entity and cosine similarity at least `0.92` reuse the event ID and refresh their expiry.
+- Java writes semantic events and Outbox rows in one transaction. RabbitMQ drives idempotent Milvus upsert/delete, failed consumer messages enter `food.agent.memory.sync.dlq`, and a daily MySQL replay repairs missed vector writes.
+- RecommendAgent may read structured preferences and semantic events. SupportAgent reads semantic events only for explicit history questions. TradeAgent never uses long-term memory as a source of real-time facts.
 
 ## Start Service
 

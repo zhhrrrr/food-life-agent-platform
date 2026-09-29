@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.21.0
+
+- Replaced `conversation_id` with `session_id` across the public API and orchestration state.
+- Added durable MySQL sessions and raw turns, optimistic historical summaries, and Redis hot session views.
+- Added structured long-term preferences in MySQL and isolated per-user semantic memory in Milvus.
+- Added deterministic memory routing so recommendation, support-history, and trade queries use only appropriate memory sources.
+- Added transactional Outbox delivery, RabbitMQ retry, dead-letter storage, idempotent Milvus sync, and 180-day semantic-event expiry.
+
 ## 0.20.1
 
 - Removed the obsolete three-way Tool Calling router after dynamic planning became the only production orchestration entry point.

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.20.1"
+    app_version: str = "0.21.0"
     app_port: int = 8500
     log_level: str = "INFO"
     # 本地env 文件中配置的llm_router_enabled优先级高于此处的默认值
@@ -32,10 +32,19 @@ class Settings(BaseModel):
     orchestration_max_parallel_tasks: int = Field(default=3, ge=1, le=10)
     orchestration_max_replans: int = Field(default=1, ge=0, le=3)
     orchestration_planner_timeout_seconds: float = Field(default=60.0, gt=0, le=180.0)
-    conversation_memory_enabled: bool = False
-    conversation_memory_ttl_seconds: int = Field(default=86400, ge=60)
-    conversation_memory_max_turns: int = Field(default=8, ge=1, le=50)
-    conversation_memory_key_prefix: str = "food-agent-api:conversation:"
+    session_memory_enabled: bool = False
+    session_memory_ttl_seconds: int = Field(default=7200, ge=60)
+    session_memory_max_turns: int = Field(default=8, ge=1, le=50)
+    session_memory_key_prefix: str = "food-agent-api:session:"
+    session_summary_enabled: bool = True
+    session_summary_trigger_turns: int = Field(default=8, ge=2, le=50)
+    session_summary_trigger_chars: int = Field(default=3000, ge=500, le=20000)
+    memory_java_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+    long_term_memory_enabled: bool = False
+    long_term_memory_top_k: int = Field(default=3, ge=1, le=10)
+    long_term_memory_candidate_k: int = Field(default=10, ge=1, le=50)
+    long_term_memory_min_score: float = Field(default=0.55, ge=-1.0, le=1.0)
+    long_term_memory_collection: str = "food_user_memory"
     java_gateway_base_url: str = "http://127.0.0.1:8080"
     java_business_base_url: str = "http://127.0.0.1:8201"
     java_trade_base_url: str = "http://127.0.0.1:8301"
@@ -82,6 +91,8 @@ class Settings(BaseModel):
     rag_rerank_min_score: float = Field(default=0.2, ge=0.0, le=1.0)
     rabbitmq_url: str = "amqp://guest:guest@127.0.0.1:5672/%2F"
     redis_url: str = "redis://127.0.0.1:6379/0"
+    memory_sync_consumer_enabled: bool = False
+    memory_sync_queue: str = "food.agent.memory.sync.queue"
     es_sync_consumer_enabled: bool = False
     es_sync_business_queue: str = "food.business.search.sync.queue"
     es_sync_trade_queue: str = "food.trade.search.sync.queue"
@@ -232,30 +243,57 @@ def get_settings() -> Settings:
                 str(defaults.orchestration_planner_timeout_seconds),
             )
         ),
-        conversation_memory_enabled=_get_value(
+        session_memory_enabled=_get_value(
             dotenv_values,
-            "CONVERSATION_MEMORY_ENABLED",
-            str(defaults.conversation_memory_enabled),
+            "SESSION_MEMORY_ENABLED",
+            str(defaults.session_memory_enabled),
         ).lower()
         in {"1", "true", "yes", "on"},
-        conversation_memory_ttl_seconds=int(
+        session_memory_ttl_seconds=int(
             _get_value(
                 dotenv_values,
-                "CONVERSATION_MEMORY_TTL_SECONDS",
-                str(defaults.conversation_memory_ttl_seconds),
+                "SESSION_MEMORY_TTL_SECONDS",
+                str(defaults.session_memory_ttl_seconds),
             )
         ),
-        conversation_memory_max_turns=int(
+        session_memory_max_turns=int(
             _get_value(
                 dotenv_values,
-                "CONVERSATION_MEMORY_MAX_TURNS",
-                str(defaults.conversation_memory_max_turns),
+                "SESSION_MEMORY_MAX_TURNS",
+                str(defaults.session_memory_max_turns),
             )
         ),
-        conversation_memory_key_prefix=_get_value(
+        session_memory_key_prefix=_get_value(
             dotenv_values,
-            "CONVERSATION_MEMORY_KEY_PREFIX",
-            defaults.conversation_memory_key_prefix,
+            "SESSION_MEMORY_KEY_PREFIX",
+            defaults.session_memory_key_prefix,
+        ),
+        session_summary_enabled=_get_value(
+            dotenv_values, "SESSION_SUMMARY_ENABLED", str(defaults.session_summary_enabled)
+        ).lower() in {"1", "true", "yes", "on"},
+        session_summary_trigger_turns=int(_get_value(
+            dotenv_values, "SESSION_SUMMARY_TRIGGER_TURNS", str(defaults.session_summary_trigger_turns)
+        )),
+        session_summary_trigger_chars=int(_get_value(
+            dotenv_values, "SESSION_SUMMARY_TRIGGER_CHARS", str(defaults.session_summary_trigger_chars)
+        )),
+        memory_java_timeout_seconds=float(_get_value(
+            dotenv_values, "MEMORY_JAVA_TIMEOUT_SECONDS", str(defaults.memory_java_timeout_seconds)
+        )),
+        long_term_memory_enabled=_get_value(
+            dotenv_values, "LONG_TERM_MEMORY_ENABLED", str(defaults.long_term_memory_enabled)
+        ).lower() in {"1", "true", "yes", "on"},
+        long_term_memory_top_k=int(_get_value(
+            dotenv_values, "LONG_TERM_MEMORY_TOP_K", str(defaults.long_term_memory_top_k)
+        )),
+        long_term_memory_candidate_k=int(_get_value(
+            dotenv_values, "LONG_TERM_MEMORY_CANDIDATE_K", str(defaults.long_term_memory_candidate_k)
+        )),
+        long_term_memory_min_score=float(_get_value(
+            dotenv_values, "LONG_TERM_MEMORY_MIN_SCORE", str(defaults.long_term_memory_min_score)
+        )),
+        long_term_memory_collection=_get_value(
+            dotenv_values, "LONG_TERM_MEMORY_COLLECTION", defaults.long_term_memory_collection
         ),
         java_gateway_base_url=_get_value(
             dotenv_values,
@@ -469,6 +507,12 @@ def get_settings() -> Settings:
         ),
         rabbitmq_url=_get_value(dotenv_values, "RABBITMQ_URL", defaults.rabbitmq_url),
         redis_url=_get_value(dotenv_values, "REDIS_URL", defaults.redis_url),
+        memory_sync_consumer_enabled=_get_value(
+            dotenv_values, "MEMORY_SYNC_CONSUMER_ENABLED", str(defaults.memory_sync_consumer_enabled)
+        ).lower() in {"1", "true", "yes", "on"},
+        memory_sync_queue=_get_value(
+            dotenv_values, "MEMORY_SYNC_QUEUE", defaults.memory_sync_queue
+        ),
         es_sync_consumer_enabled=_get_value(
             dotenv_values,
             "ES_SYNC_CONSUMER_ENABLED",

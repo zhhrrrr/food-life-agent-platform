@@ -36,7 +36,8 @@ class DynamicDagExecutor:
         plan: ExecutionPlan,
         *,
         authorization: str = "",
-        conversation_history: list[object] | None = None,
+        session_history: list[object] | None = None,
+        memory_context_by_agent: Mapping[str, str] | None = None,
         replanner: Replanner | None = None,
     ) -> DagExecutionResult:
         current_plan = validate_plan(plan)
@@ -48,7 +49,8 @@ class DynamicDagExecutor:
                 current_plan,
                 results,
                 authorization=authorization,
-                conversation_history=conversation_history or [],
+                session_history=session_history or [],
+                memory_context_by_agent=memory_context_by_agent or {},
             )
             required_failures = [
                 task
@@ -98,7 +100,8 @@ class DynamicDagExecutor:
         results: dict[str, TaskResult],
         *,
         authorization: str,
-        conversation_history: list[object],
+        session_history: list[object],
+        memory_context_by_agent: Mapping[str, str],
     ) -> None:
         task_by_id = {task.id: task for task in plan.tasks}
         while len(results) < len(task_by_id):
@@ -138,7 +141,8 @@ class DynamicDagExecutor:
                         wave,
                         results,
                         authorization=authorization,
-                        conversation_history=conversation_history,
+                        session_history=session_history,
+                        memory_context_by_agent=memory_context_by_agent,
                     )
                 )
                 progress = True
@@ -151,7 +155,8 @@ class DynamicDagExecutor:
         completed: dict[str, TaskResult],
         *,
         authorization: str,
-        conversation_history: list[object],
+        session_history: list[object],
+        memory_context_by_agent: Mapping[str, str],
     ) -> dict[str, TaskResult]:
         executor = ThreadPoolExecutor(max_workers=min(len(tasks), self.max_parallel_tasks))
         future_by_task: dict[Future[TaskResult], AgentTask] = {
@@ -160,7 +165,8 @@ class DynamicDagExecutor:
                 task,
                 completed,
                 authorization,
-                conversation_history,
+                session_history,
+                memory_context_by_agent,
             ): task
             for task in tasks
         }
@@ -218,15 +224,20 @@ class DynamicDagExecutor:
         task: AgentTask,
         completed: dict[str, TaskResult],
         authorization: str,
-        conversation_history: list[object],
+        session_history: list[object],
+        memory_context_by_agent: Mapping[str, str],
     ) -> TaskResult:
         spec = self.registry.get(task.capability)
         if spec is None or spec.agent != task.agent:
             raise ValueError(f"unregistered capability: {task.capability}")
         state = {
-            "message": _worker_message(task, completed),
+            "message": _worker_message(
+                task,
+                completed,
+                memory_context_by_agent.get(task.agent, ""),
+            ),
             "authorization": authorization,
-            "conversation_history": conversation_history,
+            "session_history": session_history,
         }
         last_error = ""
         for attempt in range(1, task.max_attempts + 1):
@@ -257,9 +268,19 @@ class DynamicDagExecutor:
         )
 
 
-def _worker_message(task: AgentTask, completed: dict[str, TaskResult]) -> str:
+def _worker_message(
+    task: AgentTask,
+    completed: dict[str, TaskResult],
+    memory_context: str = "",
+) -> str:
+    objective = task.objective
+    if memory_context:
+        objective += (
+            "\n\n用户记忆上下文（仅用于个性化，不可替代 ES 检索或 Java 实时事实）：\n"
+            + memory_context[:4000]
+        )
     if not task.depends_on:
-        return task.objective
+        return objective
     upstream = {
         dependency: completed[dependency].payload
         for dependency in task.depends_on
@@ -267,7 +288,7 @@ def _worker_message(task: AgentTask, completed: dict[str, TaskResult]) -> str:
     }
     serialized = json.dumps(upstream, ensure_ascii=False, default=str)[:6000]
     return (
-        f"{task.objective}\n\n"
+        f"{objective}\n\n"
         "已验证的上游任务结果如下。仅使用其中明确存在的 ID、事实和引用，"
         f"不要补造缺失信息：\n{serialized}"
     )

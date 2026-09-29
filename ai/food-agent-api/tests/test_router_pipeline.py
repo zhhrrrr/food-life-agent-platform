@@ -18,7 +18,7 @@ from app.llm.embedding_model import (
     resolve_embedding_model_options,
 )
 from app.main import app
-from app.memory.conversation_memory import ConversationTurn, RedisConversationMemory
+from app.memory.session_memory import SessionContext, SessionMemoryService, SessionTurn
 from app.orchestration.planner import DynamicPlanner
 from evaluation.semantic_route_cases import SEMANTIC_ROUTE_EVALUATION_CASES
 
@@ -62,7 +62,7 @@ def test_high_confidence_semantic_route_bypasses_llm_planner() -> None:
         def match(
             self,
             message: str,
-            history: list[ConversationTurn],
+            history: list[SessionTurn],
         ) -> SemanticRouteMatch:
             assert message == "\u5e2e\u6211\u627e\u4e00\u5bb6\u9002\u5408\u7ea6\u4f1a\u7684\u9910\u5385"
             assert history == []
@@ -169,7 +169,7 @@ def test_semantic_router_scores_margin_uses_memory_and_caches_examples() -> None
         embedding_model=embeddings,
     )
     history = [
-        ConversationTurn(
+        SessionTurn(
             user="\u67e5\u8be2\u5957\u9910 12 \u7684\u4ef7\u683c",
             intent="trade",
         )
@@ -229,73 +229,44 @@ def test_semantic_router_failure_enters_cooldown() -> None:
     assert embeddings.calls == 1
 
 
-class FakeRedisPipeline:
-    def __init__(self, client: "FakeRedis") -> None:
-        self.client = client
-        self.operations: list[tuple[str, tuple[Any, ...]]] = []
-
-    def rpush(self, *args: Any) -> "FakeRedisPipeline":
-        self.operations.append(("rpush", args))
-        return self
-
-    def ltrim(self, *args: Any) -> "FakeRedisPipeline":
-        self.operations.append(("ltrim", args))
-        return self
-
-    def expire(self, *args: Any) -> "FakeRedisPipeline":
-        self.operations.append(("expire", args))
-        return self
-
-    def execute(self) -> None:
-        for operation, args in self.operations:
-            if operation == "rpush":
-                key, value = args
-                self.client.values.setdefault(key, []).append(value)
-            elif operation == "ltrim":
-                key, start, _ = args
-                self.client.values[key] = self.client.values.get(key, [])[start:]
-            elif operation == "expire":
-                key, ttl = args
-                self.client.expirations[key] = ttl
-
-
 class FakeRedis:
     def __init__(self) -> None:
-        self.values: dict[str, list[str]] = {}
+        self.values: dict[str, str] = {}
         self.expirations: dict[str, int] = {}
 
-    def pipeline(self, transaction: bool) -> FakeRedisPipeline:
-        assert transaction is True
-        return FakeRedisPipeline(self)
+    def get(self, key: str) -> str | None:
+        return self.values.get(key)
 
-    def lrange(self, key: str, start: int, end: int) -> list[str]:
-        assert (start, end) == (0, -1)
-        return self.values.get(key, [])
+    def setex(self, key: str, ttl: int, value: str) -> None:
+        self.values[key] = value
+        self.expirations[key] = ttl
 
 
-def test_redis_conversation_memory_is_bounded_and_expiring() -> None:
+def test_session_memory_cache_is_bounded_and_expiring() -> None:
     redis_client = FakeRedis()
-    memory = RedisConversationMemory(
+    memory = SessionMemoryService(
         settings=Settings(
-            conversation_memory_enabled=True,
-            conversation_memory_max_turns=2,
-            conversation_memory_ttl_seconds=120,
+            session_memory_enabled=True,
+            session_memory_max_turns=2,
+            session_memory_ttl_seconds=120,
         ),
         redis_client=redis_client,
     )
 
     for index in range(3):
         memory.append(
-            "conversation-1",
+            "session-1",
             user=f"question-{index}",
             assistant=f"answer-{index}",
             intent="trade",
+            run_id=f"run-{index}",
         )
 
-    turns = memory.load("conversation-1")
+    context, status = memory.load("session-1")
 
-    assert [turn.user for turn in turns] == ["question-1", "question-2"]
-    assert redis_client.expirations["food-agent-api:conversation:conversation-1"] == 120
+    assert status == "cache"
+    assert [turn.user for turn in context.turns] == ["question-1", "question-2"]
+    assert redis_client.expirations["food-agent-api:session:anonymous:session-1"] == 120
 
 
 def test_redis_memory_failure_skips_follow_up_calls_during_cooldown() -> None:
@@ -303,54 +274,59 @@ def test_redis_memory_failure_skips_follow_up_calls_during_cooldown() -> None:
         def __init__(self) -> None:
             self.calls = 0
 
-        def lrange(self, key: str, start: int, end: int) -> list[str]:
+        def get(self, key: str) -> str | None:
             self.calls += 1
             raise RuntimeError("redis unavailable")
 
     redis_client = BrokenRedis()
-    memory = RedisConversationMemory(
-        settings=Settings(conversation_memory_enabled=True),
+    memory = SessionMemoryService(
+        settings=Settings(session_memory_enabled=True),
         redis_client=redis_client,
     )
 
-    assert memory.load("conversation-1") == []
-    assert memory.load("conversation-1") == []
+    assert memory.load("session-1")[1] == "empty"
+    assert memory.load("session-1")[1] == "empty"
     assert redis_client.calls == 1
 
 
-def test_chat_api_loads_and_appends_conversation_memory(monkeypatch) -> None:
+def test_chat_api_loads_and_appends_session_memory(monkeypatch) -> None:
     class TrackingMemory:
         def __init__(self) -> None:
             self.appended: list[tuple[str, str, str, str]] = []
 
-        def load(self, conversation_id: str) -> list[ConversationTurn]:
-            assert conversation_id == "conversation-1"
-            return [ConversationTurn(user="\u67e5\u8be2\u8ba2\u5355 12345", intent="trade")]
+        settings = Settings(session_memory_max_turns=8)
+
+        def load(self, session_id: str, **kwargs: Any) -> tuple[SessionContext, str]:
+            assert session_id == "session-1"
+            return SessionContext(session_id=session_id, turns=[SessionTurn(user="\u67e5\u8be2\u8ba2\u5355 12345", intent="trade")]), "cache"
 
         def append(
             self,
-            conversation_id: str,
+            session_id: str,
             *,
             user: str,
             assistant: str,
             intent: str,
-        ) -> None:
-            self.appended.append((conversation_id, user, assistant, intent))
+            run_id: str,
+            **kwargs: Any,
+        ) -> str:
+            self.appended.append((session_id, user, assistant, intent))
+            return "durable"
 
     memory = TrackingMemory()
-    monkeypatch.setattr("app.api.chat.conversation_memory", memory)
+    monkeypatch.setattr("app.api.chat.session_memory", memory)
 
     response = TestClient(app).post(
         "/api/agent/chat",
-        json={"message": "\u90a3\u8fd9\u4e2a\u5462", "conversation_id": "conversation-1"},
+        json={"message": "\u90a3\u8fd9\u4e2a\u5462", "session_id": "session-1"},
     )
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["conversation_id"] == "conversation-1"
+    assert payload["session_id"] == "session-1"
     assert payload["intent"] == "trade"
     assert payload["router_source"] == "rules"
-    assert memory.appended[0][0:2] == ("conversation-1", "\u90a3\u8fd9\u4e2a\u5462")
+    assert memory.appended[0][0:2] == ("session-1", "\u90a3\u8fd9\u4e2a\u5462")
     assert memory.appended[0][3] == "trade"
 
 
@@ -358,7 +334,7 @@ def test_rule_fallback_does_not_let_old_topic_override_explicit_new_query() -> N
     plan = DynamicPlanner(settings=Settings(llm_router_enabled=False)).plan(
         "\u63a8\u8350\u4e00\u5bb6\u5ddd\u83dc\u9986",
         history=[
-            ConversationTurn(
+            SessionTurn(
                 user="\u9000\u6b3e\u89c4\u5219\u662f\u4ec0\u4e48",
                 intent="support",
             )

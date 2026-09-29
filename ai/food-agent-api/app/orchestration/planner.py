@@ -9,9 +9,9 @@ from uuid import uuid4
 from app.core.config import Settings, get_settings
 from app.graph.semantic_router import SemanticRouter
 from app.llm.structured_output import invoke_structured_output
-from app.memory.conversation_memory import (
-    ConversationTurn,
-    should_use_conversation_history,
+from app.memory.session_memory import (
+    SessionTurn,
+    should_use_session_history,
 )
 from app.orchestration.models import (
     AgentName,
@@ -137,10 +137,10 @@ class DynamicPlanner:
     def plan(
         self,
         message: str,
-        history: list[ConversationTurn] | None = None,
+        history: list[SessionTurn] | None = None,
     ) -> ExecutionPlan:
-        conversation_history = history or []
-        fallback = _rules_plan(message, conversation_history)
+        session_history = history or []
+        fallback = _rules_plan(message, session_history)
         signals = detect_domain_agents(message)
 
         if not signals and any(
@@ -152,7 +152,7 @@ class DynamicPlanner:
             semantic_plan = self._semantic_plan(
                 message,
                 signals[0],
-                conversation_history,
+                session_history,
             )
             if semantic_plan is not None:
                 return semantic_plan
@@ -164,7 +164,7 @@ class DynamicPlanner:
             draft = invoke_structured_output(
                 settings=self.planner_settings,
                 schema=PlanDraft,
-                messages=_planner_messages(message, conversation_history),
+                messages=_planner_messages(message, session_history),
                 chat_model=self.chat_model,
             )
             candidate = _materialize_draft(
@@ -237,7 +237,7 @@ class DynamicPlanner:
         self,
         message: str,
         expected_agent: AgentName,
-        history: list[ConversationTurn],
+        history: list[SessionTurn],
     ) -> ExecutionPlan | None:
         match = self.semantic_router.match(message, history)
         if match is None or not match.accepted or match.intent != expected_agent:
@@ -277,10 +277,10 @@ def _default_semantic_router() -> SemanticRouter:
 
 def _rules_plan(
     message: str,
-    history: list[ConversationTurn],
+    history: list[SessionTurn],
 ) -> ExecutionPlan:
     agents = detect_domain_agents(message)
-    if not agents and history and should_use_conversation_history(message):
+    if not agents and history and should_use_session_history(message):
         previous = history[-1].intent
         if previous in {"recommend", "support", "trade"}:
             agents = [previous]  # type: ignore[list-item]
@@ -478,7 +478,7 @@ def _is_current_order_query(message: str) -> bool:
 
 def _planner_messages(
     message: str,
-    history: list[ConversationTurn],
+    history: list[SessionTurn],
 ) -> list[tuple[str, str]]:
     system = (
         "Create a bounded execution DAG for a food-life multi-agent system. "
