@@ -44,7 +44,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = Settings()
 
-    assert settings.app_version == "0.21.0"
+    assert settings.app_version == "0.22.0"
     assert settings.es_enabled is False
     assert settings.milvus_enabled is False
     assert settings.es_index_shop == "food_shop_index"
@@ -608,8 +608,13 @@ def test_support_agent_uses_rag_hits(monkeypatch) -> None:
     )
 
     class FakeSupportChain:
-        def run(self, message: str) -> object:
+        def run(
+            self,
+            message: str,
+            upstream_artifacts: dict[str, object] | None = None,
+        ) -> object:
             assert message == "\u9000\u6b3e\u89c4\u5219"
+            assert upstream_artifacts == {}
             return SupportChain(
                 settings=get_settings().model_copy(
                     update={"llm_router_enabled": False}

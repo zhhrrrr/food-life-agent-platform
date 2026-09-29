@@ -115,6 +115,26 @@ def test_trade_price_and_stock_share_one_package_snapshot_query() -> None:
     assert "stock" in result.response
 
 
+def test_trade_uses_package_id_from_upstream_artifact() -> None:
+    gateway = FakeGatewayClient()
+
+    result = _chain(gateway).run(
+        "\u67e5\u8be2\u5b9e\u65f6\u5e93\u5b58",
+        upstream_artifacts={
+            "recommend": {
+                "package_ids": [42],
+                "shop_ids": [],
+                "order_ids": [],
+                "facts": [],
+                "references": [],
+            }
+        },
+    )
+
+    assert gateway.calls == [("package", 42)]
+    assert result.capabilities == ["stock_query"]
+
+
 def test_trade_order_query_forwards_authorization() -> None:
     gateway = FakeGatewayClient()
 
@@ -168,9 +188,15 @@ def test_trade_agent_node_uses_chain_and_forwards_authorization(monkeypatch) -> 
     )
 
     class FakeTradeChain:
-        def run(self, message: str, authorization: str = "") -> TradeChainResult:
+        def run(
+            self,
+            message: str,
+            authorization: str = "",
+            upstream_artifacts: dict[str, object] | None = None,
+        ) -> TradeChainResult:
             assert message == "查询订单 12345"
             assert authorization == "token-1"
+            assert upstream_artifacts == {}
             return expected
 
     monkeypatch.setattr("app.agents.trade_agent.TradeChain", lambda: FakeTradeChain())

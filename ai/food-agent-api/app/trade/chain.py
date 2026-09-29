@@ -77,7 +77,12 @@ class TradeChain:
         )
         self.chat_model = chat_model
 
-    def run(self, message: str, authorization: str = "") -> TradeChainResult:
+    def run(
+        self,
+        message: str,
+        authorization: str = "",
+        upstream_artifacts: dict[str, object] | None = None,
+    ) -> TradeChainResult:
         rewrite = self.rewrite_query(message)
         blocked_action = detect_trade_mutation(message)
         if blocked_action:
@@ -98,7 +103,12 @@ class TradeChain:
                 ],
             )
 
-        query_results = self._query_facts(message, rewrite, authorization)
+        query_results = self._query_facts(
+            message,
+            rewrite,
+            authorization,
+            upstream_artifacts or {},
+        )
         successful_results = [result for result in query_results if result.has_data]
         if not successful_results:
             return TradeChainResult(
@@ -166,10 +176,15 @@ class TradeChain:
         message: str,
         rewrite: TradeQueryRewrite,
         authorization: str,
+        upstream_artifacts: dict[str, object],
     ) -> list[GatewayQueryResult]:
         capabilities = set(rewrite.capabilities)
-        package_id = _extract_int(message, _PACKAGE_ID_PATTERNS)
-        order_id = _extract_int(message, _ORDER_ID_PATTERNS)
+        package_id = _extract_int(message, _PACKAGE_ID_PATTERNS) or _artifact_id(
+            upstream_artifacts, "package_ids"
+        )
+        order_id = _extract_int(message, _ORDER_ID_PATTERNS) or _artifact_id(
+            upstream_artifacts, "order_ids"
+        )
         team_id = _extract_text(message, _TEAM_ID_PATTERNS)
         quantity = _extract_quantity(message)
         results: list[GatewayQueryResult] = []
@@ -301,6 +316,21 @@ def _extract_quantity(message: str) -> int:
     if quantity is None:
         return 1
     return min(max(quantity, 1), 99)
+
+
+def _artifact_id(artifacts: dict[str, object], field: str) -> int | None:
+    for artifact in artifacts.values():
+        if not isinstance(artifact, dict):
+            continue
+        values = artifact.get(field)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
+    return None
 
 
 def _asks_for_my_coupons(message: str) -> bool:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Callable, Mapping
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
@@ -10,6 +9,7 @@ from app.orchestration.models import (
     AgentTask,
     DagExecutionResult,
     ExecutionPlan,
+    TaskArtifact,
     TaskResult,
 )
 from app.orchestration.registry import CAPABILITY_REGISTRY, CapabilitySpec
@@ -231,13 +231,14 @@ class DynamicDagExecutor:
         if spec is None or spec.agent != task.agent:
             raise ValueError(f"unregistered capability: {task.capability}")
         state = {
-            "message": _worker_message(
-                task,
-                completed,
-                memory_context_by_agent.get(task.agent, ""),
-            ),
+            "message": _worker_message(task, memory_context_by_agent.get(task.agent, "")),
             "authorization": authorization,
             "session_history": session_history,
+            "upstream_artifacts": {
+                dependency: completed[dependency].artifact.model_dump(mode="json")
+                for dependency in task.depends_on
+                if dependency in completed
+            },
         }
         last_error = ""
         for attempt in range(1, task.max_attempts + 1):
@@ -249,6 +250,7 @@ class DynamicDagExecutor:
                     status="succeeded",
                     attempts=attempt,
                     payload=payload,
+                    artifact=TaskArtifact.from_payload(payload),
                 )
             except Exception as exc:  # noqa: BLE001 - retry registered worker boundary
                 last_error = f"{type(exc).__name__}: {exc}"
@@ -270,7 +272,6 @@ class DynamicDagExecutor:
 
 def _worker_message(
     task: AgentTask,
-    completed: dict[str, TaskResult],
     memory_context: str = "",
 ) -> str:
     objective = task.objective
@@ -279,19 +280,7 @@ def _worker_message(
             "\n\n用户记忆上下文（仅用于个性化，不可替代 ES 检索或 Java 实时事实）：\n"
             + memory_context[:4000]
         )
-    if not task.depends_on:
-        return objective
-    upstream = {
-        dependency: completed[dependency].payload
-        for dependency in task.depends_on
-        if dependency in completed
-    }
-    serialized = json.dumps(upstream, ensure_ascii=False, default=str)[:6000]
-    return (
-        f"{objective}\n\n"
-        "已验证的上游任务结果如下。仅使用其中明确存在的 ID、事实和引用，"
-        f"不要补造缺失信息：\n{serialized}"
-    )
+    return objective
 
 
 def _validate_completed_tasks_unchanged(

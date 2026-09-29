@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import Counter, deque
 
-from app.orchestration.models import AgentTask, ExecutionPlan
+from app.orchestration.models import ExecutionPlan
 from app.orchestration.registry import resolve_capability
 
 
@@ -70,15 +70,6 @@ def validate_plan(
     if max(depth.values(), default=0) > max_depth:
         raise PlanValidationError(f"plan depth exceeds {max_depth}")
 
-    for task in plan.tasks:
-        if task.capability == "recommend.rerank" and not task.depends_on:
-            raise PlanValidationError("recommend.rerank requires upstream evidence")
-        if task.capability == "support.explain":
-            trade_tasks = {item.id for item in plan.tasks if item.agent == "trade"}
-            if trade_tasks and not _has_upstream(task.id, trade_tasks, task_by_id):
-                raise PlanValidationError(
-                    "support.explain must depend on trade facts when TradeAgent is present"
-                )
     return plan
 
 
@@ -88,21 +79,3 @@ def validate_replan(previous: ExecutionPlan, revised: ExecutionPlan) -> Executio
     if revised.revision != previous.revision + 1:
         raise PlanValidationError("replan revision must increase by one")
     return revised
-
-
-def _has_upstream(
-    task_id: str,
-    candidates: set[str],
-    task_by_id: dict[str, AgentTask],
-) -> bool:
-    visited: set[str] = set()
-    pending = list(task_by_id[task_id].depends_on)
-    while pending:
-        dependency = pending.pop()
-        if dependency in candidates:
-            return True
-        if dependency in visited:
-            continue
-        visited.add(dependency)
-        pending.extend(task_by_id[dependency].depends_on)
-    return False

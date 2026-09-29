@@ -101,7 +101,7 @@ def test_llm_planner_normalizes_draft_before_strict_validation() -> None:
     assert plan.source == "llm"
     assert [task.id for task in plan.tasks] == ["recommend_1", "trade_2"]
     assert [task.capability for task in plan.tasks] == [
-        "recommend.retrieve",
+        "recommend.run",
         "trade.query",
     ]
     assert plan.tasks[1].depends_on == ["recommend_1"]
@@ -123,14 +123,14 @@ def test_plan_validator_rejects_cycles_and_cross_agent_capabilities() -> None:
         AgentTask(
             id="first",
             agent="recommend",
-            capability="recommend.retrieve",
+            capability="recommend.run",
             objective="first",
             depends_on=["second"],
         ),
         AgentTask(
             id="second",
             agent="support",
-            capability="support.retrieve",
+            capability="support.run",
             objective="second",
             depends_on=["first"],
         ),
@@ -146,7 +146,7 @@ def test_plan_validator_rejects_cycles_and_cross_agent_capabilities() -> None:
         AgentTask(
             id="wrong",
             agent="trade",
-            capability="recommend.retrieve",
+            capability="recommend.run",
             objective="wrong capability",
         )
     )
@@ -160,6 +160,7 @@ def test_plan_validator_rejects_cycles_and_cross_agent_capabilities() -> None:
 
 def test_executor_passes_upstream_artifact_to_dependent_agent() -> None:
     received_messages: list[str] = []
+    received_artifacts: list[dict[str, object]] = []
 
     def recommend_worker(state: dict[str, object]) -> dict[str, object]:
         return {
@@ -171,17 +172,18 @@ def test_executor_passes_upstream_artifact_to_dependent_agent() -> None:
 
     def trade_worker(state: dict[str, object]) -> dict[str, object]:
         received_messages.append(str(state["message"]))
+        received_artifacts.append(dict(state["upstream_artifacts"]))
         return {"response": "stock=8", "references": []}
 
     registry = {
-        "recommend.retrieve": CapabilitySpec("recommend", recommend_worker),
+        "recommend.run": CapabilitySpec("recommend", recommend_worker),
         "trade.query": CapabilitySpec("trade", trade_worker),
     }
     plan = _plan(
         AgentTask(
             id="recommend",
             agent="recommend",
-            capability="recommend.retrieve",
+            capability="recommend.run",
             objective="recommend a package",
         ),
         AgentTask(
@@ -196,7 +198,9 @@ def test_executor_passes_upstream_artifact_to_dependent_agent() -> None:
     result = DynamicDagExecutor(registry=registry).execute(plan)
 
     assert result.status == "completed"
-    assert "package-42" in received_messages[0]
+    assert received_messages == ["verify stock"]
+    assert received_artifacts[0]["recommend"]["package_ids"] == [42]
+    assert result.task_results[0].artifact.package_ids == [42]
     assert [item.status for item in result.task_results] == [
         "succeeded",
         "succeeded",
@@ -215,14 +219,14 @@ def test_executor_skips_dependents_after_required_failure() -> None:
         return {"response": "must not run"}
 
     registry = {
-        "recommend.retrieve": CapabilitySpec("recommend", broken_worker),
+        "recommend.run": CapabilitySpec("recommend", broken_worker),
         "trade.query": CapabilitySpec("trade", downstream_worker),
     }
     plan = _plan(
         AgentTask(
             id="recommend",
             agent="recommend",
-            capability="recommend.retrieve",
+            capability="recommend.run",
             objective="recommend",
         ),
         AgentTask(
@@ -251,14 +255,14 @@ def test_executor_applies_each_task_timeout_independently() -> None:
         return {"response": "completed"}
 
     registry = {
-        "recommend.retrieve": CapabilitySpec("recommend", short_timeout_worker),
+        "recommend.run": CapabilitySpec("recommend", short_timeout_worker),
         "trade.query": CapabilitySpec("trade", healthy_worker),
     }
     plan = _plan(
         AgentTask(
             id="short",
             agent="recommend",
-            capability="recommend.retrieve",
+            capability="recommend.run",
             objective="must time out",
             timeout_seconds=0.01,
         ),
@@ -290,14 +294,14 @@ def test_executor_applies_one_bounded_replan() -> None:
         return {"response": "recovered"}
 
     registry = {
-        "recommend.retrieve": CapabilitySpec("recommend", broken_worker),
+        "recommend.run": CapabilitySpec("recommend", broken_worker),
         "general.respond": CapabilitySpec("general", replacement_worker),
     }
     initial = _plan(
         AgentTask(
             id="broken",
             agent="recommend",
-            capability="recommend.retrieve",
+            capability="recommend.run",
             objective="broken",
         )
     )

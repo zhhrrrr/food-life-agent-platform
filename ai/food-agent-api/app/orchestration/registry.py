@@ -19,18 +19,16 @@ class CapabilitySpec:
 
 
 CAPABILITY_REGISTRY: dict[str, CapabilitySpec] = {
-    "recommend.retrieve": CapabilitySpec("recommend", recommend_agent_node),
-    "recommend.rerank": CapabilitySpec("recommend", recommend_agent_node),
-    "support.retrieve": CapabilitySpec("support", support_agent_node),
-    "support.explain": CapabilitySpec("support", support_agent_node),
+    "recommend.run": CapabilitySpec("recommend", recommend_agent_node),
+    "support.run": CapabilitySpec("support", support_agent_node),
     "trade.query": CapabilitySpec("trade", trade_agent_node),
     "general.respond": CapabilitySpec("general", general_agent_node),
 }
 
 
 DEFAULT_CAPABILITY: dict[AgentName, str] = {
-    "recommend": "recommend.retrieve",
-    "support": "support.retrieve",
+    "recommend": "recommend.run",
+    "support": "support.run",
     "trade": "trade.query",
     "general": "general.respond",
 }

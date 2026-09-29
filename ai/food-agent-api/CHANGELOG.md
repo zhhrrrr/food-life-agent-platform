@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.22.0
+
+- Reduced orchestration to one real capability per Agent and removed duplicate pseudo-stages.
+- Added typed task artifacts for IDs, facts, and references passed between dependent Agents.
+- Stopped injecting serialized upstream payloads into user prompts and query parsers.
+- Allowed TradeAgent and SupportAgent to consume verified upstream artifacts directly.
+
 ## 0.21.0
 
 - Replaced `conversation_id` with `session_id` across the public API and orchestration state.

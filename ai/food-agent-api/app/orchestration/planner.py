@@ -307,7 +307,7 @@ def _rules_plan(
             AgentTask(
                 id="recommend_candidates",
                 agent="recommend",
-                capability="recommend.retrieve",
+                capability="recommend.run",
                 objective=message,
             )
         )
@@ -331,7 +331,7 @@ def _rules_plan(
             AgentTask(
                 id="support_evidence",
                 agent="support",
-                capability="support.explain" if needs_order_facts else "support.retrieve",
+                capability="support.run",
                 objective=message,
                 depends_on=dependencies,
             )
@@ -407,7 +407,7 @@ def _materialize_draft(
             task.model_copy(
                 update={
                     "capability": (
-                        "support.retrieve"
+                        "support.run"
                         if task.agent == "support"
                         else task.capability
                     ),
@@ -444,12 +444,13 @@ def _normalize_task_id(raw_id: str, agent: AgentName, index: int) -> str:
 def _normalize_capability(agent: AgentName, capability: str) -> str:
     normalized = capability.strip().casefold()
     aliases = {
-        ("recommend", "retrieve"): "recommend.retrieve",
-        ("recommend", "search"): "recommend.retrieve",
-        ("recommend", "rerank"): "recommend.rerank",
-        ("support", "retrieve"): "support.retrieve",
-        ("support", "search"): "support.retrieve",
-        ("support", "explain"): "support.explain",
+        ("recommend", "retrieve"): "recommend.run",
+        ("recommend", "search"): "recommend.run",
+        ("recommend", "run"): "recommend.run",
+        ("support", "retrieve"): "support.run",
+        ("support", "search"): "support.run",
+        ("support", "explain"): "support.run",
+        ("support", "run"): "support.run",
         ("trade", "query"): "trade.query",
         ("general", "respond"): "general.respond",
         ("general", "chat"): "general.respond",
@@ -482,13 +483,13 @@ def _planner_messages(
 ) -> list[tuple[str, str]]:
     system = (
         "Create a bounded execution DAG for a food-life multi-agent system. "
-        "Allowed agent/capability pairs are recommend/recommend.retrieve or recommend.rerank, "
-        "support/support.retrieve or support.explain, trade/trade.query, and "
+        "Allowed agent/capability pairs are recommend/recommend.run, support/support.run, "
+        "trade/trade.query, and "
         "general/general.respond. Use general alone for casual, unclear, or out-of-domain input. "
         "Use dependencies when a later task needs IDs or facts from an earlier task. "
         "A recommendation that asks for current price, stock, or coupons must retrieve candidates "
         "before trade.query. A concrete order requiring policy explanation should query trade before "
-        "support.explain. Every task must contain id, agent, capability, objective, depends_on, and "
+        "support.run. Every task must contain id, agent, capability, objective, depends_on, and "
         "required. The top-level object must also contain confidence and reason. Task IDs must start "
         "with a lowercase letter. Create at most 6 tasks and never create write operations."
     )

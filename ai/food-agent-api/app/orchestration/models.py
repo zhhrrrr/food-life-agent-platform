@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, Field, model_validator
 
@@ -63,12 +63,59 @@ class PlanDraft(BaseModel):
     reason: str = Field(default="LLM generated a dynamic execution plan", max_length=1000)
 
 
+class TaskArtifact(BaseModel):
+    """Typed, non-prompt data passed between dependent agent tasks."""
+
+    shop_ids: list[int] = Field(default_factory=list)
+    package_ids: list[int] = Field(default_factory=list)
+    order_ids: list[int] = Field(default_factory=list)
+    facts: list[dict[str, Any]] = Field(default_factory=list)
+    references: list[dict[str, Any]] = Field(default_factory=list)
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, object]) -> TaskArtifact:
+        references = [
+            dict(item)
+            for item in payload.get("references", [])
+            if isinstance(item, dict)
+        ]
+        facts = [
+            dict(item)
+            for item in payload.get("facts", [])
+            if isinstance(item, dict)
+        ]
+        shop_ids: list[int] = []
+        package_ids: list[int] = []
+        order_ids: list[int] = []
+
+        for item in [*references, *facts, *_context_items(payload)]:
+            metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+            data = item.get("data") if isinstance(item.get("data"), dict) else {}
+            _append_int(shop_ids, metadata.get("shopId") or data.get("shopId"))
+            _append_int(package_ids, metadata.get("packageId") or data.get("packageId"))
+            _append_int(order_ids, metadata.get("orderId") or data.get("orderId"))
+            document_id = str(item.get("id") or "")
+            _append_prefixed_id(shop_ids, document_id, "shop-")
+            _append_prefixed_id(package_ids, document_id, "package-")
+            _append_colon_id(package_ids, document_id, "package:")
+            _append_colon_id(order_ids, document_id, "order:")
+
+        return cls(
+            shop_ids=list(dict.fromkeys(shop_ids)),
+            package_ids=list(dict.fromkeys(package_ids)),
+            order_ids=list(dict.fromkeys(order_ids)),
+            facts=facts,
+            references=references,
+        )
+
+
 class TaskResult(BaseModel):
     task_id: str
     agent: AgentName
     status: TaskStatus
     attempts: int = Field(default=0, ge=0)
     payload: dict[str, object] = Field(default_factory=dict)
+    artifact: TaskArtifact = Field(default_factory=TaskArtifact)
     error: str = ""
 
 
@@ -77,3 +124,30 @@ class DagExecutionResult(BaseModel):
     task_results: list[TaskResult]
     status: Literal["completed", "partial", "failed", "waiting_input"]
     replan_count: int = Field(default=0, ge=0)
+
+
+def _context_items(payload: dict[str, object]) -> list[dict[str, Any]]:
+    return [
+        dict(item)
+        for item in payload.get("context", [])
+        if isinstance(item, dict)
+    ]
+
+
+def _append_int(target: list[int], value: Any) -> None:
+    try:
+        if value is not None:
+            target.append(int(value))
+    except (TypeError, ValueError):
+        return
+
+
+def _append_prefixed_id(target: list[int], value: str, prefix: str) -> None:
+    if value.startswith(prefix):
+        _append_int(target, value.removeprefix(prefix))
+
+
+def _append_colon_id(target: list[int], value: str, prefix: str) -> None:
+    if not value.startswith(prefix):
+        return
+    _append_int(target, value.removeprefix(prefix).split(":", 1)[0])
