@@ -315,7 +315,8 @@ class SessionMemoryService:
 
 def should_use_session_history(message: str) -> bool:
     return any(marker in message.casefold() for marker in (
-        "那个", "这个", "那", "呢", "它", "还有", "刚才", "上一个", "前面", "一样", "then", "previous",
+        "那个", "这个", "这家", "那家", "那", "呢", "它", "还有", "刚才", "上一个", "前面",
+        "第一个", "第二个", "第三个", "最后一个", "前者", "后者", "上述", "一样", "then", "previous",
     ))
 
 

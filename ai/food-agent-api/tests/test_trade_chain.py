@@ -193,10 +193,12 @@ def test_trade_agent_node_uses_chain_and_forwards_authorization(monkeypatch) -> 
             message: str,
             authorization: str = "",
             upstream_artifacts: dict[str, object] | None = None,
+            session_history: list[object] | None = None,
         ) -> TradeChainResult:
             assert message == "查询订单 12345"
             assert authorization == "token-1"
             assert upstream_artifacts == {}
+            assert session_history == []
             return expected
 
     monkeypatch.setattr("app.agents.trade_agent.TradeChain", lambda: FakeTradeChain())

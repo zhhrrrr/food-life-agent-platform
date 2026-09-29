@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.26.0
+
+- Added bounded recent-turn context for genuine follow-up query rewriting across all three Agents.
+- Kept conversation text untrusted and limited it to reference resolution rather than business facts.
+- Added ordinal package/order ID resolution from typed artifacts and recent turns for TradeAgent.
+- Prevented explicit new topics from being contaminated by unrelated session history.
+
 ## 0.25.0
 
 - Routed Agent traffic through Spring Cloud Gateway and added a trusted identity-secret boundary.

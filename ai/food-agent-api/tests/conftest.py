@@ -2,7 +2,7 @@ import os
 
 os.environ.update(
     {
-        "APP_VERSION": "0.25.0",
+        "APP_VERSION": "0.26.0",
         "LLM_ROUTER_ENABLED": "false",
         "SEMANTIC_ROUTER_ENABLED": "false",
         "ES_ENABLED": "false",

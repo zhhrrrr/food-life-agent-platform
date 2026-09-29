@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.25.0`
+Current version: `0.26.0`
 
 Current route chain:
 
@@ -17,6 +17,7 @@ HTTP Request
 -> strict capability, cycle, depth, task-count, and GeneralAgent-isolation validation
 -> dynamic DAG executor: parallel waves, dependencies, retries, timeouts, bounded replan
 -> Recommend / Trade / Support / General Agent workers
+-> follow-up resolver uses recent turns only for query/reference disambiguation
 -> structured upstream artifacts passed only to dependent workers
 -> deterministic single-response composer with partial-failure disclosure
 -> Recommend query rewrite -> Embedding + ES BM25 / Milvus vector retrieval -> RRF -> Rerank -> bounded Top-K context -> Prompt + Query -> LLM answer
@@ -37,6 +38,7 @@ Operational endpoints are `/health/live`, `/health/ready`, and `/metrics`.
 Added by version:
 
 ```text
+0.26.0: bounded conversation follow-up resolution for Agent rewrites and Trade entity IDs
 0.25.0: trusted Gateway identity boundary, protected index administration, health probes, and Prometheus metrics
 0.24.0: optional authenticated MCP 2.x Streamable HTTP adapter over the native read-only tools
 0.23.0: native read-only Tool Runtime, validated TradeAgent Tool Calling, and deterministic fallback
@@ -122,7 +124,7 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.25.0
+APP_VERSION=0.26.0
 APP_PORT=8500
 LOG_LEVEL=INFO
 LLM_ROUTER_ENABLED=false

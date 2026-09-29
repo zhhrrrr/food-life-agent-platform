@@ -44,7 +44,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = Settings()
 
-    assert settings.app_version == "0.25.0"
+    assert settings.app_version == "0.26.0"
     assert settings.es_enabled is False
     assert settings.milvus_enabled is False
     assert settings.es_index_shop == "food_shop_index"
@@ -392,8 +392,13 @@ def test_recommend_agent_uses_chain_result(monkeypatch) -> None:
     )
 
     class FakeRecommendChain:
-        def run(self, message: str) -> AgentChainResult:
+        def run(
+            self,
+            message: str,
+            session_history: list[object] | None = None,
+        ) -> AgentChainResult:
             assert message == "\u63a8\u8350\u5ddd\u83dc"
+            assert session_history == []
             return chain_result
 
     monkeypatch.setattr(
@@ -612,9 +617,11 @@ def test_support_agent_uses_rag_hits(monkeypatch) -> None:
             self,
             message: str,
             upstream_artifacts: dict[str, object] | None = None,
+            session_history: list[object] | None = None,
         ) -> object:
             assert message == "\u9000\u6b3e\u89c4\u5219"
             assert upstream_artifacts == {}
+            assert session_history == []
             return SupportChain(
                 settings=get_settings().model_copy(
                     update={"llm_router_enabled": False}
