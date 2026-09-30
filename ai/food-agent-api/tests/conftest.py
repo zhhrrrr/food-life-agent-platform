@@ -2,7 +2,8 @@ import os
 
 os.environ.update(
     {
-        "APP_VERSION": "0.26.0",
+        "APP_VERSION": "0.27.0",
+        "READINESS_RUNTIME_CHECKS_ENABLED": "false",
         "LLM_ROUTER_ENABLED": "false",
         "SEMANTIC_ROUTER_ENABLED": "false",
         "ES_ENABLED": "false",

@@ -111,7 +111,11 @@ class FakeSearchService:
 
 
 class FakeEmbeddingService:
+    def __init__(self) -> None:
+        self.batch_sizes: list[int] = []
+
     def embed_documents(self, documents: list[SearchDocument]) -> list[list[float]]:
+        self.batch_sizes.append(len(documents))
         return [[1.0, 0.0, 0.0] for _ in documents]
 
 
@@ -138,7 +142,7 @@ class FakeVectorService:
         vectors: list[list[float]],
     ) -> tuple[int, int]:
         assert len(documents) == len(vectors)
-        self.documents[collection] = {document.id for document in documents}
+        self.documents.setdefault(collection, set()).update(document.id for document in documents)
         return len(documents), 0
 
     def count_documents(self, collection: str) -> int:
@@ -226,6 +230,37 @@ def test_indexer_rebuilds_elasticsearch_and_milvus_before_promoting() -> None:
     assert vector_service.created == [("food_shop_vectors", "food_shop_vectors_v1")]
     assert vector_service.promoted == [("food_shop_vectors", "food_shop_vectors_v1")]
     assert vector_service.cleaned == [("food_shop_vectors", "food_shop_vectors_v1", 2)]
+
+
+def test_indexer_streams_vector_rebuild_in_bounded_batches() -> None:
+    export_client = FakeExportClient()
+    export_client.documents_by_scope["shops"] = [
+        SearchDocument(
+            id=f"shop-{index}",
+            title=f"Shop {index}",
+            content="Dinner",
+            source="food_shop_index",
+        )
+        for index in range(5)
+    ]
+    embedding_service = FakeEmbeddingService()
+    indexer = SearchIndexer(
+        export_client=export_client,
+        search_service=FakeSearchService(),
+        vector_service=FakeVectorService(),  # type: ignore[arg-type]
+        embedding_service=embedding_service,  # type: ignore[arg-type]
+        settings=Settings(
+            milvus_enabled=True,
+            milvus_batch_size=2,
+            rag_embedding_dimensions=3,
+        ),
+    )
+
+    result = indexer.rebuild(scopes=["shops"], page_size=50)
+
+    assert result.failed == 0
+    assert result.indexed == 5
+    assert embedding_service.batch_sizes == [2, 2, 1]
 
 
 def test_indexer_rejects_unknown_scope() -> None:

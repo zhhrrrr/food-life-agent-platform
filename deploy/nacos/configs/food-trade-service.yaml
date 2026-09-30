@@ -86,6 +86,7 @@ food:
       enabled: true
       paths:
         - /api/internal/**
+        - /api/trade/internal/**
       header-name: x-internal-call
       header-value: food-life-agent
       secret-header-name: x-internal-secret
@@ -97,6 +98,7 @@ food:
       - /error
       - /api/trade/pay/callback/**
       - /api/internal/**
+      - /api/trade/internal/**
       - /v3/api-docs
       - /v3/api-docs/**
       - /swagger-ui.html

@@ -1,15 +1,62 @@
-{"id":"recommend-shop-hot-pot","agent":"recommend","query":"hot pot restaurant","capabilities":["shop_recommendation"],"expected_ids":["shop-1"]}
-{"id":"recommend-package-two-person","agent":"recommend","query":"two-person hot pot set","capabilities":["package_recommendation"],"expected_ids":["package-1"]}
-{"id":"recommend-package-four-person","agent":"recommend","query":"four-person hot pot set","capabilities":["package_recommendation"],"expected_ids":["package-2"]}
-{"id":"recommend-review-hot-pot","agent":"recommend","query":"Chengdu spicy hot pot review","capabilities":["review_semantic_search"],"expected_ids":["shop-1","review-12","review-11"]}
-{"id":"support-refund-window","agent":"support","query":"\u9000\u6b3e\u7533\u8bf7\u65f6\u6548","capabilities":["refund_rule"],"expected_ids":["rule-refund-apply-window"]}
-{"id":"support-refund-coupon","agent":"support","query":"\u9000\u6b3e\u540e\u4f18\u60e0\u5238\u8fd4\u8fd8","capabilities":["refund_rule"],"expected_ids":["rule-refund-coupon-return"]}
-{"id":"support-order-timeout","agent":"support","query":"\u8ba2\u5355\u8d85\u65f6\u5173\u95ed","capabilities":["order_status_explanation"],"expected_ids":["rule-order-timeout-close"]}
-{"id":"support-payment-callback","agent":"support","query":"\u652f\u4ed8\u56de\u8c03\u5e42\u7b49","capabilities":["payment_rule"],"expected_ids":["rule-payment-callback-idempotent"]}
-{"id":"support-coupon-scope","agent":"support","query":"\u4f18\u60e0\u5238\u9002\u7528\u8303\u56f4","capabilities":["platform_faq"],"expected_ids":["rule-coupon-use-scope"]}
-{"id":"support-group-timeout","agent":"support","query":"\u62fc\u56e2\u8d85\u65f6\u5904\u7406","capabilities":["group_buy_rule"],"expected_ids":["rule-group-buy-timeout"]}
-{"id":"support-review-publish","agent":"support","query":"\u8bc4\u4ef7\u53d1\u5e03\u89c4\u5219","capabilities":["platform_faq"],"expected_ids":["rule-shop-review-publish"]}
-{"id":"support-es-lock","agent":"support","query":"ES \u5bf9\u8d26\u5206\u5e03\u5f0f\u9501","capabilities":["platform_faq"],"expected_ids":["rule-es-sync-lock"]}
-{"id":"reject-recommend-physics","agent":"recommend","query":"\u91cf\u5b50\u529b\u5b66\u4e2d\u7684\u859b\u5b9a\u8c14\u65b9\u7a0b\u600e\u4e48\u6c42\u89e3","capabilities":["shop_recommendation"],"expected_ids":[],"should_reject":true}
-{"id":"reject-recommend-weather","agent":"recommend","query":"\u660e\u5929\u5929\u6c14\u600e\u4e48\u6837","capabilities":["shop_recommendation"],"expected_ids":[],"should_reject":true}
-{"id":"reject-support-code","agent":"support","query":"\u5e2e\u6211\u5199\u4e00\u6bb5 Java \u5feb\u901f\u6392\u5e8f","capabilities":["platform_faq"],"expected_ids":[],"should_reject":true}
+{"id":"shop-nanjing-sichuan","agent":"recommend","query":"南京新街口的川菜馆蜀香小馆277","capabilities":["shop_recommendation","cuisine_filter"],"expected_ids":["shop-100277"]}
+{"id":"shop-hangzhou-dessert","agent":"recommend","query":"杭州西湖甜品饮品店甜屿276","capabilities":["shop_recommendation","cuisine_filter"],"expected_ids":["shop-100276"]}
+{"id":"shop-chongqing-light","agent":"recommend","query":"重庆解放碑附近的元气轻食275","capabilities":["shop_recommendation","cuisine_filter"],"expected_ids":["shop-100275"]}
+{"id":"shop-chengdu-bbq","agent":"recommend","query":"成都春熙路炭火烧烤店274","capabilities":["shop_recommendation","cuisine_filter"],"expected_ids":["shop-100274"]}
+{"id":"shop-guangzhou-hotpot","agent":"recommend","query":"广州珠江新城沸腾火锅273","capabilities":["shop_recommendation","cuisine_filter"],"expected_ids":["shop-100273"]}
+{"id":"shop-shanghai-western","agent":"recommend","query":"上海陆家嘴欧陆西餐厅272","capabilities":["shop_recommendation","cuisine_filter"],"expected_ids":["shop-100272"]}
+{"id":"shop-beijing-korean","agent":"recommend","query":"北京国贸首尔厨房韩餐271","capabilities":["shop_recommendation","cuisine_filter"],"expected_ids":["shop-100271"]}
+{"id":"shop-qingdao-japanese","agent":"recommend","query":"青岛台东樱之亭日料270","capabilities":["shop_recommendation","cuisine_filter"],"expected_ids":["shop-100270"]}
+{"id":"package-family-bbq","agent":"recommend","query":"找家庭欢聚烧烤套餐2268","capabilities":["package_recommendation","scene_recommendation"],"expected_ids":["package-1002268"]}
+{"id":"package-date-western","agent":"recommend","query":"情侣约会西式午市套餐1237","capabilities":["package_recommendation","scene_recommendation"],"expected_ids":["package-1001237"]}
+{"id":"package-business-japanese","agent":"recommend","query":"商务午餐日式双人招牌套餐0206","capabilities":["package_recommendation","scene_recommendation"],"expected_ids":["package-1000206"]}
+{"id":"package-business-hunan","agent":"recommend","query":"商务午餐湘菜朋友聚餐套餐2474","capabilities":["package_recommendation","scene_recommendation"],"expected_ids":["package-1002474"]}
+{"id":"package-family-sichuan","agent":"recommend","query":"适合家庭聚餐的川味套餐1443","capabilities":["package_recommendation","scene_recommendation"],"expected_ids":["package-1001443"]}
+{"id":"package-light-friends","agent":"recommend","query":"朋友聚会低脂高蛋白轻食套餐0412","capabilities":["package_recommendation","scene_recommendation"],"expected_ids":["package-1000412"]}
+{"id":"package-night-japanese","agent":"recommend","query":"夜宵日式朋友聚餐套餐1649","capabilities":["package_recommendation","scene_recommendation"],"expected_ids":["package-1001649"]}
+{"id":"package-business-hotpot","agent":"recommend","query":"商务午餐火锅朋友聚餐套餐0824","capabilities":["package_recommendation","scene_recommendation"],"expected_ids":["package-1000824"]}
+{"id":"review-slow-cold","agent":"recommend","query":"欧陆餐厅台东店500朋友聚餐套餐2499，出餐温度不够等待很久的评价","capabilities":["review_semantic_search"],"expected_ids":["review-10024999","review-10022499","review-10019999","review-10017499","review-10014999","review-10012499","review-10009999","review-10007499","review-10004999","review-10002499"],"relevance_mode":"any"}
+{"id":"review-sashimi-service","agent":"recommend","query":"欧陆餐厅台东店500家庭欢聚套餐2498，刺身温度合适摆盘整洁服务细致的评价","capabilities":["review_semantic_search"],"expected_ids":["review-10024998","review-10022498","review-10019998","review-10017498","review-10014998","review-10012498","review-10009998","review-10007498","review-10004998","review-10002498"],"relevance_mode":"any"}
+{"id":"review-fresh-beef","agent":"recommend","query":"欧陆餐厅台东店500工作日午市套餐2497，牛肉鲜嫩蔬菜干净锅底不腻的评价","capabilities":["review_semantic_search"],"expected_ids":["review-10024997","review-10022497","review-10019997","review-10017497","review-10014997","review-10012497","review-10009997","review-10007497","review-10004997","review-10002497"],"relevance_mode":"any"}
+{"id":"review-parking","agent":"recommend","query":"欧陆餐厅台东店500双人招牌套餐2496，停车方便但周末建议错峰的评价","capabilities":["review_semantic_search"],"expected_ids":["review-10024996","review-10022496","review-10019996","review-10017496","review-10014996","review-10012496","review-10009996","review-10007496","review-10004996","review-10002496"],"relevance_mode":"any"}
+{"id":"review-non-spicy","agent":"recommend","query":"首尔厨房钟楼店499单人轻享套餐2495，不吃辣也有选择且忌口说明清楚的评价","capabilities":["review_semantic_search"],"expected_ids":["review-10024995","review-10022495","review-10019995","review-10017495","review-10014995","review-10012495","review-10009995","review-10007495","review-10004995","review-10002495"],"relevance_mode":"any"}
+{"id":"review-private-room","agent":"recommend","query":"樱之亭五一广场店498单人轻享套餐2490，包间隔音好适合生日家庭聚会的评价","capabilities":["review_semantic_search"],"expected_ids":["review-10024990","review-10022490","review-10019990","review-10017490","review-10014990","review-10012490","review-10009990","review-10007490","review-10004990","review-10002490"],"relevance_mode":"any"}
+{"id":"activity-family","agent":"recommend","query":"家庭欢聚拼团活动0800","capabilities":["package_recommendation"],"expected_ids":["group-buy-activity-2000800"]}
+{"id":"activity-couple","agent":"recommend","query":"双人同行拼团活动0799","capabilities":["package_recommendation"],"expected_ids":["group-buy-activity-2000799"]}
+{"id":"activity-light","agent":"recommend","query":"轻食搭伴拼团0798","capabilities":["package_recommendation"],"expected_ids":["group-buy-activity-2000798"]}
+{"id":"coupon-food-festival","agent":"recommend","query":"城市美食节满90减25券1500","capabilities":["budget_filter","package_recommendation"],"expected_ids":["coupon-template-3001500"]}
+{"id":"coupon-member","agent":"recommend","query":"会员回馈满80减20券1499","capabilities":["budget_filter","package_recommendation"],"expected_ids":["coupon-template-3001499"]}
+{"id":"coupon-tea","agent":"recommend","query":"下午茶满70减15券1498","capabilities":["budget_filter","package_recommendation"],"expected_ids":["coupon-template-3001498"]}
+{"id":"support-refund-window","agent":"support","query":"付款后多久还能申请退款","capabilities":["refund_rule"],"expected_ids":["rule-refund-apply-window"]}
+{"id":"support-refund-route","agent":"support","query":"退款的钱会退回原支付渠道吗","capabilities":["refund_rule"],"expected_ids":["rule-refund-payment-route"]}
+{"id":"support-refund-coupon","agent":"support","query":"整单退款后优惠券能返还吗","capabilities":["refund_rule"],"expected_ids":["rule-refund-coupon-return"]}
+{"id":"support-refund-stock","agent":"support","query":"退款成功什么时候释放库存","capabilities":["refund_rule"],"expected_ids":["rule-refund-stock-release"]}
+{"id":"support-order-idempotent","agent":"support","query":"重复点提交会不会创建两个订单","capabilities":["order_status_explanation"],"expected_ids":["rule-order-create-idempotent"]}
+{"id":"support-order-timeout","agent":"support","query":"待支付订单超时为什么自动关闭","capabilities":["order_status_explanation"],"expected_ids":["rule-order-timeout-close"]}
+{"id":"support-order-cancel","agent":"support","query":"订单没支付前可以取消吗","capabilities":["order_status_explanation"],"expected_ids":["rule-order-cancel-before-pay"]}
+{"id":"support-payment-callback","agent":"support","query":"支付平台重复回调如何避免重复结算","capabilities":["payment_rule"],"expected_ids":["rule-payment-callback-idempotent"]}
+{"id":"support-payment-settlement","agent":"support","query":"支付成功后系统怎么完成结算","capabilities":["payment_rule"],"expected_ids":["rule-payment-success-settlement"]}
+{"id":"support-coupon-limit","agent":"support","query":"优惠券每人能领取几张","capabilities":["platform_faq"],"expected_ids":["rule-coupon-receive-limit"]}
+{"id":"support-coupon-scope","agent":"support","query":"优惠券可以用于哪些门店和套餐","capabilities":["platform_faq"],"expected_ids":["rule-coupon-use-scope"]}
+{"id":"support-coupon-expire","agent":"support","query":"优惠券过期后还能下单使用吗","capabilities":["platform_faq"],"expected_ids":["rule-coupon-expire"]}
+{"id":"support-group-open","agent":"support","query":"发起拼团需要满足什么条件","capabilities":["group_buy_rule"],"expected_ids":["rule-group-buy-open"]}
+{"id":"support-group-join","agent":"support","query":"加入别人的拼团要校验什么","capabilities":["group_buy_rule"],"expected_ids":["rule-group-buy-join"]}
+{"id":"support-group-timeout","agent":"support","query":"拼团到期人数不够怎么处理","capabilities":["group_buy_rule"],"expected_ids":["rule-group-buy-timeout"]}
+{"id":"support-seckill-entry","agent":"support","query":"参加秒杀前会检查哪些资格","capabilities":["platform_faq"],"expected_ids":["rule-seckill-entry"]}
+{"id":"support-seckill-stock","agent":"support","query":"高并发秒杀库存如何扣减","capabilities":["platform_faq"],"expected_ids":["rule-seckill-stock"]}
+{"id":"support-package-use","agent":"support","query":"到店核销套餐需要检查什么","capabilities":["platform_faq"],"expected_ids":["rule-package-use-rule"]}
+{"id":"support-shop-status","agent":"support","query":"门店下线后为什么不能推荐和购买","capabilities":["platform_faq"],"expected_ids":["rule-shop-status"]}
+{"id":"support-review-publish","agent":"support","query":"消费完成后发布评价有什么要求","capabilities":["platform_faq"],"expected_ids":["rule-shop-review-publish"]}
+{"id":"support-sync-realtime","agent":"support","query":"MySQL 数据如何实时增量同步到 ES","capabilities":["platform_faq"],"expected_ids":["rule-es-sync-realtime"]}
+{"id":"support-sync-reconcile","agent":"support","query":"增量消息遗漏后如何定时对账修复","capabilities":["platform_faq"],"expected_ids":["rule-es-sync-reconcile"]}
+{"id":"support-sync-lock","agent":"support","query":"多实例 ES 对账如何用 Redis 锁防止重复执行","capabilities":["platform_faq"],"expected_ids":["rule-es-sync-lock"]}
+{"id":"support-source-truth","agent":"support","query":"搜索文档的事实源到底是 MySQL 还是 ES","capabilities":["platform_faq"],"expected_ids":["rule-search-source-of-truth"]}
+{"id":"support-manual-review","agent":"support","query":"哪些退款和支付异常需要人工审核","capabilities":["refund_rule","payment_rule"],"expected_ids":["rule-manual-review"]}
+{"id":"support-complaint","agent":"support","query":"用户投诉需要记录哪些信息以及何时升级","capabilities":["platform_faq"],"expected_ids":["rule-customer-complaint"]}
+{"id":"reject-recommend-physics","agent":"recommend","query":"量子力学中的薛定谔方程怎么求解","capabilities":["shop_recommendation"],"expected_ids":[],"should_reject":true}
+{"id":"reject-recommend-weather","agent":"recommend","query":"明天北京天气怎么样","capabilities":["shop_recommendation"],"expected_ids":[],"should_reject":true}
+{"id":"reject-recommend-programming","agent":"recommend","query":"用 Rust 实现一个 B 树数据库","capabilities":["package_recommendation"],"expected_ids":[],"should_reject":true}
+{"id":"reject-recommend-history","agent":"recommend","query":"分析工业革命对欧洲政治的影响","capabilities":["shop_recommendation"],"expected_ids":[],"should_reject":true}
+{"id":"reject-support-code","agent":"support","query":"帮我写一段 Java 快速排序","capabilities":["platform_faq"],"expected_ids":[],"should_reject":true}
+{"id":"reject-support-math","agent":"support","query":"证明黎曼猜想","capabilities":["platform_faq"],"expected_ids":[],"should_reject":true}
+{"id":"reject-support-travel","agent":"support","query":"制定一份去冰岛看极光的行程","capabilities":["platform_faq"],"expected_ids":[],"should_reject":true}
+{"id":"reject-support-news","agent":"support","query":"总结今天的国际新闻","capabilities":["platform_faq"],"expected_ids":[],"should_reject":true}

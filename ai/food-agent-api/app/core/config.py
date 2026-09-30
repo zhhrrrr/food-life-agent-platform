@@ -7,9 +7,11 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.26.0"
+    app_version: str = "0.27.0"
     app_port: int = 8500
     log_level: str = "INFO"
+    readiness_runtime_checks_enabled: bool = True
+    readiness_timeout_seconds: float = Field(default=2.0, gt=0, le=10.0)
     # 本地env 文件中配置的llm_router_enabled优先级高于此处的默认值
     llm_router_enabled: bool = False
     llm_provider: str = "openai"
@@ -150,6 +152,19 @@ def get_settings() -> Settings:
         app_version=_get_value(dotenv_values, "APP_VERSION", defaults.app_version),
         app_port=int(_get_value(dotenv_values, "APP_PORT", str(defaults.app_port))),
         log_level=_get_value(dotenv_values, "LOG_LEVEL", defaults.log_level),
+        readiness_runtime_checks_enabled=_get_value(
+            dotenv_values,
+            "READINESS_RUNTIME_CHECKS_ENABLED",
+            str(defaults.readiness_runtime_checks_enabled),
+        ).lower()
+        in {"1", "true", "yes", "on"},
+        readiness_timeout_seconds=float(
+            _get_value(
+                dotenv_values,
+                "READINESS_TIMEOUT_SECONDS",
+                str(defaults.readiness_timeout_seconds),
+            )
+        ),
         llm_router_enabled=_get_value(
             dotenv_values,
             "LLM_ROUTER_ENABLED",

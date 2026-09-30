@@ -417,8 +417,21 @@ class SearchIndexer:
             return len(documents), 0
         if collection is None or self.embedding_service is None:
             return 0, len(documents)
-        vectors = self.embedding_service.embed_documents(documents)
-        return self.vector_service.index_documents(collection, documents, vectors)
+
+        indexed = 0
+        failed = 0
+        batch_size = max(1, self.settings.milvus_batch_size)
+        for offset in range(0, len(documents), batch_size):
+            batch = documents[offset : offset + batch_size]
+            vectors = self.embedding_service.embed_documents(batch)
+            batch_indexed, batch_failed = self.vector_service.index_documents(
+                collection,
+                batch,
+                vectors,
+            )
+            indexed += batch_indexed
+            failed += batch_failed
+        return indexed, failed
 
     def _count_vector_documents(self, collection: str | None, expected: int) -> int:
         if self.vector_service is None:

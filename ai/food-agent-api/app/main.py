@@ -17,6 +17,7 @@ from app.core.errors import (
 )
 from app.core.logging import configure_logging
 from app.core.metrics import HTTP_DURATION, HTTP_REQUESTS, metrics_response
+from app.core.readiness import readiness_checks
 from app.mcp.server import build_mcp_asgi_app, create_mcp_server
 from app.sync.es_reconciliation import start_es_reconciliation, stop_es_reconciliation
 from app.sync.es_sync_consumer import start_es_sync_consumer, stop_es_sync_consumer
@@ -106,19 +107,7 @@ def liveness() -> dict[str, str]:
 
 @app.get("/health/ready")
 def readiness() -> JSONResponse:
-    checks = {
-        "gateway_identity": bool(settings.gateway_trusted_secret),
-        "llm": not settings.llm_router_enabled or bool(settings.llm_api_key),
-        "semantic_router": not settings.semantic_router_enabled
-        or bool(settings.embedding_api_key),
-        "hybrid_rag": not settings.rag_hybrid_enabled
-        or (
-            settings.es_enabled
-            and settings.milvus_enabled
-            and bool(settings.embedding_api_key)
-        ),
-        "mcp": not settings.mcp_enabled or bool(settings.mcp_internal_token),
-    }
+    checks = readiness_checks(settings)
     ready = all(checks.values())
     return JSONResponse(
         status_code=200 if ready else 503,

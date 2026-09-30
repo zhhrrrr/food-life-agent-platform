@@ -54,6 +54,7 @@ class JavaSearchExportClient:
         try:
             response = httpx.get(
                 self._join_url(base_url, path),
+                headers=self._internal_headers(),
                 params=params or None,
                 timeout=self.timeout_seconds,
                 trust_env=False,
@@ -78,6 +79,7 @@ class JavaSearchExportClient:
         try:
             response = httpx.get(
                 self._join_url(base_url, path),
+                headers=self._internal_headers(),
                 timeout=self.timeout_seconds,
                 trust_env=False,
             )
@@ -106,6 +108,12 @@ class JavaSearchExportClient:
         if service_name == "trade":
             return self.settings.java_trade_base_url
         raise JavaSearchExportError(f"unsupported service: {service_name}")
+
+    def _internal_headers(self) -> dict[str, str]:
+        return {
+            "x-internal-call": "food-life-agent",
+            self.settings.gateway_trusted_secret_header: self.settings.gateway_trusted_secret,
+        }
 
     @staticmethod
     def _join_url(base_url: str, path: str) -> str:

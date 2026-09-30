@@ -2,7 +2,7 @@
 
 Food Life Agent / food-agent-api Python Agent service.
 
-Current version: `0.26.0`
+Current version: `0.27.0`
 
 Current route chain:
 
@@ -38,6 +38,7 @@ Operational endpoints are `/health/live`, `/health/ready`, and `/metrics`.
 Added by version:
 
 ```text
+0.27.0: complete search projections, streaming Milvus rebuilds, authenticated Java exports, runtime readiness, and enterprise RAG gates
 0.26.0: bounded conversation follow-up resolution for Agent rewrites and Trade entity IDs
 0.25.0: trusted Gateway identity boundary, protected index administration, health probes, and Prometheus metrics
 0.24.0: optional authenticated MCP 2.x Streamable HTTP adapter over the native read-only tools
@@ -78,17 +79,17 @@ Added by version:
 0.10.0: stage 6 RecommendAgent query rewrite, ES/RAG retrieval, and LLM answer chain
 ```
 
-This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python writes text projections to Elasticsearch and embeddings to independent Milvus collections. LangChain provides model integration while LangGraph runs a fixed control graph around a validated runtime task DAG. RecommendAgent and SupportAgent run query rewrite -> Elasticsearch BM25 plus Milvus vector retrieval -> reciprocal rank fusion -> BGE reranking -> bounded context -> LLM answer -> validated references. TradeAgent exclusively owns current order, price, stock, coupon, group-buy, and preview reads through allow-listed Java Gateway GET queries. GeneralAgent has no business tools and handles greetings, clarification, capability guidance, and out-of-domain fallback. Search projections remain focused on recommendation discovery and exclude current stock and coupon supply counters. Durable background transport, SSE, Human Confirmation, and business action tools remain separate runtime stages.
+This version does not connect to MySQL directly. Java remains the source of truth for MySQL data and exposes read-only search document endpoints; Python writes text projections to Elasticsearch and embeddings to independent Milvus collections. LangChain provides model integration while LangGraph runs a fixed control graph around a validated runtime task DAG. RecommendAgent and SupportAgent run query rewrite -> Elasticsearch BM25 plus Milvus vector retrieval -> reciprocal rank fusion -> BGE reranking -> bounded context -> LLM answer -> validated references. TradeAgent exclusively owns current order, price, stock, coupon, group-buy, and preview reads through allow-listed Java Gateway GET queries. GeneralAgent has no business tools and handles greetings, clarification, capability guidance, and out-of-domain fallback. Search projections remain focused on recommendation discovery and exclude current stock and coupon supply counters. SSE, Human Confirmation, and business action tools remain separate runtime stages.
 
 Elasticsearch and Milvus support are disabled by default. Enable each store only after its service is healthy; hybrid retrieval requires both `RAG_HYBRID_ENABLED=true` and `MILVUS_ENABLED=true`.
 
 Run the deterministic retrieval quality gate after rebuilding the indexes:
 
 ```bash
-python scripts/evaluate_rag.py --min-recall 0.9 --min-rejection-rate 1.0
+python scripts/evaluate_rag.py --min-hit-rate 0.9 --min-recall 0.9 --min-mrr 0.8 --min-ndcg 0.85 --min-rejection-rate 1.0 --max-p95-ms 3000
 ```
 
-The evaluation set contains positive retrieval cases and out-of-domain negative cases. A release passes only when positive recall and negative rejection rate both meet their configured gates.
+The evaluation set contains current business IDs, paraphrased positive cases, and out-of-domain negative cases. A release passes only when hit rate, recall, MRR, NDCG, rejection rate, and P95 latency all meet their configured gates.
 
 ## Requirements
 
@@ -124,9 +125,11 @@ Copy `.env.example` to `.env`, or provide environment variables directly:
 
 ```text
 APP_NAME=food-agent-api
-APP_VERSION=0.26.0
+APP_VERSION=0.27.0
 APP_PORT=8500
 LOG_LEVEL=INFO
+READINESS_RUNTIME_CHECKS_ENABLED=true
+READINESS_TIMEOUT_SECONDS=2
 LLM_ROUTER_ENABLED=false
 LLM_PROVIDER=openai
 LLM_MODEL=gpt-4o-mini

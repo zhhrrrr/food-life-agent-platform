@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.27.0
+
+- Added authenticated internal headers to Java search-export reads and allowed Trade export endpoints through service authentication.
+- Changed Milvus rebuild embedding and writes to bounded streaming batches and completed vector coverage for all recommendation projections.
+- Added parallel runtime readiness probes for Java Gateway, Elasticsearch, Milvus, Redis, and RabbitMQ.
+- Replaced obsolete demo retrieval cases with current business IDs and added Hit Rate, Recall, MRR, NDCG, rejection, and P95 latency gates.
+- Enabled local RabbitMQ incremental search sync and Redis-locked scheduled reconciliation.
+
 ## 0.26.0
 
 - Added bounded recent-turn context for genuine follow-up query rewriting across all three Agents.
