@@ -16,6 +16,11 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.amqp.rabbit.connection.CorrelationData;
+import java.util.concurrent.TimeUnit;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -38,15 +43,18 @@ public class BusinessRabbitMqEventPublisher implements IBusinessEventPublisher {
     private final IBusinessLocalMessageMapper localMessageMapper;
     private final ObjectMapper objectMapper;
     private final RabbitTemplate rabbitTemplate;
+    private final TransactionTemplate committedMessageTransaction;
 
     public BusinessRabbitMqEventPublisher(BusinessRabbitMqProperties properties,
                                           IBusinessLocalMessageMapper localMessageMapper,
                                           ObjectMapper objectMapper,
-                                          RabbitTemplate rabbitTemplate) {
+                                       RabbitTemplate rabbitTemplate, PlatformTransactionManager transactionManager) {
         this.properties = properties;
         this.localMessageMapper = localMessageMapper;
         this.objectMapper = objectMapper;
         this.rabbitTemplate = rabbitTemplate;
+        this.committedMessageTransaction = new TransactionTemplate(transactionManager);
+        this.committedMessageTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Override
@@ -88,7 +96,12 @@ public class BusinessRabbitMqEventPublisher implements IBusinessEventPublisher {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                publishStoredMessage(findByMessageId(messageId));
+                try {
+                    committedMessageTransaction.executeWithoutResult(status -> publishStoredMessage(findByMessageId(messageId)));
+                } catch (RuntimeException e) {
+                    // The business transaction has committed; the persisted INIT intent remains retryable.
+                    log.error("post-commit MQ delivery needs retry, messageId={}", messageId, e);
+                }
             }
         });
     }
@@ -115,8 +128,13 @@ public class BusinessRabbitMqEventPublisher implements IBusinessEventPublisher {
             messageProperties.setMessageId(message.getMessageId());
             messageProperties.setHeader("eventKey", content.get("key").asText());
             messageProperties.setHeader("eventType", content.get("tag").asText());
+            CorrelationData correlation = new CorrelationData(message.getMessageId());
             rabbitTemplate.send(content.get("topic").asText(), content.get("tag").asText(),
-                    new Message(message.getContent().getBytes(StandardCharsets.UTF_8), messageProperties));
+                    new Message(message.getContent().getBytes(StandardCharsets.UTF_8), messageProperties), correlation);
+            CorrelationData.Confirm confirm = correlation.getFuture().get(5, TimeUnit.SECONDS);
+            if (!confirm.isAck() || correlation.getReturned() != null) {
+                throw new IllegalStateException("RabbitMQ did not confirm routed delivery");
+            }
             markSuccess(message.getId());
             log.info("business RabbitMQ publish success, messageId={}", message.getMessageId());
             return true;

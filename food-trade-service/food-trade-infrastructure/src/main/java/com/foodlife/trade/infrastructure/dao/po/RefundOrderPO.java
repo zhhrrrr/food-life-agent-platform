@@ -30,5 +30,8 @@ public class RefundOrderPO implements Serializable {
     private LocalDateTime refundTime;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+    private Boolean businessCompleted;
+    private Integer recoveryCount;
+    private LocalDateTime nextRetryTime;
 }
 

@@ -1,171 +1,546 @@
+# =========================
+# Gateway 业务服务端口
+# 前端所有业务请求统一先访问 8080
+# =========================
 server:
   port: 8080
 
+
+# =========================
+# Actuator / Prometheus 监控配置
+# 单独使用 8081，和业务端口 8080 分离
+# =========================
 management:
   server:
     port: 8081
+
   endpoints:
     web:
       exposure:
+        # 对外暴露的 Actuator 端点
+        # health：健康检查
+        # info：应用信息
+        # prometheus：提供给 Prometheus 抓取指标
+        # metrics：查看 Micrometer 指标
         include: health,info,prometheus,metrics
+
   endpoint:
     health:
       probes:
+        # 开启存活、就绪探针
+        # /actuator/health/liveness
+        #→ 存活探针：服务进程还活着吗？
+        #
+        #/actuator/health/readiness
+        #→ 就绪探针：服务现在能正常接请求吗？
         enabled: true
+
+      # health 接口显示详细信息
       show-details: always
+
   metrics:
     tags:
+      # 给所有指标增加 application 标签
+      # 例如 application=food-gateway-service
       application: ${spring.application.name}
+
     distribution:
       percentiles-histogram:
+        # 为 Spring MVC/WebFlux HTTP 请求耗时生成直方图指标
         http.server.requests: true
+
+        # 为自己定义的 HTTP 请求耗时指标生成直方图
         food_http_server_request_duration: true
+
   tracing:
     sampling:
+      # 链路追踪采样率
+      # 默认 1.0 = 100% 请求都采样
+      # 也可以通过环境变量 MANAGEMENT_TRACING_SAMPLING_PROBABILITY 覆盖
+      # 来了 100 个请求
+      #→ 大约 100 个都会记录 Trace
       probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
 
+
+# =========================
+# Swagger / OpenAPI 聚合
+# Gateway 统一展示三个微服务的 API 文档
+# =========================
 springdoc:
   api-docs:
     enabled: true
+
   swagger-ui:
+    # ① 浏览器打开
+    #http://localhost:8080/swagger-ui.html
+    #
+    #        ↓
+    #
+    #② Swagger UI 看到配置：
+    #
+    #user-service
+    #→ /v3/api-docs/user
+    #
+    #        ↓
+    #
+    #③ 浏览器请求 Gateway：
+    #
+    #GET /v3/api-docs/user
+    #
+    #        ↓
+    #
+    #④ Gateway Predicate 判断：
+    #
+    #Path=/v3/api-docs/user
+    #
+    #匹配成功
+    #
+    #        ↓
+    #
+    #⑤ Gateway 确定目标：
+    #
+    #lb://food-user-service
+    #
+    #        ↓
+    #
+    #⑥ RewritePath：
+    #
+    #/v3/api-docs/user
+    #        ↓
+    #/v3/api-docs
+    #
+    #        ↓
+    #
+    #⑦ 最终请求 User Service：
+    #
+    #http://UserService/v3/api-docs
+    #
+    #        ↓
+    #
+    #⑧ User Service 内部 Springdoc 返回
+    #OpenAPI JSON
+    #
+    #        ↓
+    #
+    #⑨ Gateway 把 JSON 返回浏览器
+    #
+    #        ↓
+    #
+    #⑩ Swagger UI 把 JSON
+    #渲染成接口文档页面
     path: /swagger-ui.html
+
     urls:
+      # User Service API 文档
       - name: user-service
         url: /v3/api-docs/user
+
+      # Business Service API 文档
       - name: business-service
         url: /v3/api-docs/business
+
+      # Trade Service API 文档
       - name: trade-service
         url: /v3/api-docs/trade
 
+
 spring:
-  redis:
-    host: localhost
-    port: 6379
-    database: 0
+  # =========================
+  # Redis
+  # Gateway 主要用于登录 Token 校验等
+  # Spring Boot 3.x 使用 spring.data.redis
+  # =========================
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+
+
   cloud:
+
+    # =========================
+    # Sentinel
+    # Gateway 流量治理、限流
+    # =========================
     sentinel:
       transport:
+        # Sentinel Dashboard 地址
         dashboard: ${SENTINEL_DASHBOARD_ADDR:localhost:8858}
+
+        # Sentinel 客户端和 Dashboard 通信用端口
         port: ${SENTINEL_TRANSPORT_PORT:8730}
+
+
+    # =========================
+    # 简易服务发现
+    #
+    # 当前没有依赖 Nacos，也能让 lb:// 找到服务实例
+    #
+    # Gateway：
+    # lb://food-trade-service
+    #        ↓
+    # SimpleDiscoveryClient
+    #        ↓
+    # localhost:8301
+    # =========================
     discovery:
       client:
         simple:
           instances:
+
+            # 用户服务实例
             food-user-service:
               - uri: http://localhost:8101
+
+            # 商家服务实例
             food-business-service:
               - uri: http://localhost:8201
+
+            # 交易服务实例
             food-trade-service:
               - uri: http://localhost:8301
+
+
+    # =========================
+    # Spring Cloud Gateway
+    # =========================
     gateway:
+
+      # =========================
+      # 默认过滤器
+      # =========================
       default-filters:
+
+        # 转发请求时保留原始(Host 请求头)
+        # 携带的是：
+        # 客户端想访问的目标主机名，以及可选的端口号。
         - PreserveHostHeader
+
+
+      # =========================
+      # CORS 跨域配置
+      # =========================
       globalcors:
         cors-configurations:
+          # Gateway 的所有路径都走这条路径
           '[/**]':
+
+            # 允许所有来源
             allowedOriginPatterns:
               - "*"
+
+            # 允许的 HTTP 方法
             allowedMethods:
               - GET
               - POST
               - PUT
               - DELETE
               - OPTIONS
+
+            # 允许所有请求头
             allowedHeaders:
               - "*"
+
+            # 允许前端读取这些响应头（注意请求和响应的区别）
+            # Gateway 返回给浏览器的响应头，前端 JavaScript 能不能读取。
             exposedHeaders:
               - authorization
               - X-Trace-Id
+
+            # 允许携带 Cookie / 凭证
             allowCredentials: true
+
+            # 浏览器预检请求缓存 3600 秒
+            # 浏览器把 CORS 预检请求（OPTIONS）的结果缓存 3600 秒
+            # OPTIONS 预检 = 浏览器在真正跨域请求前，先检查来源、方法、请求头是否被服务器允许。
             maxAge: 3600
+
+
+      # =========================
+      # Gateway 路由规则
+      # =========================
       routes:
+
+        # -------------------------
+        # User Service 业务路由
+        # -------------------------
         - id: food-user-route
+
+          # lb:// 表示通过 Spring Cloud LoadBalancer
+          # 根据服务名选择具体实例
           uri: lb://food-user-service
+
           predicates:
+            # /api/user/** 请求全部转给 User Service
+            # predicates = 如果请求路径匹配 /api/shop/**
+            #→ 这条路由成立
+            #→ Gateway 就走这条 route
+            # filters    = 匹配成功后，对请求/响应做处理
             - Path=/api/user/**
+
+
+        # -------------------------
+        # User Service Swagger 路由
+        # -------------------------
         - id: food-user-openapi-route
           uri: lb://food-user-service
+
           predicates:
             - Path=/v3/api-docs/user
+
           filters:
+            # Gateway 收到：
+            # /v3/api-docs/user
+            #
+            # 转发给 User Service 时改成：
+            # /v3/api-docs
             - RewritePath=/v3/api-docs/user,/v3/api-docs
+
+
+        # -------------------------
+        # Business Service 业务路由
+        # -------------------------
         - id: food-business-route
           uri: lb://food-business-service
+
           predicates:
+            # 商家、套餐、评论、收藏、运营接口
+            # 全部转发给 Business Service
             - Path=/api/shop-category/**,/api/shop/**,/api/package/**,/api/shop-homepage/**,/api/reviews/**,/api/favorites/shops/**,/api/business/operations/**
+
+
+        # -------------------------
+        # Business Service Swagger
+        # -------------------------
         - id: food-business-openapi-route
           uri: lb://food-business-service
+
           predicates:
             - Path=/v3/api-docs/business
+
           filters:
+            # /v3/api-docs/business
+            #          ↓
+            # /v3/api-docs
             - RewritePath=/v3/api-docs/business,/v3/api-docs
+
+
+        # -------------------------
+        # Trade Service 业务路由
+        # -------------------------
         - id: food-trade-route
           uri: lb://food-trade-service
+
           predicates:
+            # 所有交易接口转发给 Trade Service
             - Path=/api/trade/**
+
+
+        # -------------------------
+        # Trade Service Swagger
+        # -------------------------
         - id: food-trade-openapi-route
           uri: lb://food-trade-service
+
           predicates:
             - Path=/v3/api-docs/trade
+
           filters:
             - RewritePath=/v3/api-docs/trade,/v3/api-docs
 
+
+# =========================
+# Gateway 日志等级
+# =========================
 logging:
   level:
+    # Spring Cloud Gateway 输出 info 级别日志
+    # 输出 INFO 及以上级别。
     org.springframework.cloud.gateway: info
 
+
+# =========================
+# 自己定义的 food 配置
+# 配置给@ConfigurationProperties 读取
+# =========================
 food:
+
+  # =========================
+  # 可观测性
+  # =========================
   observability:
+
+    # 开启自定义可观测性组件
     enabled: true
+
+    # 分布式请求 TraceId 使用的 Header
     trace-header: X-Trace-Id
+
+    # 开启请求日志
     request-log-enabled: true
+
+    # 是否记录正常请求
     log-normal-request: ${FOOD_OBSERVABILITY_LOG_NORMAL_REQUEST:true}
+
+    # HTTP 接口超过 1000ms 判定为慢接口
     slow-api-threshold-ms: ${FOOD_SLOW_API_THRESHOLD_MS:1000}
+
+    # Feign 调用超过 1000ms 判定为慢调用
     slow-feign-threshold-ms: ${FOOD_SLOW_FEIGN_THRESHOLD_MS:1000}
+
+
   gateway:
+
+    # =========================
+    # Gateway 登录鉴权
+    # =========================
     auth:
+
+      # 开启 Gateway 统一鉴权
       enabled: true
+
+      # Token 放在哪个请求头
       token-header: authorization
+
+      # Redis 中登录 Token 的 Key 前缀
+      # 最终可能：
+      # food:login:token:xxxxxxxx
       token-prefix: "food:login:token:"
+
+      # Gateway 鉴权成功后
+      # 向下游微服务传递用户信息
       user-id-header: x-user-id
       user-nickname-header: x-user-nickname
       user-icon-header: x-user-icon
+
+      # 标识“微服务内部调用”的 Header
       internal-header-name: x-internal-call
+
+      # 内部调用对应的密钥 Header
       internal-secret-header-name: x-internal-secret
+
+      # =========================
+      # 鉴权白名单
+      # 命中这些路径时，不要求用户登录
+      # =========================
       exclude-paths:
+
+        # 健康检查
         - /health
+
+        # Spring 默认错误接口
         - /error
+
+        # 获取验证码
         - /api/user/code
+
+        # 登录
         - /api/user/login
+
+        # 登出
         - /api/user/logout
+
+        # 商品分类公开查询
         - /api/shop-category/**
+
+        # 商家公开查询
         - /api/shop/**
+
+        # 套餐公开查询
         - /api/package/*
+
         - /api/package/of/shop
+
+        # 套餐交易快照接口
         - /api/package/trade-snapshot/*
+
+        # 支付平台回调不能要求普通用户登录
         - /api/trade/pay/callback/**
+
+        # Swagger
         - /v3/api-docs/**
         - /swagger-ui.html
         - /swagger-ui/**
+
+
+    # =========================
+    # Gateway 安全黑名单
+    #
+    # 和 exclude-paths 不同：
+    #
+    # exclude-paths：
+    #   是否需要登录
+    #
+    # blacklist：
+    #   是否允许外部用户从 Gateway 访问
+    # =========================
     security:
       blacklist:
+
+        # 开启黑名单
         enabled: true
+
         paths:
+
+          # 内部接口禁止外部调用
           - /internal/**
           - /api/internal/**
+
+          # Actuator 不允许从业务 Gateway 访问
           - /actuator/**
+
+          # 库存占用接口只能由内部服务调用
           - /api/package/*/stock/occupy
+
+          # 库存释放接口只能由内部服务调用
           - /api/package/*/stock/release
+
+          # 销量确认接口
           - /api/package/*/sold/confirm
+
+          # 销量回滚接口
           - /api/package/*/sold/rollback
+
+
+    # =========================
+    # Gateway Sentinel 限流
+    # =========================
     sentinel:
+
+      # 开启网关 Sentinel
       enabled: true
+
+      # Trade Service 整体路由：
+      # 最大约 300 QPS
       trade-route-qps: 300
+
+      # Business Service 整体路由：
+      # 最大约 500 QPS
       business-route-qps: 500
+
+      # User Service 整体路由：
+      # 最大约 200 QPS
       user-route-qps: 200
+
+      # 普通创建订单接口：
+      # 最大约 80 QPS
       trade-order-create-qps: 80
+
+      # 秒杀创建订单：
+      # 最大约 30 QPS
       seckill-order-create-qps: 30
+
+      # 支付回调：
+      # 最大约 100 QPS
       payment-callback-qps: 100
+
+      # 使用 authorization 请求头区分用户
+      # 做用户维度的热点参数限流
       user-header-name: authorization
+
+      # 单用户最大约 20 QPS
       user-header-qps: 20
+
+      # 开启用于测试 Sentinel 是否生效的 smoke 规则
       smoke-rule-enabled: true

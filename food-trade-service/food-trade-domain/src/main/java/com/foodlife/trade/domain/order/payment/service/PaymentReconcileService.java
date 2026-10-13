@@ -61,6 +61,9 @@ public class PaymentReconcileService {
                 .filter(refundOrder -> RefundOrderStatusConstants.SUCCESS.equals(refundOrder.getRefundStatus()))
                 .filter(refundOrder -> {
                     PaymentOrderEntity paymentOrder = paymentOrderMap.get(refundOrder.getPayOrderNo());
+                    if (paymentOrder == null) {
+                        paymentOrder = paymentOrderRepository.findByPayOrderNo(refundOrder.getPayOrderNo());
+                    }
                     return paymentOrder == null || !PaymentOrderStatusConstants.REFUNDED.equals(paymentOrder.getPayStatus());
                 })
                 .map(RefundOrderEntity::getPayOrderNo)

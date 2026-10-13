@@ -11,6 +11,7 @@ import org.springframework.util.CollectionUtils;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Repository
 @ConditionalOnProperty(prefix = "food.user.repository", name = "type", havingValue = "redis")
@@ -49,6 +50,10 @@ public class RedisUserRepository implements IUserRepository {
 
     @Override
     public UserEntity save(UserEntity user) {
+        UserEntity existing = findByPhone(user.getPhone());
+        if (existing != null) {
+            return existing;
+        }
         if (user.getId() == null) {
             Long id = stringRedisTemplate.opsForValue().increment(UserRedisConstants.USER_ID_SEQUENCE_KEY);
             user.setId(id);
@@ -60,7 +65,15 @@ public class RedisUserRepository implements IUserRepository {
 
         Map<String, String> userMap = toMap(user);
         stringRedisTemplate.opsForHash().putAll(UserRedisConstants.USER_DATA_KEY + user.getId(), userMap);
-        stringRedisTemplate.opsForValue().set(UserRedisConstants.USER_PHONE_KEY + user.getPhone(), String.valueOf(user.getId()));
+        Boolean reserved = stringRedisTemplate.opsForValue().setIfAbsent(
+                UserRedisConstants.USER_PHONE_KEY + user.getPhone(),
+                String.valueOf(user.getId())
+        );
+        if (!Boolean.TRUE.equals(reserved)) {
+            stringRedisTemplate.delete(UserRedisConstants.USER_DATA_KEY + user.getId());
+            return findByPhone(user.getPhone());
+        }
+        stringRedisTemplate.expire(UserRedisConstants.USER_PHONE_KEY + user.getPhone(), 3650, TimeUnit.DAYS);
         return user;
     }
 

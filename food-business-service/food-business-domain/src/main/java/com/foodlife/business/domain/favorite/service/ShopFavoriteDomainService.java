@@ -7,6 +7,7 @@ import com.foodlife.business.domain.favorite.repository.IShopFavoriteRepository;
 import com.foodlife.business.domain.shop.model.ShopEntity;
 import com.foodlife.business.domain.shop.repository.IShopRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -24,12 +25,14 @@ public class ShopFavoriteDomainService {
         this.shopRepository = shopRepository;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public ShopFavoriteEntity favoriteShop(ShopFavoriteCommand command) {
         checkCommand(command);
         checkShopOnline(command.getShopId());
         return shopFavoriteRepository.favoriteShop(command.getUserId(), command.getShopId());
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public ShopFavoriteEntity unfavoriteShop(ShopFavoriteCommand command) {
         checkCommand(command);
         return shopFavoriteRepository.unfavoriteShop(command.getUserId(), command.getShopId());

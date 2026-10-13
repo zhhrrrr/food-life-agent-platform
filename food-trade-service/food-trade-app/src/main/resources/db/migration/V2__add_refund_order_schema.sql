@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS refund_order (
   source VARCHAR(32) NOT NULL COMMENT 'source',
   channel VARCHAR(32) NOT NULL COMMENT 'payment channel',
   refund_amount BIGINT NOT NULL COMMENT 'refund amount in cents',
-  refund_status VARCHAR(32) NOT NULL COMMENT 'PREPARED/SUCCESS/FAILED',
+  refund_status VARCHAR(32) NOT NULL COMMENT 'PREPARED/PROCESSING/SUCCESS/FAILED',
   refund_reason VARCHAR(255) DEFAULT '' COMMENT 'refund reason',
   out_trade_no VARCHAR(64) DEFAULT NULL COMMENT 'provider trade no',
   out_refund_no VARCHAR(64) DEFAULT NULL COMMENT 'provider refund no',

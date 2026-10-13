@@ -17,9 +17,7 @@ public class AuthProperties {
     private String tokenHeader = AuthConstants.DEFAULT_TOKEN_HEADER;
     private String tokenPrefix = AuthConstants.DEFAULT_TOKEN_PREFIX;
     private long tokenTtlMinutes = AuthConstants.DEFAULT_TOKEN_TTL_MINUTES;
-    private List<String> includePaths = new ArrayList<String>() {{
-        add("/**");
-    }};
+    private List<String> includePaths = new ArrayList<>(List.of("/**"));
     private List<String> excludePaths = new ArrayList<String>();
     private InternalCall internalCall = new InternalCall();
     private RoleAccess roleAccess = new RoleAccess();
@@ -28,9 +26,7 @@ public class AuthProperties {
     public static class InternalCall {
 
         private boolean enabled = true;
-        private List<String> paths = new ArrayList<String>() {{
-            add("/api/internal/**");
-        }};
+        private List<String> paths = new ArrayList<>(List.of("/api/internal/**"));
         private String headerName = "x-internal-call";
         private String headerValue = "food-life-agent";
         private String secretHeaderName = "x-internal-secret";

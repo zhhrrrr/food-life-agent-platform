@@ -113,6 +113,13 @@ mybatis-plus:
       id-type: auto
 
 food:
+  job:
+    lock:
+      enabled: ${FOOD_JOB_LOCK_ENABLED:true}
+      key-prefix: food:job:lock
+      wait-time-ms: 0
+      lease-time-ms: -1
+      log-skipped: true
   observability:
     enabled: true
     trace-header: X-Trace-Id
@@ -123,10 +130,8 @@ food:
   mq:
     enabled: ${FOOD_MQ_ENABLED:true}
     review-created-queue: food.business.review.created.queue
-    package-stock-event-queue: food.business.package.stock.event.queue
     dead-letter-exchange: food.business.dlx
     review-created-dead-letter-queue: food.business.review.created.dlq
-    package-stock-event-dead-letter-queue: food.business.package.stock.event.dlq
     backlog-alert-threshold: ${BUSINESS_MQ_BACKLOG_ALERT_THRESHOLD:1000}
     retry-delay-seconds: 30
     retry-limit: 50

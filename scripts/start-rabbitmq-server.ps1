@@ -10,6 +10,22 @@ $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
 $RabbitMqHome = Join-Path $Root "tools\rabbitmq-server\rabbitmq_server-$RabbitMqVersion"
+if ($RabbitMqHome -match '[^\x00-\x7F]') {
+    # Cowboy static-file handling requires an ASCII code path on Windows.
+    # Keep the installation and broker data in place; use a junction for the executable path.
+    $RabbitMqAsciiRoot = Join-Path $env:LOCALAPPDATA 'FoodLifeAgent\tools'
+    $RabbitMqAsciiHome = Join-Path $RabbitMqAsciiRoot "rabbitmq_server-$RabbitMqVersion"
+    New-Item -ItemType Directory -Force -Path $RabbitMqAsciiRoot | Out-Null
+    if (Test-Path -LiteralPath $RabbitMqAsciiHome) {
+        $RabbitMqAlias = Get-Item -LiteralPath $RabbitMqAsciiHome
+        if ($RabbitMqAlias.LinkType -ne 'Junction' -or $RabbitMqAlias.Target -notcontains $RabbitMqHome) {
+            throw "RabbitMQ ASCII path already exists with a different target: $RabbitMqAsciiHome"
+        }
+    } else {
+        New-Item -ItemType Junction -Path $RabbitMqAsciiHome -Target $RabbitMqHome | Out-Null
+    }
+    $RabbitMqHome = $RabbitMqAsciiHome
+}
 $RabbitMqBin = Join-Path $RabbitMqHome "sbin"
 $RabbitMqServer = Join-Path $RabbitMqBin "rabbitmq-server.bat"
 $RabbitMqPlugins = Join-Path $RabbitMqBin "rabbitmq-plugins.bat"

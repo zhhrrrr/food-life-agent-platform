@@ -17,6 +17,8 @@ public interface IPackageRepository {
 
     PackageTradeSnapshotEntity queryTradeSnapshot(Long packageId);
 
+    List<PackageTradeSnapshotEntity> queryTradeSnapshots(List<Long> packageIds);
+
     PackageStockChangeResult occupyPackageStock(Long packageId, Integer quantity);
 
     PackageStockChangeResult occupyPackageStock(Long packageId, Integer quantity, String operationId);

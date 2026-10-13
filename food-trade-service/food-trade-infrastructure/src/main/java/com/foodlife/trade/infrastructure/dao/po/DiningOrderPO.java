@@ -15,6 +15,8 @@ public class DiningOrderPO implements Serializable {
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
     private String orderNo;
+    private String requestId;
+    private String requestFingerprint;
     private Long userId;
     private Long shopId;
     private Long packageId;

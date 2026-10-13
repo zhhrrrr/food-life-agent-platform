@@ -1,5 +1,6 @@
 package com.foodlife.trade.trigger.job;
 
+import com.foodlife.job.lock.ScheduledJobLockExecutor;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyTimeoutCompensateResult;
 import com.foodlife.trade.domain.order.groupbuy.service.GroupBuyTimeoutCompensationService;
 import org.slf4j.Logger;
@@ -13,15 +14,23 @@ import org.springframework.stereotype.Component;
 public class GroupBuyTimeoutCompensationJob {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GroupBuyTimeoutCompensationJob.class);
+    private static final String LOCK_KEY = "trade:group-buy-timeout-compensation";
 
     private final GroupBuyTimeoutCompensationService groupBuyTimeoutCompensationService;
+    private final ScheduledJobLockExecutor jobLockExecutor;
 
-    public GroupBuyTimeoutCompensationJob(GroupBuyTimeoutCompensationService groupBuyTimeoutCompensationService) {
+    public GroupBuyTimeoutCompensationJob(GroupBuyTimeoutCompensationService groupBuyTimeoutCompensationService,
+                                          ScheduledJobLockExecutor jobLockExecutor) {
         this.groupBuyTimeoutCompensationService = groupBuyTimeoutCompensationService;
+        this.jobLockExecutor = jobLockExecutor;
     }
 
     @Scheduled(fixedDelayString = "${food.trade.group-buy.timeout-compensation.fixed-delay-ms:60000}")
     public void compensateTimeoutTeams() {
+        jobLockExecutor.execute(LOCK_KEY, this::doCompensateTimeoutTeams);
+    }
+
+    private void doCompensateTimeoutTeams() {
         GroupBuyTimeoutCompensateResult result = groupBuyTimeoutCompensationService.compensateTimeoutTeams(null);
         if (result.getCompensatedTeamCount() > 0) {
             LOGGER.info("group buy timeout compensation completed, scannedTeamCount={}, compensatedTeamCount={}, canceledOrderCount={}, refundedOrderCount={}, restoredStockCount={}",

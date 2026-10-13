@@ -77,6 +77,20 @@ public class OrderRepository implements IOrderRepository {
     }
 
     @Override
+    public DiningOrderEntity findOrderByRequestIdAndUserId(String requestId, Long userId) {
+        return toOrderEntity(diningOrderMapper.selectOne(new LambdaQueryWrapper<DiningOrderPO>()
+                .eq(DiningOrderPO::getRequestId, requestId)
+                .eq(DiningOrderPO::getUserId, userId).last("limit 1")));
+    }
+
+    @Override
+    public DiningOrderEntity lockOrderByIdAndUserId(Long orderId, Long userId) {
+        return toOrderEntity(diningOrderMapper.selectOne(new LambdaQueryWrapper<DiningOrderPO>()
+                .eq(DiningOrderPO::getId, orderId).eq(DiningOrderPO::getUserId, userId)
+                .last("limit 1 for update")));
+    }
+
+    @Override
     public List<DiningOrderEntity> listUserOrders(Long userId, Long lastId, Integer pageSize) {
         return listUserOrders(userId, lastId, pageSize, null, null);
     }
@@ -151,13 +165,17 @@ public class OrderRepository implements IOrderRepository {
         updatePO.setUpdateTime(LocalDateTime.now());
         int updated = diningOrderMapper.update(updatePO, new LambdaUpdateWrapper<DiningOrderPO>()
                 .eq(DiningOrderPO::getId, orderId)
-                .eq(DiningOrderPO::getOrderStatus, fromStatus));
+                .eq(DiningOrderPO::getOrderStatus, fromStatus)
+                // A durable refund intent blocks consumption, even when the provider result is unknown.
+                .notExists("select 1 from refund_order r where r.order_id = dining_order.id"));
         return updated > 0;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public OrderUseRecordEntity usePaidOrder(DiningOrderEntity order, LocalDateTime useTime, String useRecordNo) {
+        // Serialize with refund preparation before testing the refund intent.
+        lockOrderByIdAndUserId(order.getId(), order.getUserId());
         boolean success = updateOrderStatusAndUseTime(order.getId(), OrderStatusConstants.PAID, OrderStatusConstants.USED, useTime);
         if (!success) {
             throw new IllegalArgumentException("order status can not use");
@@ -233,6 +251,8 @@ public class OrderRepository implements IOrderRepository {
         DiningOrderPO po = new DiningOrderPO();
         po.setId(entity.getId());
         po.setOrderNo(entity.getOrderNo());
+        po.setRequestId(entity.getRequestId());
+        po.setRequestFingerprint(entity.getRequestFingerprint());
         po.setUserId(entity.getUserId());
         po.setShopId(entity.getShopId());
         po.setPackageId(entity.getPackageId());
@@ -260,6 +280,8 @@ public class OrderRepository implements IOrderRepository {
         DiningOrderEntity entity = new DiningOrderEntity();
         entity.setId(po.getId());
         entity.setOrderNo(po.getOrderNo());
+        entity.setRequestId(po.getRequestId());
+        entity.setRequestFingerprint(po.getRequestFingerprint());
         entity.setUserId(po.getUserId());
         entity.setShopId(po.getShopId());
         entity.setPackageId(po.getPackageId());

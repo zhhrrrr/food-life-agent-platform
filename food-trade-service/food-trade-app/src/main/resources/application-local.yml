@@ -113,6 +113,13 @@ mybatis-plus:
       id-type: auto
 
 food:
+  job:
+    lock:
+      enabled: ${FOOD_JOB_LOCK_ENABLED:true}
+      key-prefix: food:job:lock
+      wait-time-ms: 0
+      lease-time-ms: -1
+      log-skipped: true
   payment:
     local:
       callback-secret: ${LOCAL_PAYMENT_CALLBACK_SECRET:local-payment-secret}

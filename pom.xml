@@ -20,6 +20,7 @@
     <modules>
         <module>food-domain-patterns</module>
         <module>food-auth-starter</module>
+        <module>food-job-lock-starter</module>
         <module>food-observability-starter</module>
         <module>food-user-service</module>
         <module>food-business-service</module>
@@ -36,6 +37,7 @@
         <mysql.version>8.0.33</mysql.version>
         <hutool.version>5.8.26</hutool.version>
         <springdoc-openapi.version>2.2.0</springdoc-openapi.version>
+        <redisson.version>3.27.2</redisson.version>
         <maven-enforcer-plugin.version>3.4.1</maven-enforcer-plugin.version>
     </properties>
 
@@ -81,6 +83,11 @@
                 <version>${springdoc-openapi.version}</version>
             </dependency>
             <dependency>
+                <groupId>org.redisson</groupId>
+                <artifactId>redisson</artifactId>
+                <version>${redisson.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>com.foodlife</groupId>
                 <artifactId>food-domain-patterns</artifactId>
                 <version>${project.version}</version>
@@ -88,6 +95,11 @@
             <dependency>
                 <groupId>com.foodlife</groupId>
                 <artifactId>food-auth-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.foodlife</groupId>
+                <artifactId>food-job-lock-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

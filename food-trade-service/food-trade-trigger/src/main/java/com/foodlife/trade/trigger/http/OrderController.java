@@ -79,6 +79,10 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/trade")
 public class OrderController {
+    @org.springframework.beans.factory.annotation.Value("${food.payment.local.enabled:true}")
+    private boolean localPaymentEnabled;
+    @org.springframework.beans.factory.annotation.Value("${food.payment.default-channel:LOCAL_PAY}")
+    private String defaultPaymentChannel;
 
     private final OrderDomainService orderDomainService;
     private final RefundConfirmApplicationService refundConfirmApplicationService;
@@ -149,6 +153,12 @@ public class OrderController {
                 return Response.fail("503", serviceBusyMessage(e));
             }
         });
+    }
+
+    @GetMapping("/seckill/activities/{activityId}")
+    public Response<SeckillActivityListResponseDTO.ActivityInfo> querySeckillActivity(@PathVariable Long activityId) {
+        try { return Response.success(toSeckillActivityInfo(orderDomainService.querySeckillActivity(activityId))); }
+        catch (IllegalArgumentException e) { return Response.fail("404", e.getMessage()); }
     }
 
     @PostMapping("/orders/seckill/async")
@@ -292,6 +302,7 @@ public class OrderController {
     public Response<PayOrderResponseDTO> payOrderLocal(@PathVariable Long orderId,
                                                       @RequestBody(required = false) PayOrderRequestDTO request) {
         try {
+            if (!localPaymentEnabled) { throw new IllegalArgumentException("local payment is disabled"); }
             OrderPaySettlementEntity result = orderDomainService.payOrderLocal(toPaySuccessEntity(orderId, request));
             PayOrderResponseDTO response = toPayResponse(result);
             operationAuditApplicationService.recordSuccess("ORDER_PAY_LOCAL", "ORDER", String.valueOf(orderId),
@@ -386,6 +397,8 @@ public class OrderController {
         command.setPackageId(request == null ? null : request.getPackageId());
         command.setQuantity(request == null ? null : request.getQuantity());
         command.setUserCouponId(request == null ? null : request.getUserCouponId());
+        command.setRequestId(request == null ? null : request.getRequestId());
+        command.setExpectedUnitPrice(request == null ? null : request.getExpectedUnitPrice());
         return command;
     }
 
@@ -395,6 +408,9 @@ public class OrderController {
         command.setPackageId(request == null ? null : request.getPackageId());
         command.setQuantity(request == null ? null : request.getQuantity());
         command.setTeamId(request == null ? null : request.getTeamId());
+        command.setRequestId(request == null ? null : request.getRequestId());
+        command.setExpectedUnitPrice(request == null ? null : request.getExpectedUnitPrice());
+        command.setExpectedActivityId(request == null ? null : request.getExpectedActivityId());
         return command;
     }
 
@@ -402,6 +418,8 @@ public class OrderController {
         SeckillOrderCommand command = new SeckillOrderCommand();
         command.setUserId(UserHolder.getUserId());
         command.setActivityId(request == null ? null : request.getActivityId());
+        command.setRequestId(request == null ? null : request.getRequestId());
+        command.setExpectedUnitPrice(request == null ? null : request.getExpectedUnitPrice());
         command.setQuantity(request == null ? null : request.getQuantity());
         return command;
     }
@@ -685,7 +703,7 @@ public class OrderController {
     private OrderRefundCommandEntity toRefundCommand(Long orderId, RefundOrderRequestDTO request) {
         OrderRefundCommandEntity command = new OrderRefundCommandEntity();
         command.setSource(readOrDefault(request == null ? null : request.getSource(), "FOOD_LIFE"));
-        command.setChannel(readOrDefault(request == null ? null : request.getChannel(), PaymentChannelConstants.LOCAL_PAY));
+        command.setChannel(readOrDefault(request == null ? null : request.getChannel(), defaultPaymentChannel));
         command.setUserId(request != null && request.getUserId() != null ? request.getUserId() : UserHolder.getUserId());
         command.setOrderId(orderId);
         command.setRefundReason(readOrDefault(request == null ? null : request.getRefundReason(), "order refund"));

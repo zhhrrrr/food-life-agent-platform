@@ -16,6 +16,8 @@ public class PaymentOrderResponseDTO implements Serializable {
     private String channel;
     private Long payAmount;
     private String payStatus;
+    private String paymentUrl;
+    private String paymentForm;
     private String outTradeNo;
     private LocalDateTime payTime;
     private LocalDateTime createTime;

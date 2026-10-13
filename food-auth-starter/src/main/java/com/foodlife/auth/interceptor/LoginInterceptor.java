@@ -16,9 +16,25 @@ import java.util.Set;
 public class LoginInterceptor implements HandlerInterceptor {
 
     private final List<String> excludePaths;
+    /**
+     * Ant风格路径匹配器
+     *
+     * 支持：
+     *
+     * /user/**
+     *
+     * 可以匹配：
+     *
+     * /user/login
+     * /user/info/list
+     */
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
     public LoginInterceptor(List<String> excludePaths) {
+        /**
+         * 如果没有配置排除路径
+         * 使用空集合，避免后续遍历空指针
+         */
         this.excludePaths = excludePaths == null ? Collections.emptyList() : excludePaths;
     }
 
@@ -36,12 +52,41 @@ public class LoginInterceptor implements HandlerInterceptor {
         return true;
     }
 
+    // candidatePaths:
+    //
+    /// food/api/user/login
+    /// api/user/login
+    // 两者描述的是不同层面的路径，拦截器想兼容所有部署方式，所以两个
     private boolean isExcluded(HttpServletRequest request) {
         Set<String> candidatePaths = new LinkedHashSet<>();
+        /**
+         * 获取完整请求路径
+         *
+         * 例如：
+         *
+         * /food/api/user/login
+         */
         addPathCandidate(candidatePaths, request.getRequestURI());
+        /**
+         * 获取Servlet处理路径
+         *
+         * 例如：
+         *
+         * /api/user/login
+         */
         addPathCandidate(candidatePaths, request.getServletPath());
 
+        /**
+         * 获取项目部署前缀
+         *
+         * 例如：
+         *
+         * server.servlet.context-path=/food
+         *
+         * contextPath=/food
+         */
         String contextPath = request.getContextPath();
+
         String requestUri = request.getRequestURI();
         if (StringUtils.hasText(contextPath) && StringUtils.hasText(requestUri)
                 && requestUri.startsWith(contextPath)) {

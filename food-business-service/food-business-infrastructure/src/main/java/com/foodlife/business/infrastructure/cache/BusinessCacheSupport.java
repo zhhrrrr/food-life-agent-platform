@@ -7,6 +7,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.util.List;
@@ -21,7 +23,6 @@ public class BusinessCacheSupport {
     private static final Duration SHOP_TTL = Duration.ofMinutes(10);
     private static final Duration PACKAGE_TTL = Duration.ofMinutes(5);
     private static final Duration PACKAGE_LIST_TTL = Duration.ofMinutes(3);
-    private static final Duration TRADE_SNAPSHOT_TTL = Duration.ofMinutes(2);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -41,10 +42,6 @@ public class BusinessCacheSupport {
 
     public String packageListKey(Long shopId) {
         return "food:cache:shop:" + shopId + ":packages";
-    }
-
-    public String packageTradeSnapshotKey(Long packageId) {
-        return "food:cache:package:" + packageId + ":trade-snapshot";
     }
 
     public <T> T getObject(String key, Class<T> type) {
@@ -94,17 +91,12 @@ public class BusinessCacheSupport {
         putObject(packageListKey(shopId), value, PACKAGE_LIST_TTL);
     }
 
-    public void putTradeSnapshot(Long packageId, Object value) {
-        putObject(packageTradeSnapshotKey(packageId), value, TRADE_SNAPSHOT_TTL);
-    }
-
     public void evictShop(Long shopId) {
         evict(shopKey(shopId));
     }
 
     public void evictPackage(Long packageId) {
         evict(packageKey(packageId));
-        evict(packageTradeSnapshotKey(packageId));
     }
 
     public void evictPackageList(Long shopId) {
@@ -117,7 +109,6 @@ public class BusinessCacheSupport {
 
     public void delayedEvictPackage(Long packageId) {
         delayedEvict(packageKey(packageId));
-        delayedEvict(packageTradeSnapshotKey(packageId));
     }
 
     public void delayedEvictPackageList(Long shopId) {
@@ -125,6 +116,10 @@ public class BusinessCacheSupport {
     }
 
     private void evict(String key) {
+        afterCommit(() -> deleteNow(key));
+    }
+
+    private void deleteNow(String key) {
         try {
             redisTemplate.delete(key);
         } catch (Exception e) {
@@ -133,6 +128,17 @@ public class BusinessCacheSupport {
     }
 
     private void delayedEvict(String key) {
-        CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS).execute(() -> evict(key));
+        afterCommit(() -> CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS).execute(() -> deleteNow(key)));
+    }
+
+    private void afterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { action.run(); }
+            });
+        } else {
+            action.run();
+        }
     }
 }

@@ -41,6 +41,7 @@ if (Test-PortListening -ListenPort $Port) {
 }
 
 Write-Host "Starting Nacos standalone from $NacosHomePath"
+& (Join-Path $PSScriptRoot "use-java17-plus.ps1")
 Start-Process -FilePath "cmd.exe" `
     -ArgumentList "/c", "startup.cmd -m standalone" `
     -WorkingDirectory $BinPath `

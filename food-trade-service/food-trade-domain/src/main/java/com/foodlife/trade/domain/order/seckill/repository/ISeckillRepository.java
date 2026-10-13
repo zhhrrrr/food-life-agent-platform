@@ -50,6 +50,8 @@ public interface ISeckillRepository {
 
     void markSeckillOrderRequestFailed(String requestNo, String failReason);
 
+    void markSeckillOrderRequestRetry(String requestNo, String failReason);
+
     boolean cancelTimeoutSeckillOrderRequest(String requestNo, String failReason);
 
     int querySeckillOrderCount(Long activityId, String orderStatus);

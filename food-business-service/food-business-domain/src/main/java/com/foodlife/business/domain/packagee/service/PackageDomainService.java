@@ -1,7 +1,5 @@
 package com.foodlife.business.domain.packagee.service;
 
-import com.foodlife.business.domain.event.BusinessMqTopics;
-import com.foodlife.business.domain.event.IBusinessEventPublisher;
 import com.foodlife.business.domain.packagee.model.AdjustPackageStockCommand;
 import com.foodlife.business.domain.packagee.model.AdjustPackageStockResult;
 import com.foodlife.business.domain.packagee.model.MealPackageEntity;
@@ -13,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class PackageDomainService {
@@ -21,12 +20,9 @@ public class PackageDomainService {
     private static final int MAX_RECORD_LIMIT = 100;
 
     private final IPackageRepository packageRepository;
-    private final IBusinessEventPublisher businessEventPublisher;
 
-    public PackageDomainService(IPackageRepository packageRepository,
-                                IBusinessEventPublisher businessEventPublisher) {
+    public PackageDomainService(IPackageRepository packageRepository) {
         this.packageRepository = packageRepository;
-        this.businessEventPublisher = businessEventPublisher;
     }
 
     public MealPackageEntity queryPackageById(Long id) {
@@ -41,6 +37,14 @@ public class PackageDomainService {
         return packageRepository.queryTradeSnapshot(packageId);
     }
 
+    public List<PackageTradeSnapshotEntity> queryTradeSnapshots(List<Long> packageIds) {
+        if (packageIds == null || packageIds.isEmpty() || packageIds.size() > 50
+                || packageIds.stream().anyMatch(id -> id == null || id <= 0)) {
+            throw new IllegalArgumentException("packageIds must contain 1 to 50 positive IDs");
+        }
+        return packageRepository.queryTradeSnapshots(packageIds.stream().distinct().collect(Collectors.toList()));
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public PackageStockChangeResult occupyPackageStock(Long packageId, Integer quantity) {
         return occupyPackageStock(packageId, quantity, null);
@@ -49,9 +53,7 @@ public class PackageDomainService {
     @Transactional(rollbackFor = Exception.class)
     public PackageStockChangeResult occupyPackageStock(Long packageId, Integer quantity, String operationId) {
         checkPackageStockCommand(packageId, quantity);
-        PackageStockChangeResult result = packageRepository.occupyPackageStock(packageId, quantity, operationId);
-        publishStockEvent(BusinessMqTopics.STOCK_OCCUPIED, result, operationId);
-        return result;
+        return packageRepository.occupyPackageStock(packageId, quantity, operationId);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -62,9 +64,7 @@ public class PackageDomainService {
     @Transactional(rollbackFor = Exception.class)
     public PackageStockChangeResult releasePackageStock(Long packageId, Integer quantity, String operationId) {
         checkPackageStockCommand(packageId, quantity);
-        PackageStockChangeResult result = packageRepository.releasePackageStock(packageId, quantity, operationId);
-        publishStockEvent(BusinessMqTopics.STOCK_RELEASED, result, operationId);
-        return result;
+        return packageRepository.releasePackageStock(packageId, quantity, operationId);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -75,9 +75,7 @@ public class PackageDomainService {
     @Transactional(rollbackFor = Exception.class)
     public PackageStockChangeResult confirmPackageSold(Long packageId, Integer quantity, String operationId) {
         checkPackageStockCommand(packageId, quantity);
-        PackageStockChangeResult result = packageRepository.confirmPackageSold(packageId, quantity, operationId);
-        publishStockEvent(BusinessMqTopics.STOCK_SOLD_CONFIRMED, result, operationId);
-        return result;
+        return packageRepository.confirmPackageSold(packageId, quantity, operationId);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -88,20 +86,13 @@ public class PackageDomainService {
     @Transactional(rollbackFor = Exception.class)
     public PackageStockChangeResult rollbackPackageSold(Long packageId, Integer quantity, String operationId) {
         checkPackageStockCommand(packageId, quantity);
-        PackageStockChangeResult result = packageRepository.rollbackPackageSold(packageId, quantity, operationId);
-        publishStockEvent(BusinessMqTopics.STOCK_ROLLBACK, result, operationId);
-        return result;
+        return packageRepository.rollbackPackageSold(packageId, quantity, operationId);
     }
 
     @Transactional(rollbackFor = Exception.class)
     public AdjustPackageStockResult adjustPackageStock(AdjustPackageStockCommand command) {
         checkAdjustPackageStockCommand(command);
-        AdjustPackageStockResult result = packageRepository.adjustPackageStock(command);
-        businessEventPublisher.publish(BusinessMqTopics.PACKAGE_STOCK_TOPIC,
-                BusinessMqTopics.PACKAGE_CHANGED,
-                command.getPackageId() + ":" + command.getOperationId(),
-                result);
-        return result;
+        return packageRepository.adjustPackageStock(command);
     }
 
     public List<PackageStockChangeRecordEntity> listStockChangeRecords(String operationIdPrefix, Long packageId, Integer limit) {
@@ -153,12 +144,4 @@ public class PackageDomainService {
         return value == null || value.trim().isEmpty();
     }
 
-    private void publishStockEvent(String tag, PackageStockChangeResult result, String operationId) {
-        String key = result.getPackageId() + ":" + tag + ":" + readOrDefault(operationId, String.valueOf(System.currentTimeMillis()));
-        businessEventPublisher.publish(BusinessMqTopics.PACKAGE_STOCK_TOPIC, tag, key, result);
-    }
-
-    private String readOrDefault(String value, String defaultValue) {
-        return value == null || value.trim().isEmpty() ? defaultValue : value.trim();
-    }
 }

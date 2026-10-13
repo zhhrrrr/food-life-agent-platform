@@ -118,6 +118,13 @@ public class CouponService {
         UserCouponEntity coupon = couponRepository.findUserCouponByIdAndUserId(userCouponId, userId);
         String releaseStatus = resolveReleaseStatus(coupon, now);
         boolean released = couponRepository.releaseUsedCoupon(userCouponId, userId, orderId, releaseStatus);
+        if (!released) {
+            UserCouponEntity current = couponRepository.findUserCouponByIdAndUserId(userCouponId, userId);
+            released = current != null && current.getUsedOrderId() == null
+                    && (CouponStatusConstants.UNUSED.equals(current.getCouponStatus())
+                        || CouponStatusConstants.EXPIRED.equals(current.getCouponStatus()));
+            if (released) { releaseStatus = current.getCouponStatus(); }
+        }
         result.setReleased(released);
         result.setCouponStatus(released ? releaseStatus : coupon == null ? null : coupon.getCouponStatus());
         return result;

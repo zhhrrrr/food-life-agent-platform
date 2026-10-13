@@ -9,6 +9,7 @@ import com.foodlife.trade.domain.order.payment.repository.IPaymentOrderRepositor
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import com.foodlife.trade.domain.order.service.OrderDomainService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderTimeoutDelayCloseService {
@@ -17,17 +18,21 @@ public class OrderTimeoutDelayCloseService {
     private final IPaymentOrderRepository paymentOrderRepository;
     private final OrderDomainService orderDomainService;
     private final ITradeEventPublisher tradeEventPublisher;
+    private final com.foodlife.trade.domain.order.payment.provider.PaymentProviderRouter providers;
 
     public OrderTimeoutDelayCloseService(IOrderRepository orderRepository,
                                          IPaymentOrderRepository paymentOrderRepository,
                                          OrderDomainService orderDomainService,
-                                         ITradeEventPublisher tradeEventPublisher) {
+                                         ITradeEventPublisher tradeEventPublisher,
+                                         com.foodlife.trade.domain.order.payment.provider.PaymentProviderRouter providers) {
         this.orderRepository = orderRepository;
         this.paymentOrderRepository = paymentOrderRepository;
         this.orderDomainService = orderDomainService;
         this.tradeEventPublisher = tradeEventPublisher;
+        this.providers = providers;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public OrderTimeoutCloseResult closeTimeoutOrder(OrderTimeoutCloseMessage message) {
         validate(message);
         OrderTimeoutCloseResult result = initResult(message);
@@ -65,6 +70,7 @@ public class OrderTimeoutDelayCloseService {
         if (!PaymentOrderStatusConstants.PREPARED.equals(paymentOrder.getPayStatus())) {
             return;
         }
+        providers.route(paymentOrder.getChannel()).closePayment(paymentOrder);
         boolean closed = paymentOrderRepository.markPayClosed(paymentOrder.getPayOrderNo(), PaymentOrderStatusConstants.PREPARED);
         result.setPaymentClosed(closed);
         if (closed) {

@@ -2,6 +2,7 @@ param(
     [switch]$Rebuild,
     [switch]$Restart,
     [switch]$IncludeGateway,
+    [string]$ArtifactSourceRoot,
     [string]$SpringProfilesActive = "nacos",
     [string]$RabbitMqHost = "127.0.0.1",
     [string]$RabbitMqPort = "5672",
@@ -18,6 +19,11 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Logs = Join-Path $Root "logs"
 New-Item -ItemType Directory -Force -Path $Logs | Out-Null
+
+if (-not [string]::IsNullOrWhiteSpace($ArtifactSourceRoot)) {
+    if (-not $Restart) { throw "ArtifactSourceRoot requires -Restart so running jars are not overwritten." }
+    $ArtifactSourceRoot = (Resolve-Path -LiteralPath $ArtifactSourceRoot).Path
+}
 
 & (Join-Path $PSScriptRoot "use-java17-plus.ps1")
 
@@ -109,6 +115,11 @@ function Stop-ServicePort {
     param([hashtable]$Service)
     $processId = Get-PortProcessId -Port $Service.Port
     if ($null -ne $processId) {
+        $serviceProcess = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $processId)
+        $expectedJar = Join-Path $Root $Service.Jar
+        if ($null -eq $serviceProcess -or -not $serviceProcess.CommandLine.Contains($expectedJar)) {
+            throw "Port $($Service.Port) belongs to another process; refusing to stop it."
+        }
         Write-Host "Stopping $($Service.Name) on port $($Service.Port), pid=$processId"
         Stop-Process -Id $processId -Force
         Start-Sleep -Seconds 2
@@ -141,6 +152,15 @@ function Wait-Health {
 
 Set-Location $Root
 
+if (-not [string]::IsNullOrWhiteSpace($ArtifactSourceRoot)) {
+    if ($Rebuild) { throw "Use either -Rebuild or verified ArtifactSourceRoot, not both." }
+    foreach ($service in $Services) {
+        if (-not (Test-Path -LiteralPath (Join-Path $ArtifactSourceRoot $service.Jar))) {
+            throw "Verified build artifact missing for $($service.Name); services have not been stopped."
+        }
+    }
+}
+
 if ($Restart -or $Rebuild) {
     foreach ($service in $Services) {
         Stop-ServicePort -Service $service
@@ -150,6 +170,14 @@ if ($Restart -or $Rebuild) {
 if ($Rebuild) {
     $mavenModules = ($Services | ForEach-Object { $_.MavenModule }) -join ","
     mvn -pl $mavenModules -am package -DskipTests
+}
+
+if (-not [string]::IsNullOrWhiteSpace($ArtifactSourceRoot)) {
+    foreach ($service in $Services) {
+        $verifiedJar = Join-Path $ArtifactSourceRoot $service.Jar
+        if (-not (Test-Path -LiteralPath $verifiedJar)) { throw "Verified build artifact missing: $verifiedJar" }
+        Copy-Item -LiteralPath $verifiedJar -Destination (Join-Path $Root $service.Jar) -Force
+    }
 }
 
 foreach ($service in $Services) {

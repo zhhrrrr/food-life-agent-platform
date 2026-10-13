@@ -9,12 +9,15 @@ import com.foodlife.trade.domain.order.normal.model.NormalPackageStockSyncResult
 import com.foodlife.trade.domain.order.normal.repository.INormalPackageStockMessageRepository;
 import com.foodlife.trade.domain.order.port.IBusinessPackagePort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
 public class NormalPackageStockMessageService {
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(NormalPackageStockMessageService.class);
 
     private static final int DEFAULT_LIMIT = 20;
     private static final int MAX_LIMIT = 100;
@@ -84,16 +87,35 @@ public class NormalPackageStockMessageService {
                 ? messageRepository.saveInitMessage(messageType, bizId, buildContent(messageType, order), now)
                 : existed;
 
-        if (LocalMessageStatusConstants.SUCCESS.equals(message.getMessageStatus())) {
+        if (!LocalMessageStatusConstants.INIT.equals(message.getMessageStatus())) {
             return;
         }
-        if (!LocalMessageStatusConstants.INIT.equals(message.getMessageStatus())) {
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    try {
+                        executeInitMessage(messageId);
+                    } catch (RuntimeException e) {
+                        LOG.error("post-commit stock task needs retry, messageId={}", messageId, e);
+                    }
+                }
+            });
+            return;
+        }
+
+        executeInitMessage(messageId);
+    }
+
+    private void executeInitMessage(String messageId) {
+        TradeLocalMessageEntity message = messageRepository.queryMessageByMessageId(messageId);
+        if (message == null || !LocalMessageStatusConstants.INIT.equals(message.getMessageStatus())) {
             return;
         }
         if (!messageRepository.markMessageProcessing(message.getId())) {
             return;
         }
-
         NormalPackageStockSyncResult ignored = new NormalPackageStockSyncResult();
         processSingleMessage(message, ignored);
     }

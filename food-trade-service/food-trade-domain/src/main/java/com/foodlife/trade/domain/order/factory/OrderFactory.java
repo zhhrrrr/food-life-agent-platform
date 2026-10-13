@@ -25,6 +25,8 @@ public class OrderFactory {
         DiningOrderEntity order = new DiningOrderEntity();
         order.setOrderNo(orderNoGenerator.generate(command.getUserId()));
         order.setUserId(command.getUserId());
+        order.setRequestId(command.getRequestId());
+        order.setRequestFingerprint(command.getRequestFingerprint());
         order.setShopId(snapshot.getShopId());
         order.setPackageId(snapshot.getPackageId());
         order.setQuantity(command.getQuantity());

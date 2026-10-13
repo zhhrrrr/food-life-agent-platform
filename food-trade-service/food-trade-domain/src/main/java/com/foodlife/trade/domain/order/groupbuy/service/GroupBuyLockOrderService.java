@@ -45,6 +45,11 @@ public class GroupBuyLockOrderService {
             context.setCommand(command);
             groupBuyLockRuleFilter.apply(context, context);
 
+            if (command.getExpectedUnitPrice() != null && !command.getExpectedUnitPrice().equals(context.getActivity().getGroupPrice())
+                || command.getExpectedActivityId() != null && !command.getExpectedActivityId().equals(context.getActivity().getId())) {
+                throw new IllegalArgumentException("group buy activity or price changed; preview and confirm again");
+            }
+
             GroupBuyLockAggregate aggregate = buildAggregate(context);
             return groupBuyRepository.saveGroupBuyLockOrder(aggregate);
         } catch (IllegalArgumentException e) {
@@ -97,6 +102,8 @@ public class GroupBuyLockOrderService {
         createOrderCommand.setUserId(command.getUserId());
         createOrderCommand.setPackageId(command.getPackageId());
         createOrderCommand.setQuantity(command.getQuantity());
+        createOrderCommand.setRequestId(command.getRequestId());
+        createOrderCommand.setRequestFingerprint(command.getRequestFingerprint());
         return createOrderCommand;
     }
 

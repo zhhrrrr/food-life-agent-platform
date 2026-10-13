@@ -1,0 +1,18 @@
+spring:
+  config:
+    import: optional:file:./.runtime/alipay-sandbox.properties
+
+food:
+  payment:
+    default-channel: ALIPAY_SANDBOX
+    local:
+      enabled: false
+    alipay:
+      enabled: true
+      app-id: ${ALIPAY_APP_ID:}
+      gateway-url: ${ALIPAY_GATEWAY_URL:https://openapi-sandbox.dl.alipaydev.com/gateway.do}
+      seller-id: ${ALIPAY_SELLER_ID:}
+      private-key-path: ${ALIPAY_PRIVATE_KEY_PATH:}
+      public-key-path: ${ALIPAY_PUBLIC_KEY_PATH:}
+      notify-url: ${ALIPAY_NOTIFY_URL:}
+      return-url: ${ALIPAY_RETURN_URL:http://localhost:5173/orders}

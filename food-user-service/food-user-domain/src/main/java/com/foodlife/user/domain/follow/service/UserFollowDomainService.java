@@ -8,6 +8,7 @@ import com.foodlife.user.domain.follow.repository.IUserFollowRepository;
 import com.foodlife.user.domain.user.model.UserEntity;
 import com.foodlife.user.domain.user.repository.IUserRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -25,12 +26,14 @@ public class UserFollowDomainService {
         this.userRepository = userRepository;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public UserFollowEntity followUser(UserFollowCommand command) {
         checkCommand(command);
         checkTargetUser(command.getFollowUserId());
         return userFollowRepository.followUser(command.getUserId(), command.getFollowUserId());
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public UserFollowEntity unfollowUser(UserFollowCommand command) {
         checkCommand(command);
         return userFollowRepository.unfollowUser(command.getUserId(), command.getFollowUserId());

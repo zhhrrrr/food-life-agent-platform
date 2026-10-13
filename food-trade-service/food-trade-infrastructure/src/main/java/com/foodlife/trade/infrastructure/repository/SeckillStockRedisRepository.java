@@ -92,6 +92,16 @@ public class SeckillStockRedisRepository implements ISeckillStockRepository {
     }
 
     @Override
+    public void releaseActivityStock(Long activityId, Long userId, String operationId) {
+        if (operationId == null || operationId.isBlank()) {
+            throw new IllegalArgumentException("seckill stock release operation required");
+        }
+        stringRedisTemplate.execute(releaseScript,
+                Arrays.asList(stockKey(activityId), userKey(activityId), stockKey(activityId) + ":released"),
+                String.valueOf(userId), operationId);
+    }
+
+    @Override
     public void refreshActivityStock(SeckillActivityEntity activity, LocalDateTime now, Integer stock) {
         if (stock == null) {
             return;

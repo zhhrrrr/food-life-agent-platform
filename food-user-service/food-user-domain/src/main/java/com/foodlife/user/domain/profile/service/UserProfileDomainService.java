@@ -5,6 +5,7 @@ import com.foodlife.user.domain.profile.model.UserProfileEntity;
 import com.foodlife.user.domain.profile.model.UserProfileUpdateCommand;
 import com.foodlife.user.domain.profile.repository.IUserProfileRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class UserProfileDomainService {
@@ -36,6 +37,7 @@ public class UserProfileDomainService {
         return profile;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public UserProfileEntity updateMyProfile(UserProfileUpdateCommand command) {
         checkUpdateCommand(command);
         UserProfileEntity profile = userProfileRepository.updateProfile(command);

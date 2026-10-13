@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/package")
@@ -53,8 +54,20 @@ public class PackageController {
         target.setPrice(source.getPrice());
         target.setOriginalPrice(source.getOriginalPrice());
         target.setStock(source.getStock());
+        target.setSold(source.getSold());
+        target.setShopSold(source.getShopSold());
         target.setPackageStatus(source.getPackageStatus());
         target.setUseRule(source.getUseRule());
         return target;
+    }
+
+    @GetMapping("/trade-snapshots")
+    public Response<List<PackageTradeSnapshotResponseDTO>> queryTradeSnapshots(@RequestParam List<Long> packageIds) {
+        try {
+            return Response.success(packageDomainService.queryTradeSnapshots(packageIds).stream()
+                    .map(this::toTradeSnapshotResponse).collect(Collectors.toList()));
+        } catch (IllegalArgumentException e) {
+            return Response.fail("400", e.getMessage());
+        }
     }
 }

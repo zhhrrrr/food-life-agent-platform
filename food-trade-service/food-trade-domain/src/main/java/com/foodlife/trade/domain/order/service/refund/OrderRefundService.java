@@ -1,31 +1,54 @@
 package com.foodlife.trade.domain.order.service.refund;
 
-import com.foodlife.patterns.framework.link.model2.chain.BusinessLinkedList;
-import com.foodlife.trade.domain.order.model.OrderRefundBehaviorEntity;
-import com.foodlife.trade.domain.order.model.OrderRefundCommandEntity;
-import com.foodlife.trade.domain.order.refund.factory.OrderRefundRuleFilterFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
+import com.foodlife.trade.domain.order.constant.TradeTypeConstants;
+import com.foodlife.trade.domain.order.model.*;
+import com.foodlife.trade.domain.order.payment.model.*;
+import com.foodlife.trade.domain.order.payment.repository.IPaymentOrderRepository;
+import com.foodlife.trade.domain.order.payment.service.*;
+import com.foodlife.trade.domain.order.seckill.repository.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderRefundService {
+    private final RefundTransactionService transactions;
+    private final IPaymentOrderRepository payments;
+    private final PaymentRefundService refunds;
+    private final RefundJournalService journal;
+    private final ISeckillRepository seckillOrders;
+    private final ISeckillStockRepository seckillStock;
 
-    private final BusinessLinkedList<OrderRefundCommandEntity, OrderRefundRuleFilterFactory.DynamicContext, OrderRefundBehaviorEntity> orderRefundRuleFilter;
-
-    public OrderRefundService(@Qualifier("orderRefundRuleFilter")
-                              BusinessLinkedList<OrderRefundCommandEntity, OrderRefundRuleFilterFactory.DynamicContext, OrderRefundBehaviorEntity> orderRefundRuleFilter) {
-        this.orderRefundRuleFilter = orderRefundRuleFilter;
+    public OrderRefundService(RefundTransactionService transactions, IPaymentOrderRepository payments,
+            PaymentRefundService refunds, RefundJournalService journal,
+            ISeckillRepository seckillOrders, ISeckillStockRepository seckillStock) {
+        this.transactions = transactions;
+        this.payments = payments;
+        this.refunds = refunds;
+        this.journal = journal;
+        this.seckillOrders = seckillOrders;
+        this.seckillStock = seckillStock;
     }
 
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public OrderRefundBehaviorEntity refundOrder(OrderRefundCommandEntity command) {
-        try {
-            return orderRefundRuleFilter.apply(command, new OrderRefundRuleFilterFactory.DynamicContext());
-        } catch (IllegalArgumentException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new IllegalStateException("order refund failed", e);
+        DiningOrderEntity order = transactions.prepare(command);
+        PaymentOrderEntity payment = payments.findByOrderIdAndUserId(order.getId(), order.getUserId());
+        RefundOrderEntity refund = payment == null ? null
+                : refunds.refundPaidPayment(payment, command.getSource(), command.getRefundReason());
+        OrderRefundBehaviorEntity result = transactions.complete(command);
+        if (refund != null) {
+            result.setPaymentRefunded(true);
+            result.setRefundOrderNo(refund.getRefundOrderNo());
+            result.setOutRefundNo(refund.getOutRefundNo());
         }
+        // Database compensation has committed. Redis is replayable by the durable refund journal.
+        if (TradeTypeConstants.SECKILL.equals(order.getTradeType())
+                && (refund == null || !Boolean.TRUE.equals(refund.getBusinessCompleted()))) {
+            seckillStock.releaseActivityStock(seckillOrders.querySeckillActivityId(order), order.getUserId(),
+                    "REFUND:" + order.getOrderNo());
+        }
+        if (refund != null) { journal.businessCompleted(refund.getRefundOrderNo()); }
+        return result;
     }
 }

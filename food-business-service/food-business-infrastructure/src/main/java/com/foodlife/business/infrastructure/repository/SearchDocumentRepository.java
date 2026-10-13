@@ -48,7 +48,7 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
         Map<Long, ShopCategoryPO> categoryMap = listCategoryMap();
         return shopMapper.selectList(new LambdaQueryWrapper<ShopPO>()
                         .eq(ShopPO::getStatus, 1)
-                        .orderByDesc(ShopPO::getSold)
+                        .orderByAsc(ShopPO::getId)
                         .last(limitClause(limit, offset)))
                 .stream()
                 .map(shop -> toShopDocument(shop, categoryMap.get(shop.getCategoryId())))
@@ -60,7 +60,7 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
         Map<Long, ShopPO> shopMap = listShopMap();
         return mealPackageMapper.selectList(new LambdaQueryWrapper<MealPackagePO>()
                         .eq(MealPackagePO::getStatus, 1)
-                        .orderByDesc(MealPackagePO::getSold)
+                        .orderByAsc(MealPackagePO::getId)
                         .last(limitClause(limit, offset)))
                 .stream()
                 .map(mealPackage -> toPackageDocument(mealPackage, shopMap.get(mealPackage.getShopId())))
@@ -153,7 +153,6 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
         metadata.put("area", shop.getArea());
         metadata.put("address", shop.getAddress());
         metadata.put("avgPrice", shop.getAvgPrice());
-        metadata.put("sold", shop.getSold());
         metadata.put("comments", shop.getComments());
         metadata.put("score", shop.getScore());
         metadata.put("openHours", shop.getOpenHours());
@@ -182,7 +181,6 @@ public class SearchDocumentRepository implements ISearchDocumentRepository {
         metadata.put("shopName", shop == null ? null : shop.getName());
         metadata.put("price", mealPackage.getPrice());
         metadata.put("originalPrice", mealPackage.getOriginalPrice());
-        metadata.put("sold", mealPackage.getSold());
         metadata.put("status", mealPackage.getStatus());
         metadata.put("useRule", mealPackage.getUseRule());
 

@@ -54,6 +54,11 @@ public class RefundOrderRuleFilter implements ILogicHandler<OrderRefundCommandEn
         if (!OrderStatusConstants.PAID.equals(order.getOrderStatus())) {
             throw new IllegalArgumentException("order status can not refund");
         }
+        if (!TradeTypeConstants.NORMAL.equals(order.getTradeType())
+                && !TradeTypeConstants.GROUP_BUY.equals(order.getTradeType())
+                && !TradeTypeConstants.SECKILL.equals(order.getTradeType())) {
+            throw new IllegalArgumentException("unsupported trade type");
+        }
         OrderRefundBehaviorEntity behavior;
         if (TradeTypeConstants.GROUP_BUY.equals(order.getTradeType())) {
             behavior = groupBuyRefundStrategyRouter.refundOrder(requestParameter, order);
@@ -69,23 +74,23 @@ public class RefundOrderRuleFilter implements ILogicHandler<OrderRefundCommandEn
             throw new IllegalArgumentException("order status can not refund");
         }
         behavior = buildRefundBehavior(requestParameter, order, null);
-        if (TradeTypeConstants.NORMAL.equals(order.getTradeType())) {
-            return finishTradeSideRefund(order, behavior, true);
-        }
-
-        return finishTradeSideRefund(order, behavior, false);
+        return finishTradeSideRefund(order, behavior, true);
     }
 
     private OrderRefundBehaviorEntity finishTradeSideRefund(DiningOrderEntity order,
                                                             OrderRefundBehaviorEntity behavior,
                                                             boolean rollbackPackageStock) {
-        RefundOrderEntity refundOrder = refundPaymentIfPresent(order, behavior.getSource(), behavior);
+        RefundOrderEntity refundOrder = requirePaymentRefund(order);
         behavior.setPaymentRefunded(refundOrder != null);
         if (refundOrder != null) {
             behavior.setRefundOrderNo(refundOrder.getRefundOrderNo());
             behavior.setOutRefundNo(refundOrder.getOutRefundNo());
         }
         CouponReleaseResult couponReleaseResult = couponService.releaseCouponWithResult(order.getUserCouponId(), order.getUserId(), order.getId());
+        if (order.getUserCouponId() != null && (couponReleaseResult == null
+                || !Boolean.TRUE.equals(couponReleaseResult.getReleased()))) {
+            throw new IllegalStateException("refund coupon compensation incomplete");
+        }
         behavior.setCouponReturned(couponReleaseResult != null
                 && couponReleaseResult.getUserCouponId() != null
                 && Boolean.TRUE.equals(couponReleaseResult.getReleased()));
@@ -96,28 +101,18 @@ public class RefundOrderRuleFilter implements ILogicHandler<OrderRefundCommandEn
         return behavior;
     }
 
-    private RefundOrderEntity refundPaymentIfPresent(DiningOrderEntity order, String source, OrderRefundBehaviorEntity behavior) {
+    private RefundOrderEntity requirePaymentRefund(DiningOrderEntity order) {
         PaymentOrderEntity paymentOrder = paymentOrderRepository.findByOrderIdAndUserId(order.getId(), order.getUserId());
         if (paymentOrder == null) {
             return null;
         }
         if (PaymentOrderStatusConstants.REFUNDED.equals(paymentOrder.getPayStatus())) {
-            return paymentRefundService.refundPaidPayment(paymentOrder, source, readRefundReason(behavior));
+            return paymentRefundService.requireConfirmedRefund(paymentOrder);
         }
         if (!PaymentOrderStatusConstants.SUCCESS.equals(paymentOrder.getPayStatus())) {
             throw new IllegalArgumentException("payment order status can not refund");
         }
-        return paymentRefundService.refundPaidPayment(paymentOrder, source, readRefundReason(behavior));
-    }
-
-    private String readRefundReason(OrderRefundBehaviorEntity behavior) {
-        if (behavior != null && behavior.getRefundReason() != null && !behavior.getRefundReason().trim().isEmpty()) {
-            return behavior.getRefundReason().trim();
-        }
-        if (behavior == null || behavior.getRefundBehavior() == null) {
-            return "order refund";
-        }
-        return "order refund " + behavior.getRefundBehavior().getCode();
+        return paymentRefundService.requireConfirmedRefund(paymentOrder);
     }
 
     private void rollbackNormalPackageStock(DiningOrderEntity order, OrderRefundBehaviorEntity behavior) {

@@ -91,6 +91,7 @@ public class OrderDomainService {
     private final NormalPackageStockMessageService normalPackageStockMessageService;
     private final CouponService couponService;
     private final ITradeEventPublisher tradeEventPublisher;
+    private final com.foodlife.trade.domain.order.payment.service.PaymentCancellationService paymentCancellationService;
 
     public OrderDomainService(IOrderRepository orderRepository,
                               OrderCreateCheckChain orderCreateCheckChain,
@@ -107,7 +108,8 @@ public class OrderDomainService {
                               IBusinessPackagePort businessPackagePort,
                               NormalPackageStockMessageService normalPackageStockMessageService,
                               CouponService couponService,
-                              ITradeEventPublisher tradeEventPublisher) {
+                              ITradeEventPublisher tradeEventPublisher,
+                              com.foodlife.trade.domain.order.payment.service.PaymentCancellationService paymentCancellationService) {
         this.orderRepository = orderRepository;
         this.orderCreateCheckChain = orderCreateCheckChain;
         this.orderPricingService = orderPricingService;
@@ -124,10 +126,26 @@ public class OrderDomainService {
         this.normalPackageStockMessageService = normalPackageStockMessageService;
         this.couponService = couponService;
         this.tradeEventPublisher = tradeEventPublisher;
+        this.paymentCancellationService = paymentCancellationService;
     }
 
     @Transactional(rollbackFor = Exception.class)
     public CreateOrderResult createNormalOrder(CreateOrderCommand command) {
+        if (command != null && command.getRequestId() != null) {
+            if (command.getUserId() == null || !command.getRequestId().matches("[A-Za-z0-9_-]{1,64}")) {
+                throw new IllegalArgumentException("invalid order requestId or user");
+            }
+            DiningOrderEntity existing = orderRepository.findOrderByRequestIdAndUserId(command.getRequestId(), command.getUserId());
+            if (existing != null) {
+                if (!TradeTypeConstants.NORMAL.equals(existing.getTradeType())
+                        || !java.util.Objects.equals(existing.getPackageId(), command.getPackageId())
+                        || !java.util.Objects.equals(existing.getQuantity(), command.getQuantity())
+                        || !java.util.Objects.equals(existing.getUserCouponId(), command.getUserCouponId())) {
+                    throw new IllegalArgumentException("requestId already used with different order parameters");
+                }
+                return buildCreateOrderResult(existing);
+            }
+        }
         boolean packageStockOccupied = false;
         Long usedCouponId = null;
         Long savedOrderId = null;
@@ -135,6 +153,10 @@ public class OrderDomainService {
         try {
             OrderCreateContext context = buildCreateContext(TradeTypeConstants.NORMAL, command);
             orderCreateCheckChain.checkNormalOrder(context);
+            if (command.getExpectedUnitPrice() != null
+                    && !command.getExpectedUnitPrice().equals(context.getPackageSnapshot().getPrice())) {
+                throw new IllegalArgumentException("package price changed; preview and confirm again");
+            }
             Long totalAmount = context.getPackageSnapshot().getPrice() * command.getQuantity();
             UserCouponEntity userCoupon = couponService.validateCouponForOrder(command.getUserCouponId(), command.getUserId(), totalAmount, context.getPackageSnapshot());
             context.setUserCoupon(userCoupon);
@@ -258,6 +280,8 @@ public class OrderDomainService {
             throw new IllegalArgumentException("order status can not cancel");
         }
 
+        paymentCancellationService.closeBeforeCancellation(orderId, userId);
+
         if (TradeTypeConstants.GROUP_BUY.equals(order.getTradeType())) {
             groupBuyRepository.cancelUnpaidGroupBuyOrder(order);
             return buildCancelOrderResult(order);
@@ -288,18 +312,8 @@ public class OrderDomainService {
         return payOrderLocal(paySuccessEntity);
     }
 
-    @Transactional(rollbackFor = Exception.class)
     public OrderRefundBehaviorEntity refundOrderMock(OrderRefundCommandEntity command) {
-        OrderRefundBehaviorEntity refund = orderRefundService.refundOrder(command);
-        tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
-                TradeMqTopics.ORDER_REFUND_REQUESTED,
-                String.valueOf(refund.getOrderId()),
-                refund);
-        tradeEventPublisher.publish(TradeMqTopics.PAYMENT_TOPIC,
-                TradeMqTopics.PAYMENT_REFUNDED,
-                String.valueOf(refund.getOrderId()),
-                refund);
-        return refund;
+        return orderRefundService.refundOrder(command);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -314,6 +328,26 @@ public class OrderDomainService {
 
     @Transactional(rollbackFor = Exception.class)
     public GroupBuyLockResult createGroupBuyOrder(GroupBuyLockOrderCommand command) {
+        if (command != null && command.getRequestId() != null) {
+            com.foodlife.trade.domain.order.model.TradeRequestIdentity.validate(command.getUserId(), command.getRequestId());
+            String fingerprint = com.foodlife.trade.domain.order.model.TradeRequestIdentity.fingerprint("GROUP_BUY", command.getPackageId(),
+                command.getQuantity(), command.getTeamId(), command.getExpectedUnitPrice(), command.getExpectedActivityId());
+            command.setRequestFingerprint(fingerprint);
+            DiningOrderEntity existing = orderRepository.findOrderByRequestIdAndUserId(command.getRequestId(), command.getUserId());
+            if (existing != null) {
+                if (!TradeTypeConstants.GROUP_BUY.equals(existing.getTradeType()) || !fingerprint.equals(existing.getRequestFingerprint())) {
+                    throw new IllegalArgumentException("requestId already used with different purchase parameters");
+                }
+                com.foodlife.trade.domain.order.groupbuy.model.GroupBuyOrderListEntity member = groupBuyRepository.queryOrderListByOrderIdAndUserId(existing.getId(), existing.getUserId());
+                com.foodlife.trade.domain.order.groupbuy.model.GroupBuyTeamEntity team = groupBuyRepository.queryTeamByTeamId(member.getTeamId());
+                GroupBuyLockResult replay = new GroupBuyLockResult();
+                replay.setOrderId(existing.getId()); replay.setOrderNo(existing.getOrderNo()); replay.setOrderStatus(existing.getOrderStatus());
+                replay.setPayAmount(existing.getPayAmount()); replay.setTeamId(member.getTeamId()); replay.setActivityId(member.getActivityId());
+                if (team != null) { replay.setTeamStatus(team.getTeamStatus()); replay.setTargetCount(team.getTargetCount());
+                    replay.setLockCount(team.getLockCount()); replay.setCompleteCount(team.getCompleteCount()); }
+                return replay;
+            }
+        }
         GroupBuyLockResult result = groupBuyLockOrderService.lockOrder(command);
         tradeEventPublisher.publish(TradeMqTopics.TRADE_ORDER_TOPIC,
                 TradeMqTopics.ORDER_CREATED,
@@ -325,6 +359,10 @@ public class OrderDomainService {
 
     public java.util.List<SeckillActivityView> querySeckillActivities(Long packageId, Integer limit) {
         return seckillOrderService.queryAvailableActivities(packageId, limit);
+    }
+
+    public SeckillActivityView querySeckillActivity(Long activityId) {
+        return seckillOrderService.queryActivity(activityId);
     }
 
     public SeckillStockPreheatResult preheatSeckillActivityStock(Long activityId) {

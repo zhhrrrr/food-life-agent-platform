@@ -9,5 +9,9 @@ public class CreateGroupBuyOrderRequestDTO implements Serializable {
 
     private Long packageId;
     private Integer quantity;
+    private String requestId;
+    private Long expectedUnitPrice;
+    private Long expectedActivityId;
+
     private String teamId;
 }

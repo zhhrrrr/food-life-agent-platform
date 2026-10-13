@@ -10,6 +10,9 @@ public class SeckillOrderRequestEntity implements Serializable {
 
     private Long id;
     private String requestNo;
+    private String clientRequestId;
+    private String requestFingerprint;
+    private Long expectedUnitPrice;
     private Long userId;
     private Long activityId;
     private Long packageId;

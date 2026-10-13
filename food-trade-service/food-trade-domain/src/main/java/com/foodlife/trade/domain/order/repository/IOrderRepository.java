@@ -13,6 +13,9 @@ public interface IOrderRepository {
 
     DiningOrderEntity findOrderByIdAndUserId(Long orderId, Long userId);
 
+    DiningOrderEntity lockOrderByIdAndUserId(Long orderId, Long userId);
+    DiningOrderEntity findOrderByRequestIdAndUserId(String requestId, Long userId);
+
     java.util.List<DiningOrderEntity> listUserOrders(Long userId, Long lastId, Integer pageSize);
 
     java.util.List<DiningOrderEntity> listUserOrders(Long userId, Long lastId, Integer pageSize,

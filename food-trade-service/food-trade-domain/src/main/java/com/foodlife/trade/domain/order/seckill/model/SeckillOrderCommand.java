@@ -10,4 +10,8 @@ public class SeckillOrderCommand implements Serializable {
     private Long userId;
     private Long activityId;
     private Integer quantity;
+    private String requestId;
+    private Long expectedUnitPrice;
+    private String requestFingerprint;
+
 }

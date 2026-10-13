@@ -9,4 +9,7 @@ public class CreateSeckillOrderRequestDTO implements Serializable {
 
     private Long activityId;
     private Integer quantity;
+    private String requestId;
+    private Long expectedUnitPrice;
+
 }

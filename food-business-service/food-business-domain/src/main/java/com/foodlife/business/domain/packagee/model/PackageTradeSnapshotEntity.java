@@ -16,6 +16,8 @@ public class PackageTradeSnapshotEntity implements Serializable {
     private Long price;
     private Long originalPrice;
     private Integer stock;
+    private Integer sold;
+    private Integer shopSold;
     private Integer packageStatus;
     private String useRule;
 }

@@ -1,6 +1,7 @@
 package com.foodlife.trade.domain.order.groupbuy.service;
 
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyTeamQueryResult;
+import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyActivityEntity;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyTeamView;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyUserOrderQueryResult;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyUserOrderView;
@@ -31,6 +32,22 @@ public class GroupBuyQueryService {
         GroupBuyTeamQueryResult result = new GroupBuyTeamQueryResult();
         result.setTeams(groupBuyRepository.listAvailableGroupBuyTeams(packageId, LocalDateTime.now(), normalizeLimit(limit)));
         return result;
+    }
+
+    public GroupBuyActivityEntity queryActivity(Long packageId) {
+        if (packageId == null || packageId <= 0) throw new IllegalArgumentException("packageId required");
+        GroupBuyActivityEntity activity = groupBuyRepository.queryActiveActivityByPackageId(packageId);
+        if (activity == null) throw new IllegalArgumentException("group buy activity not found");
+        return activity;
+    }
+
+    public boolean canBuy(GroupBuyActivityEntity activity, Long userId) {
+        LocalDateTime now = LocalDateTime.now();
+        return Integer.valueOf(1).equals(activity.getActivityStatus()) && activity.getStock() != null && activity.getStock() > 0
+            && activity.getValidStartTime() != null && !activity.getValidStartTime().isAfter(now)
+            && activity.getValidEndTime() != null && activity.getValidEndTime().isAfter(now)
+            && userId != null && (activity.getUserTakeLimit() == null
+                || groupBuyRepository.queryUserTakeOrderCount(activity.getId(), userId) < activity.getUserTakeLimit());
     }
 
     public GroupBuyTeamView queryTeamDetail(String teamId) {

@@ -10,6 +10,8 @@ public class DiningOrderEntity implements Serializable {
 
     private Long id;
     private String orderNo;
+    private String requestId;
+    private String requestFingerprint;
     private Long userId;
     private Long shopId;
     private Long packageId;

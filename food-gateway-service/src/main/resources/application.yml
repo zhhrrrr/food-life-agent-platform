@@ -1,33 +1,90 @@
+# 在同一个 application.yml 里，把配置分成上下两块。
+# 第一块：基础配置
+# --- 上面   --- 的实际作用不是“分块好看”，而是：让同一个 application.yml 里，可以存在多套互相独立、带不同生效条件的配置。
+#= 基础配置
+#= 一定先加载
+#= 里面决定当前 active profile 是什么
+
+# 启动流程：
+# 启动服务
+#   ↓
+# 先读取本地 application.yml / 环境变量 / 启动参数
+#   ↓
+# 确定当前 Profile：
+# spring.profiles.active = nacos
+#   ↓
+# 激活 nacos Profile
+#   ↓
+# 命中：
+# spring.config.activate.on-profile = nacos
+#   ↓
+# 开始连接 Nacos
+#   ↓
+# 从 Nacos 配置中心读取：
+# 1. food-common.yaml
+# 2. food-gateway-service.yaml
+
 spring:
   application:
+    # 当前服务名
     name: food-gateway-service
+
   profiles:
+    # 激活环境；未配置环境变量时默认使用 nacos
     active: ${SPRING_PROFILES_ACTIVE:nacos}
+
   cloud:
     nacos:
       config:
+        # 检查是否正确通过 spring.config.import 导入 Nacos 配置
         import-check:
           enabled: true
 
 ---
+# 第二块：nacos 专用配置
 spring:
   config:
+    # 只有 nacos Profile 激活时，下面配置才生效
     activate:
       on-profile: nacos
+
+    # 从 Nacos 配置中心加载配置
     import:
+      # 公共配置
+      # 语法： ? 可以理解成 “开始写附加参数”
       - nacos:food-common.yaml?group=${NACOS_CONFIG_GROUP:FOOD_LIFE_AGENT}&refreshEnabled=true
+
+      # Gateway 专属配置
       - nacos:food-gateway-service.yaml?group=${NACOS_CONFIG_GROUP:FOOD_LIFE_AGENT}&refreshEnabled=true
+
   cloud:
     nacos:
+      # Nacos 服务地址
       server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+
+      # Nacos 登录信息
       username: ${NACOS_USERNAME:}
       password: ${NACOS_PASSWORD:}
+
       discovery:
+        # 开启服务注册与发现
         enabled: ${NACOS_DISCOVERY_ENABLED:true}
+
+        # 命名空间，用于环境隔离
         namespace: ${NACOS_NAMESPACE:}
+
+        # 服务注册所属 Group
         group: ${NACOS_DISCOVERY_GROUP:FOOD_LIFE_AGENT}
+
       config:
+        # 开启 Nacos 配置中心
         enabled: ${NACOS_CONFIG_ENABLED:true}
+
+        # 配置中心命名空间
         namespace: ${NACOS_NAMESPACE:}
+
+        # 配置所属 Group
         group: ${NACOS_CONFIG_GROUP:FOOD_LIFE_AGENT}
+
+        # 配置文件格式
         file-extension: yaml

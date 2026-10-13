@@ -47,11 +47,9 @@ public class RefundOrderRepository implements IRefundOrderRepository {
     }
 
     @Override
-    public boolean markRefundSuccess(String refundOrderNo, String fromStatus, String outRefundNo, LocalDateTime refundTime) {
+    public boolean markRefundProcessing(String refundOrderNo, String fromStatus) {
         RefundOrderPO updatePO = new RefundOrderPO();
-        updatePO.setRefundStatus(RefundOrderStatusConstants.SUCCESS);
-        updatePO.setOutRefundNo(outRefundNo);
-        updatePO.setRefundTime(refundTime);
+        updatePO.setRefundStatus(RefundOrderStatusConstants.PROCESSING);
         updatePO.setUpdateTime(LocalDateTime.now());
         int updated = refundOrderMapper.update(updatePO, new LambdaUpdateWrapper<RefundOrderPO>()
                 .eq(RefundOrderPO::getRefundOrderNo, refundOrderNo)
@@ -60,10 +58,24 @@ public class RefundOrderRepository implements IRefundOrderRepository {
     }
 
     @Override
+    public boolean markRefundSuccess(String refundOrderNo, String fromStatus, String outRefundNo, LocalDateTime refundTime) {
+        RefundOrderPO updatePO = new RefundOrderPO();
+        updatePO.setRefundStatus(RefundOrderStatusConstants.SUCCESS);
+        updatePO.setOutRefundNo(outRefundNo);
+        updatePO.setRefundTime(refundTime);
+        updatePO.setUpdateTime(LocalDateTime.now());
+        int updated = refundOrderMapper.update(updatePO, new LambdaUpdateWrapper<RefundOrderPO>()
+                .eq(RefundOrderPO::getRefundOrderNo, refundOrderNo)
+                .eq(RefundOrderPO::getRefundStatus, fromStatus)
+                .set(RefundOrderPO::getFailReason, null));
+        return updated > 0;
+    }
+
+    @Override
     public boolean markRefundFailed(String refundOrderNo, String fromStatus, String failReason) {
         RefundOrderPO updatePO = new RefundOrderPO();
         updatePO.setRefundStatus(RefundOrderStatusConstants.FAILED);
-        updatePO.setFailReason(failReason);
+        updatePO.setFailReason(failReason == null ? "refund result unknown" : failReason.substring(0, Math.min(255, failReason.length())));
         updatePO.setUpdateTime(LocalDateTime.now());
         int updated = refundOrderMapper.update(updatePO, new LambdaUpdateWrapper<RefundOrderPO>()
                 .eq(RefundOrderPO::getRefundOrderNo, refundOrderNo)
@@ -94,6 +106,68 @@ public class RefundOrderRepository implements IRefundOrderRepository {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public boolean recoverStaleProcessing(String refundOrderNo, LocalDateTime timeoutBefore) {
+        return refundOrderMapper.update(null, new LambdaUpdateWrapper<RefundOrderPO>()
+                .set(RefundOrderPO::getRefundStatus, RefundOrderStatusConstants.FAILED)
+                .set(RefundOrderPO::getFailReason, "processing timeout; query provider before retry")
+                .set(RefundOrderPO::getUpdateTime, LocalDateTime.now())
+                .eq(RefundOrderPO::getRefundOrderNo, refundOrderNo)
+                .eq(RefundOrderPO::getRefundStatus, RefundOrderStatusConstants.PROCESSING)
+                .le(RefundOrderPO::getUpdateTime, timeoutBefore)) > 0;
+    }
+
+    @Override
+    public List<RefundOrderEntity> listRecoverableRefundOrders(LocalDateTime now, Integer limit) {
+        int safeLimit = limit == null || limit <= 0 ? 50 : Math.min(limit, 200);
+        return refundOrderMapper.selectList(new LambdaQueryWrapper<RefundOrderPO>()
+                        .eq(RefundOrderPO::getBusinessCompleted, false)
+                        .lt(RefundOrderPO::getRecoveryCount, 10)
+                        .le(RefundOrderPO::getNextRetryTime, now)
+                        .orderByAsc(RefundOrderPO::getNextRetryTime, RefundOrderPO::getId)
+                        .last("limit " + safeLimit))
+                .stream().map(this::toEntity).collect(Collectors.toList());
+    }
+
+    @Override
+    public boolean claimRecoveryAttempt(String refundOrderNo, LocalDateTime now, LocalDateTime nextRetryTime) {
+        return refundOrderMapper.update(null, new LambdaUpdateWrapper<RefundOrderPO>()
+                .setSql("recovery_count = recovery_count + 1")
+                .set(RefundOrderPO::getNextRetryTime, nextRetryTime)
+                .eq(RefundOrderPO::getRefundOrderNo, refundOrderNo)
+                .eq(RefundOrderPO::getBusinessCompleted, false)
+                .lt(RefundOrderPO::getRecoveryCount, 10)
+                .le(RefundOrderPO::getNextRetryTime, now)) > 0;
+    }
+
+    @Override
+    public void markBusinessCompleted(String refundOrderNo) {
+        refundOrderMapper.update(null, new LambdaUpdateWrapper<RefundOrderPO>()
+                .set(RefundOrderPO::getBusinessCompleted, true)
+                .set(RefundOrderPO::getFailReason, null)
+                .set(RefundOrderPO::getUpdateTime, LocalDateTime.now())
+                .eq(RefundOrderPO::getRefundOrderNo, refundOrderNo)
+                .eq(RefundOrderPO::getRefundStatus, RefundOrderStatusConstants.SUCCESS));
+    }
+
+    @Override
+    public boolean resetRecovery(String refundOrderNo) {
+        return refundOrderMapper.update(null, new LambdaUpdateWrapper<RefundOrderPO>()
+                .set(RefundOrderPO::getRecoveryCount, 0)
+                .set(RefundOrderPO::getNextRetryTime, LocalDateTime.now())
+                .eq(RefundOrderPO::getRefundOrderNo, refundOrderNo)
+                .eq(RefundOrderPO::getBusinessCompleted, false)) > 0;
+    }
+
+    @Override
+    public void recordRecoveryFailure(String refundOrderNo, String reason) {
+        refundOrderMapper.update(null, new LambdaUpdateWrapper<RefundOrderPO>()
+                .set(RefundOrderPO::getFailReason, reason == null ? "business compensation incomplete"
+                        : reason.substring(0, Math.min(255, reason.length())))
+                .eq(RefundOrderPO::getRefundOrderNo, refundOrderNo)
+                .eq(RefundOrderPO::getBusinessCompleted, false));
+    }
+
     private RefundOrderPO toPO(RefundOrderEntity entity) {
         RefundOrderPO po = new RefundOrderPO();
         po.setId(entity.getId());
@@ -113,6 +187,9 @@ public class RefundOrderRepository implements IRefundOrderRepository {
         po.setRefundTime(entity.getRefundTime());
         po.setCreateTime(entity.getCreateTime());
         po.setUpdateTime(entity.getUpdateTime());
+        po.setBusinessCompleted(entity.getBusinessCompleted());
+        po.setRecoveryCount(entity.getRecoveryCount());
+        po.setNextRetryTime(entity.getNextRetryTime());
         return po;
     }
 
@@ -138,6 +215,9 @@ public class RefundOrderRepository implements IRefundOrderRepository {
         entity.setRefundTime(po.getRefundTime());
         entity.setCreateTime(po.getCreateTime());
         entity.setUpdateTime(po.getUpdateTime());
+        entity.setBusinessCompleted(po.getBusinessCompleted());
+        entity.setRecoveryCount(po.getRecoveryCount());
+        entity.setNextRetryTime(po.getNextRetryTime());
         return entity;
     }
 }

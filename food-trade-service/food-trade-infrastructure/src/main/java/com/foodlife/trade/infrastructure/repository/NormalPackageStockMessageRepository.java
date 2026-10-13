@@ -8,7 +8,10 @@ import com.foodlife.trade.domain.order.normal.constant.NormalPackageStockMessage
 import com.foodlife.trade.domain.order.normal.repository.INormalPackageStockMessageRepository;
 import com.foodlife.trade.infrastructure.dao.ITradeLocalMessageMapper;
 import com.foodlife.trade.infrastructure.dao.po.TradeLocalMessagePO;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -38,8 +41,12 @@ public class NormalPackageStockMessageRepository implements INormalPackageStockM
         po.setContent(content);
         po.setCreateTime(now);
         po.setUpdateTime(now);
-        tradeLocalMessageMapper.insert(po);
-        return toEntity(po);
+        try {
+            tradeLocalMessageMapper.insert(po);
+            return toEntity(po);
+        } catch (DuplicateKeyException e) {
+            return queryMessageByMessageId(po.getMessageId());
+        }
     }
 
     @Override
@@ -94,6 +101,7 @@ public class NormalPackageStockMessageRepository implements INormalPackageStockM
     }
 
     @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public boolean markMessageProcessing(Long messageId) {
         int updated = tradeLocalMessageMapper.update(null, new LambdaUpdateWrapper<TradeLocalMessagePO>()
                 .set(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.PROCESSING)
@@ -104,6 +112,7 @@ public class NormalPackageStockMessageRepository implements INormalPackageStockM
     }
 
     @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public boolean recoverProcessingMessage(Long messageId, LocalDateTime nextRetryTime) {
         int updated = tradeLocalMessageMapper.update(null, new LambdaUpdateWrapper<TradeLocalMessagePO>()
                 .setSql("retry_count = retry_count + 1")
@@ -117,6 +126,7 @@ public class NormalPackageStockMessageRepository implements INormalPackageStockM
     }
 
     @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public void markMessageSuccess(Long messageId) {
         tradeLocalMessageMapper.update(null, new LambdaUpdateWrapper<TradeLocalMessagePO>()
                 .set(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.SUCCESS)
@@ -126,6 +136,7 @@ public class NormalPackageStockMessageRepository implements INormalPackageStockM
     }
 
     @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public void markMessageRetry(Long messageId, String failReason, LocalDateTime nextRetryTime) {
         tradeLocalMessageMapper.update(null, new LambdaUpdateWrapper<TradeLocalMessagePO>()
                 .setSql("retry_count = retry_count + 1")
@@ -137,6 +148,7 @@ public class NormalPackageStockMessageRepository implements INormalPackageStockM
     }
 
     @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public void markMessageFailed(Long messageId, String failReason) {
         tradeLocalMessageMapper.update(null, new LambdaUpdateWrapper<TradeLocalMessagePO>()
                 .set(TradeLocalMessagePO::getMessageStatus, LocalMessageStatusConstants.FAILED)

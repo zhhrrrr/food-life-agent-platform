@@ -2,6 +2,8 @@ package com.foodlife.trade.trigger.http;
 
 import com.foodlife.auth.context.UserHolder;
 import com.foodlife.trade.api.dto.GroupBuyTeamDetailResponseDTO;
+import com.foodlife.trade.api.dto.GroupBuyActivityResponseDTO;
+import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyActivityEntity;
 import com.foodlife.trade.api.dto.GroupBuyTeamListResponseDTO;
 import com.foodlife.trade.api.dto.UserGroupBuyOrderListResponseDTO;
 import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyParticipantView;
@@ -38,6 +40,25 @@ public class GroupBuyQueryController {
         } catch (IllegalArgumentException e) {
             return Response.fail("400", e.getMessage());
         }
+    }
+
+    @GetMapping("/activities/package/{packageId}")
+    public Response<GroupBuyActivityResponseDTO> queryActivity(@PathVariable Long packageId) {
+        try {
+            GroupBuyActivityEntity activity = groupBuyQueryService.queryActivity(packageId);
+            GroupBuyActivityResponseDTO response = new GroupBuyActivityResponseDTO();
+            response.setActivityId(activity.getId());
+            response.setPackageId(activity.getPackageId());
+            response.setActivityName(activity.getActivityName());
+            response.setGroupPrice(activity.getGroupPrice());
+            response.setTargetCount(activity.getTargetCount());
+            response.setStock(activity.getStock());
+            response.setUserTakeLimit(activity.getUserTakeLimit());
+            response.setValidStartTime(activity.getValidStartTime());
+            response.setValidEndTime(activity.getValidEndTime());
+            response.setCanBuy(groupBuyQueryService.canBuy(activity, UserHolder.getUserId()));
+            return Response.success(response);
+        } catch (IllegalArgumentException e) { return Response.fail("404", e.getMessage()); }
     }
 
     @GetMapping("/teams/{teamId}")

@@ -33,6 +33,8 @@ import com.foodlife.trade.domain.order.seckill.model.SeckillStockPreheatResult;
 import com.foodlife.trade.domain.order.seckill.repository.ISeckillRepository;
 import com.foodlife.trade.domain.order.seckill.repository.ISeckillStockRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -60,19 +62,22 @@ public class SeckillOrderService {
     private final IBusinessPackagePort businessPackagePort;
     private final OrderFactory orderFactory;
     private final ITradeEventPublisher tradeEventPublisher;
+    private final TransactionTemplate transactionTemplate;
 
     public SeckillOrderService(ISeckillRepository seckillRepository,
                                ISeckillStockRepository seckillStockRepository,
                                IOrderRepository orderRepository,
                                IBusinessPackagePort businessPackagePort,
                                OrderFactory orderFactory,
-                               ITradeEventPublisher tradeEventPublisher) {
+                               ITradeEventPublisher tradeEventPublisher,
+                               TransactionTemplate transactionTemplate) {
         this.seckillRepository = seckillRepository;
         this.seckillStockRepository = seckillStockRepository;
         this.orderRepository = orderRepository;
         this.businessPackagePort = businessPackagePort;
         this.orderFactory = orderFactory;
         this.tradeEventPublisher = tradeEventPublisher;
+        this.transactionTemplate = transactionTemplate;
     }
 
     public List<SeckillActivityView> queryAvailableActivities(Long packageId, Integer limit) {
@@ -80,6 +85,22 @@ public class SeckillOrderService {
                 .stream()
                 .map(this::fillRedisStock)
                 .collect(Collectors.toList());
+    }
+
+    public SeckillActivityView queryActivity(Long activityId) {
+        if (activityId == null || activityId <= 0) throw new IllegalArgumentException("activityId required");
+        SeckillActivityEntity activity = seckillRepository.queryActivityById(activityId);
+        if (activity == null) throw new IllegalArgumentException("seckill activity not found");
+        SeckillActivityView view = new SeckillActivityView();
+        view.setActivityId(activity.getId()); view.setPackageId(activity.getPackageId()); view.setActivityName(activity.getActivityName());
+        view.setSeckillPrice(activity.getSeckillPrice()); view.setActivityStatus(activity.getActivityStatus());
+        view.setValidStartTime(activity.getValidStartTime()); view.setValidEndTime(activity.getValidEndTime());
+        view.setStock(activity.getStock()); view.setUserTakeLimit(activity.getUserTakeLimit());
+        LocalDateTime now = LocalDateTime.now();
+        view.setCanBuy(Integer.valueOf(1).equals(activity.getActivityStatus()) && activity.getStock() != null && activity.getStock() > 0
+            && activity.getValidStartTime() != null && !activity.getValidStartTime().isAfter(now)
+            && activity.getValidEndTime() != null && activity.getValidEndTime().isAfter(now));
+        return fillRedisStock(view);
     }
 
     public SeckillStockPreheatResult preheatActivityStock(Long activityId) {
@@ -94,7 +115,32 @@ public class SeckillOrderService {
         return seckillStockRepository.preheatActivityStock(activity, now);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public SeckillOrderResult createSeckillOrder(SeckillOrderCommand command) {
+        if (command != null && command.getRequestId() != null) {
+            com.foodlife.trade.domain.order.model.TradeRequestIdentity.validate(command.getUserId(), command.getRequestId());
+            String fingerprint = com.foodlife.trade.domain.order.model.TradeRequestIdentity.fingerprint(
+                    "SECKILL", command.getActivityId(), command.getQuantity(), command.getExpectedUnitPrice());
+            command.setRequestFingerprint(fingerprint);
+            DiningOrderEntity existing = orderRepository.findOrderByRequestIdAndUserId(command.getRequestId(), command.getUserId());
+            if (existing != null) {
+                if (!TradeTypeConstants.SECKILL.equals(existing.getTradeType())
+                        || !fingerprint.equals(existing.getRequestFingerprint())) {
+                    throw new IllegalArgumentException("requestId already used with different seckill parameters");
+                }
+                SeckillOrderResult replay = new SeckillOrderResult();
+                replay.setOrderId(existing.getId());
+                replay.setOrderNo(existing.getOrderNo());
+                replay.setOrderStatus(existing.getOrderStatus());
+                replay.setPayAmount(existing.getPayAmount());
+                replay.setActivityId(command.getActivityId());
+                return replay;
+            }
+            if (seckillRepository.querySeckillOrderRequest(
+                    com.foodlife.trade.domain.order.model.TradeRequestIdentity.seckillRequestNo(command.getUserId(), command.getRequestId())) != null) {
+                throw new IllegalArgumentException("requestId already used by asynchronous seckill order; query its result");
+            }
+        }
         boolean stockOccupied = false;
         SeckillActivityEntity activity = null;
         try {
@@ -123,7 +169,22 @@ public class SeckillOrderService {
         }
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public SeckillOrderRequestResult createSeckillOrderRequest(SeckillOrderCommand command) {
+        if (command != null && command.getRequestId() != null) {
+            com.foodlife.trade.domain.order.model.TradeRequestIdentity.validate(command.getUserId(), command.getRequestId());
+            String fingerprint = com.foodlife.trade.domain.order.model.TradeRequestIdentity.fingerprint("SECKILL", command.getActivityId(), command.getQuantity(), command.getExpectedUnitPrice());
+            command.setRequestFingerprint(fingerprint);
+            SeckillOrderRequestEntity existing = seckillRepository.querySeckillOrderRequest(
+                com.foodlife.trade.domain.order.model.TradeRequestIdentity.seckillRequestNo(command.getUserId(), command.getRequestId()));
+            if (existing != null) {
+                if (!fingerprint.equals(existing.getRequestFingerprint())) throw new IllegalArgumentException("requestId already used with different seckill parameters");
+                return toRequestResult(existing);
+            }
+            if (orderRepository.findOrderByRequestIdAndUserId(command.getRequestId(), command.getUserId()) != null) {
+                throw new IllegalArgumentException("requestId already used by another order");
+            }
+        }
         boolean stockOccupied = false;
         SeckillActivityEntity activity = null;
         try {
@@ -134,7 +195,8 @@ public class SeckillOrderService {
             SeckillStockOccupyResult stockOccupyResult = occupyActivityStock(activity, command.getUserId(), now);
             stockOccupied = true;
 
-            String requestNo = generateRequestNo(command.getUserId());
+            String requestNo = command.getRequestId() == null ? generateRequestNo(command.getUserId())
+                : com.foodlife.trade.domain.order.model.TradeRequestIdentity.seckillRequestNo(command.getUserId(), command.getRequestId());
             SeckillOrderRequestEntity request = buildOrderRequest(command, activity, requestNo, now);
             TradeLocalMessageEntity message = buildLocalMessage(request, now);
             seckillRepository.saveSeckillOrderRequestAndMessage(request, message);
@@ -207,7 +269,10 @@ public class SeckillOrderService {
             if (!seckillRepository.markLocalMessageProcessing(message.getId())) {
                 continue;
             }
-            processSingleOrderRequestMessage(message, result);
+            transactionTemplate.execute(status -> {
+                processSingleOrderRequestMessage(message, result);
+                return null;
+            });
         }
         return result;
     }
@@ -278,6 +343,9 @@ public class SeckillOrderService {
         SeckillActivityEntity activity = seckillRepository.queryActivityById(command.getActivityId());
         if (activity == null) {
             throw new IllegalArgumentException("seckill activity not found");
+        }
+        if (command.getExpectedUnitPrice() != null && !command.getExpectedUnitPrice().equals(activity.getSeckillPrice())) {
+            throw new IllegalArgumentException("seckill price changed; preview and confirm again");
         }
         if (activity.getActivityStatus() == null || activity.getActivityStatus() != 1) {
             throw new IllegalArgumentException("seckill activity disabled");
@@ -354,7 +422,7 @@ public class SeckillOrderService {
                 processResult.setFailedCount(processResult.getFailedCount() + 1);
                 return;
             }
-            seckillRepository.markSeckillOrderRequestFailed(request.getRequestNo(), failReason);
+            seckillRepository.markSeckillOrderRequestRetry(request.getRequestNo(), failReason);
             seckillRepository.markLocalMessageRetry(message.getId(), failReason, LocalDateTime.now().plusSeconds(30));
             processResult.setRetryCount(processResult.getRetryCount() + 1);
         }
@@ -375,6 +443,12 @@ public class SeckillOrderService {
         command.setUserId(request.getUserId());
         command.setActivityId(request.getActivityId());
         command.setQuantity(request.getQuantity());
+        command.setRequestId(request.getClientRequestId());
+        command.setRequestFingerprint(request.getRequestFingerprint());
+        command.setExpectedUnitPrice(request.getExpectedUnitPrice());
+        if (command.getExpectedUnitPrice() != null && !command.getExpectedUnitPrice().equals(activity.getSeckillPrice())) {
+            throw new IllegalArgumentException("confirmed seckill price changed before order creation");
+        }
 
         SeckillOrderAggregate aggregate = buildAggregate(command, activity, snapshot);
         return seckillRepository.saveSeckillOrder(aggregate, now);
@@ -463,6 +537,8 @@ public class SeckillOrderService {
         createOrderCommand.setUserId(command.getUserId());
         createOrderCommand.setPackageId(activity.getPackageId());
         createOrderCommand.setQuantity(command.getQuantity());
+        createOrderCommand.setRequestId(command.getRequestId());
+        createOrderCommand.setRequestFingerprint(command.getRequestFingerprint());
 
         DiningOrderEntity order = orderFactory.createOrder(TradeTypeConstants.SECKILL, createOrderCommand, snapshot, pricingResult);
         DiningOrderItemEntity orderItem = orderFactory.createOrderItem(order, snapshot, command.getQuantity());
@@ -489,6 +565,9 @@ public class SeckillOrderService {
                                                         LocalDateTime now) {
         SeckillOrderRequestEntity request = new SeckillOrderRequestEntity();
         request.setRequestNo(requestNo);
+        request.setClientRequestId(command.getRequestId());
+        request.setRequestFingerprint(command.getRequestFingerprint());
+        request.setExpectedUnitPrice(command.getExpectedUnitPrice());
         request.setUserId(command.getUserId());
         request.setActivityId(activity.getId());
         request.setPackageId(activity.getPackageId());

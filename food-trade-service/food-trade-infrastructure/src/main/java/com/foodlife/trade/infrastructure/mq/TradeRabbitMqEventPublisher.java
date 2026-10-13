@@ -17,6 +17,11 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.amqp.rabbit.connection.CorrelationData;
+import java.util.concurrent.TimeUnit;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -35,15 +40,18 @@ public class TradeRabbitMqEventPublisher implements ITradeEventPublisher {
     private final ITradeLocalMessageMapper tradeLocalMessageMapper;
     private final ObjectMapper objectMapper;
     private final RabbitTemplate rabbitTemplate;
+    private final TransactionTemplate committedMessageTransaction;
 
     public TradeRabbitMqEventPublisher(TradeRabbitMqProperties properties,
                                        ITradeLocalMessageMapper tradeLocalMessageMapper,
                                        ObjectMapper objectMapper,
-                                       RabbitTemplate rabbitTemplate) {
+                                       RabbitTemplate rabbitTemplate, PlatformTransactionManager transactionManager) {
         this.properties = properties;
         this.tradeLocalMessageMapper = tradeLocalMessageMapper;
         this.objectMapper = objectMapper;
         this.rabbitTemplate = rabbitTemplate;
+        this.committedMessageTransaction = new TransactionTemplate(transactionManager);
+        this.committedMessageTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Override
@@ -91,7 +99,7 @@ public class TradeRabbitMqEventPublisher implements ITradeEventPublisher {
     @Override
     public boolean republishMessage(String messageId) {
         TradeLocalMessagePO message = findByMessageId(messageId);
-        if (message == null) {
+        if (message == null || !BIZ_TYPE.equals(message.getBizType())) {
             return false;
         }
         if (LocalMessageStatusConstants.SUCCESS.equals(message.getMessageStatus())) {
@@ -111,7 +119,12 @@ public class TradeRabbitMqEventPublisher implements ITradeEventPublisher {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                publishStoredMessage(findByMessageId(messageId));
+                try {
+                    committedMessageTransaction.executeWithoutResult(status -> publishStoredMessage(findByMessageId(messageId)));
+                } catch (RuntimeException e) {
+                    // The business transaction has committed; the persisted INIT intent remains retryable.
+                    log.error("post-commit MQ delivery needs retry, messageId={}", messageId, e);
+                }
             }
         });
     }
@@ -143,7 +156,7 @@ public class TradeRabbitMqEventPublisher implements ITradeEventPublisher {
         }
     }
 
-    private void sendRabbitMessage(TradeLocalMessagePO message, JsonNode content) {
+    private void sendRabbitMessage(TradeLocalMessagePO message, JsonNode content) throws Exception {
         String exchange = content.get("topic").asText();
         String routingKey = content.get("tag").asText();
         long delayMillis = content.hasNonNull("delayMillis") ? content.get("delayMillis").asLong(0L) : 0L;
@@ -161,8 +174,13 @@ public class TradeRabbitMqEventPublisher implements ITradeEventPublisher {
         if (delayMillis > 0) {
             messageProperties.setExpiration(String.valueOf(delayMillis));
         }
+        CorrelationData correlation = new CorrelationData(message.getMessageId());
         rabbitTemplate.send(exchange, routingKey,
-                new Message(message.getContent().getBytes(StandardCharsets.UTF_8), messageProperties));
+                new Message(message.getContent().getBytes(StandardCharsets.UTF_8), messageProperties), correlation);
+        CorrelationData.Confirm confirm = correlation.getFuture().get(5, TimeUnit.SECONDS);
+        if (!confirm.isAck() || correlation.getReturned() != null) {
+            throw new IllegalStateException("RabbitMQ did not confirm routed delivery");
+        }
     }
 
     private TradeLocalMessagePO saveInitMessage(String messageId, String topic, String tag, String key, Object payload, Long delayMillis) {

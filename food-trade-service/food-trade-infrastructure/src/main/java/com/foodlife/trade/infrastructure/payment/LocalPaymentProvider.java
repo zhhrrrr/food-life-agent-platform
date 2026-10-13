@@ -21,6 +21,8 @@ import java.util.Locale;
 public class LocalPaymentProvider implements IPaymentProvider {
 
     private final String callbackSecret;
+    @Value("${food.payment.local.enabled:true}")
+    private boolean enabled = true;
 
     public LocalPaymentProvider(@Value("${food.payment.local.callback-secret:local-payment-secret}") String callbackSecret) {
         this.callbackSecret = callbackSecret;
@@ -36,6 +38,7 @@ public class LocalPaymentProvider implements IPaymentProvider {
         if (command == null || command.getOrderId() == null || command.getUserId() == null) {
             throw new IllegalArgumentException("payment prepare command invalid");
         }
+        if (!enabled) { throw new IllegalArgumentException("local payment is disabled"); }
     }
 
     @Override

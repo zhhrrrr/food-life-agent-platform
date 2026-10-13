@@ -14,4 +14,6 @@ public class PaymentCallbackCommand implements Serializable {
     private LocalDateTime payTime;
     private String signType;
     private String signature;
+    private String channel;
+    private java.util.Map<String, String> providerParameters;
 }

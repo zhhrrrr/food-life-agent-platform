@@ -18,6 +18,7 @@ import com.foodlife.trade.domain.order.seckill.repository.ISeckillRepository;
 import com.foodlife.trade.domain.order.settlement.factory.OrderSettlementRuleFilterFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderPaySettlementService {
@@ -44,6 +45,7 @@ public class OrderPaySettlementService {
         this.orderPaySettlementRuleFilter = orderPaySettlementRuleFilter;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public OrderPaySettlementEntity settlementOrderPaySuccess(OrderPaySuccessEntity orderPaySuccessEntity) {
         try {
             OrderSettlementRuleFilterBackEntity filterBackEntity = orderPaySettlementRuleFilter.apply(
@@ -67,6 +69,9 @@ public class OrderPaySettlementService {
                 return settlementEntity;
             }
 
+            if (!TradeTypeConstants.NORMAL.equals(order.getTradeType())) {
+                throw new IllegalArgumentException("unsupported trade type");
+            }
             boolean success = orderRepository.updateOrderStatus(order.getId(), OrderStatusConstants.WAIT_PAY, OrderStatusConstants.PAID);
             if (!success) {
                 throw new IllegalArgumentException("order status can not pay");

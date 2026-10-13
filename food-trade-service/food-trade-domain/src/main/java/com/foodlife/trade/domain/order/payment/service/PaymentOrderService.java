@@ -16,7 +16,9 @@ import com.foodlife.trade.domain.order.payment.provider.PaymentProviderRouter;
 import com.foodlife.trade.domain.order.payment.repository.IPaymentOrderRepository;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import com.foodlife.trade.domain.order.service.settlement.OrderPaySettlementService;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -42,6 +44,7 @@ public class PaymentOrderService {
         this.paymentProviderRouter = paymentProviderRouter;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public PaymentOrderEntity preparePayment(PaymentPrepareCommand command) {
         validatePrepareCommand(command);
         DiningOrderEntity order = orderRepository.findOrderByIdAndUserId(command.getOrderId(), command.getUserId());
@@ -52,14 +55,19 @@ public class PaymentOrderService {
             throw new IllegalArgumentException("order status can not pay");
         }
 
-        PaymentOrderEntity existed = paymentOrderRepository.findByOrderIdAndUserId(command.getOrderId(), command.getUserId());
-        if (existed != null) {
-            return existed;
-        }
-
         String channel = paymentProviderRouter.normalize(readOrDefault(command.getChannel(), PaymentChannelConstants.LOCAL_PAY));
         command.setChannel(channel);
         paymentProviderRouter.route(channel).validatePrepare(command);
+        PaymentOrderEntity existed = paymentOrderRepository.findByOrderIdAndUserId(command.getOrderId(), command.getUserId());
+        if (existed != null) {
+            if (!channel.equals(existed.getChannel())) {
+                throw new IllegalArgumentException("existing payment uses another channel; create a new order");
+            }
+            if (!PaymentOrderStatusConstants.PREPARED.equals(existed.getPayStatus())) {
+                throw new IllegalArgumentException("payment order is no longer payable");
+            }
+            return existed;
+        }
 
         LocalDateTime now = LocalDateTime.now();
         PaymentOrderEntity paymentOrder = new PaymentOrderEntity();
@@ -73,7 +81,20 @@ public class PaymentOrderService {
         paymentOrder.setPayStatus(PaymentOrderStatusConstants.PREPARED);
         paymentOrder.setCreateTime(now);
         paymentOrder.setUpdateTime(now);
-        PaymentOrderEntity savedPaymentOrder = paymentOrderRepository.save(paymentOrder);
+        PaymentOrderEntity savedPaymentOrder;
+        try {
+            savedPaymentOrder = paymentOrderRepository.save(paymentOrder);
+        } catch (DuplicateKeyException e) {
+            PaymentOrderEntity concurrentCreated = paymentOrderRepository.findByOrderIdAndUserId(command.getOrderId(), command.getUserId());
+            if (concurrentCreated != null) {
+                if (!channel.equals(concurrentCreated.getChannel())
+                        || !PaymentOrderStatusConstants.PREPARED.equals(concurrentCreated.getPayStatus())) {
+                    throw new IllegalArgumentException("concurrent payment is no longer payable with this channel");
+                }
+                return concurrentCreated;
+            }
+            throw e;
+        }
         tradeEventPublisher.publish(TradeMqTopics.PAYMENT_TOPIC,
                 TradeMqTopics.PAYMENT_CREATED,
                 savedPaymentOrder.getPayOrderNo(),
@@ -81,6 +102,7 @@ public class PaymentOrderService {
         return savedPaymentOrder;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public PaymentCallbackResult handlePaySuccessCallback(PaymentCallbackCommand command) {
         validateCallbackCommand(command);
         PaymentOrderEntity paymentOrder = paymentOrderRepository.findByPayOrderNo(command.getPayOrderNo());
@@ -88,6 +110,14 @@ public class PaymentOrderService {
             throw new IllegalArgumentException("payment order not found");
         }
         paymentProviderRouter.route(paymentOrder.getChannel()).verifyPaySuccessCallback(command, paymentOrder);
+
+        if (PaymentOrderStatusConstants.REFUNDED.equals(paymentOrder.getPayStatus())) {
+            PaymentCallbackResult result = new PaymentCallbackResult();
+            result.setPaymentOrder(paymentOrder);
+            result.setCallbackBehavior("repeat");
+            result.setSettlement(buildRepeatedSettlement(paymentOrder));
+            return result;
+        }
 
         if (PaymentOrderStatusConstants.SUCCESS.equals(paymentOrder.getPayStatus())) {
             PaymentCallbackResult result = new PaymentCallbackResult();
@@ -176,7 +206,9 @@ public class PaymentOrderService {
         settlementEntity.setUserId(paymentOrder.getUserId());
         settlementEntity.setOrderId(paymentOrder.getOrderId());
         settlementEntity.setOrderNo(paymentOrder.getOrderNo());
-        settlementEntity.setOrderStatus(OrderStatusConstants.PAID);
+        DiningOrderEntity order = orderRepository.findOrderByIdAndUserId(paymentOrder.getOrderId(), paymentOrder.getUserId());
+        if (order == null) { throw new IllegalStateException("payment business order missing"); }
+        settlementEntity.setOrderStatus(order.getOrderStatus());
         settlementEntity.setOutTradeNo(paymentOrder.getOutTradeNo());
         settlementEntity.setOutTradeTime(paymentOrder.getPayTime());
         return settlementEntity;

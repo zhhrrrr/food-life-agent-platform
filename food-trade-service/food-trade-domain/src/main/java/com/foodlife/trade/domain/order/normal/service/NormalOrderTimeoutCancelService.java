@@ -9,6 +9,7 @@ import com.foodlife.trade.domain.order.normal.model.NormalOrderTimeoutCancelDeta
 import com.foodlife.trade.domain.order.normal.model.NormalOrderTimeoutCancelResult;
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -26,15 +27,21 @@ public class NormalOrderTimeoutCancelService {
     private final NormalPackageStockMessageService normalPackageStockMessageService;
     private final CouponService couponService;
     private final ITradeEventPublisher tradeEventPublisher;
+    private final TransactionTemplate transactionTemplate;
+    private final com.foodlife.trade.domain.order.payment.service.PaymentCancellationService paymentCancellationService;
 
     public NormalOrderTimeoutCancelService(IOrderRepository orderRepository,
                                            NormalPackageStockMessageService normalPackageStockMessageService,
                                            CouponService couponService,
-                                           ITradeEventPublisher tradeEventPublisher) {
+                                           ITradeEventPublisher tradeEventPublisher,
+                                           TransactionTemplate transactionTemplate,
+                                           com.foodlife.trade.domain.order.payment.service.PaymentCancellationService paymentCancellationService) {
         this.orderRepository = orderRepository;
         this.normalPackageStockMessageService = normalPackageStockMessageService;
         this.couponService = couponService;
         this.tradeEventPublisher = tradeEventPublisher;
+        this.transactionTemplate = transactionTemplate;
+        this.paymentCancellationService = paymentCancellationService;
     }
 
     public NormalOrderTimeoutCancelResult cancelTimeoutOrders(Integer timeoutMinutes, Integer limit) {
@@ -55,7 +62,17 @@ public class NormalOrderTimeoutCancelService {
         result.setFailedOrderCount(0);
 
         for (DiningOrderEntity order : timeoutOrders) {
-            NormalOrderTimeoutCancelDetail detail = cancelSingleOrder(order);
+            NormalOrderTimeoutCancelDetail detail = transactionTemplate.execute(status -> {
+                NormalOrderTimeoutCancelDetail singleDetail = cancelSingleOrder(order);
+                if (singleDetail.getFailReason() != null && Boolean.TRUE.equals(singleDetail.getCanceled())) {
+                    status.setRollbackOnly();
+                    singleDetail.setCanceled(false);
+                    singleDetail.setAfterOrderStatus(singleDetail.getBeforeOrderStatus());
+                    singleDetail.setCouponReleased(order.getUserCouponId() == null);
+                    singleDetail.setReleaseStockMessageSent(false);
+                }
+                return singleDetail;
+            });
             result.getDetails().add(detail);
             if (Boolean.TRUE.equals(detail.getCanceled())) {
                 result.setCanceledOrderCount(result.getCanceledOrderCount() + 1);
@@ -74,6 +91,7 @@ public class NormalOrderTimeoutCancelService {
     private NormalOrderTimeoutCancelDetail cancelSingleOrder(DiningOrderEntity order) {
         NormalOrderTimeoutCancelDetail detail = buildDetail(order);
         try {
+            paymentCancellationService.closeBeforeCancellation(order.getId(), order.getUserId());
             boolean success = orderRepository.updateOrderStatus(order.getId(), OrderStatusConstants.WAIT_PAY, OrderStatusConstants.CANCELED);
             detail.setCanceled(success);
             if (!success) {

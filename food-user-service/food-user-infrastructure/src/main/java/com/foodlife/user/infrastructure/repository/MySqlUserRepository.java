@@ -6,6 +6,7 @@ import com.foodlife.user.domain.user.repository.IUserRepository;
 import com.foodlife.user.infrastructure.dao.IUserMapper;
 import com.foodlife.user.infrastructure.dao.po.UserPO;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -44,9 +45,17 @@ public class MySqlUserRepository implements IUserRepository {
     @Override
     public UserEntity save(UserEntity user) {
         UserPO userPO = toPO(user);
-        userMapper.insert(userPO);
-        user.setId(userPO.getId());
-        return user;
+        try {
+            userMapper.insert(userPO);
+            user.setId(userPO.getId());
+            return user;
+        } catch (DuplicateKeyException e) {
+            UserEntity existing = findByPhone(user.getPhone());
+            if (existing != null) {
+                return existing;
+            }
+            throw e;
+        }
     }
 
     private UserEntity toEntity(UserPO userPO) {

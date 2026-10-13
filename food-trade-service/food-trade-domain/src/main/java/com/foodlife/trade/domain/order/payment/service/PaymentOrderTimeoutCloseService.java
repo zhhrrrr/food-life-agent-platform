@@ -13,6 +13,7 @@ import com.foodlife.trade.domain.order.payment.repository.IPaymentOrderRepositor
 import com.foodlife.trade.domain.order.repository.IOrderRepository;
 import com.foodlife.trade.domain.order.service.OrderDomainService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -28,15 +29,21 @@ public class PaymentOrderTimeoutCloseService {
     private final IOrderRepository orderRepository;
     private final OrderDomainService orderDomainService;
     private final ITradeEventPublisher tradeEventPublisher;
+    private final TransactionTemplate transactionTemplate;
+    private final com.foodlife.trade.domain.order.payment.provider.PaymentProviderRouter providers;
 
     public PaymentOrderTimeoutCloseService(IPaymentOrderRepository paymentOrderRepository,
                                            IOrderRepository orderRepository,
                                            OrderDomainService orderDomainService,
-                                           ITradeEventPublisher tradeEventPublisher) {
+                                           ITradeEventPublisher tradeEventPublisher,
+                                           TransactionTemplate transactionTemplate,
+                                           com.foodlife.trade.domain.order.payment.provider.PaymentProviderRouter providers) {
         this.paymentOrderRepository = paymentOrderRepository;
         this.orderRepository = orderRepository;
         this.orderDomainService = orderDomainService;
         this.tradeEventPublisher = tradeEventPublisher;
+        this.transactionTemplate = transactionTemplate;
+        this.providers = providers;
     }
 
     public PaymentOrderTimeoutCloseResult closeTimeoutPreparedPaymentOrders(Integer timeoutMinutes, Integer limit) {
@@ -56,7 +63,17 @@ public class PaymentOrderTimeoutCloseService {
         result.setFailedPaymentCount(0);
 
         for (PaymentOrderEntity paymentOrder : paymentOrders) {
-            PaymentOrderTimeoutCloseDetail detail = closeOnePaymentOrder(paymentOrder);
+            PaymentOrderTimeoutCloseDetail detail = transactionTemplate.execute(status -> {
+                PaymentOrderTimeoutCloseDetail singleDetail = closeOnePaymentOrder(paymentOrder);
+                if (singleDetail.getFailReason() != null && Boolean.TRUE.equals(singleDetail.getPaymentClosed())) {
+                    status.setRollbackOnly();
+                    singleDetail.setPaymentClosed(false);
+                    singleDetail.setOrderCanceled(false);
+                    singleDetail.setAfterPayStatus(singleDetail.getBeforePayStatus());
+                    singleDetail.setAfterOrderStatus(singleDetail.getBeforeOrderStatus());
+                }
+                return singleDetail;
+            });
             result.getDetails().add(detail);
             if (Boolean.TRUE.equals(detail.getPaymentClosed())) {
                 result.setClosedPaymentCount(result.getClosedPaymentCount() + 1);
@@ -80,6 +97,7 @@ public class PaymentOrderTimeoutCloseService {
                 detail.setAfterOrderStatus(order.getOrderStatus());
             }
 
+            providers.route(paymentOrder.getChannel()).closePayment(paymentOrder);
             boolean closed = paymentOrderRepository.markPayClosed(paymentOrder.getPayOrderNo(), PaymentOrderStatusConstants.PREPARED);
             detail.setPaymentClosed(closed);
             detail.setAfterPayStatus(closed ? PaymentOrderStatusConstants.CLOSED : paymentOrder.getPayStatus());

@@ -30,6 +30,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.beans.factory.annotation.Value;
+import com.foodlife.trade.domain.order.payment.provider.PaymentProviderRouter;
+import com.foodlife.trade.domain.order.payment.service.ExternalPaymentService;
 
 import java.util.stream.Collectors;
 
@@ -40,13 +43,23 @@ public class PaymentController {
     private final PaymentOrderService paymentOrderService;
     private final PaymentOrderTimeoutCloseService paymentOrderTimeoutCloseService;
     private final OperationAuditApplicationService operationAuditApplicationService;
+    private final PaymentProviderRouter providers;
+    private final ExternalPaymentService externalPayments;
+    @Value("${food.payment.default-channel:LOCAL_PAY}")
+    private String defaultChannel;
+    @Value("${food.payment.local.enabled:true}")
+    private boolean localEnabled;
 
     public PaymentController(PaymentOrderService paymentOrderService,
                              PaymentOrderTimeoutCloseService paymentOrderTimeoutCloseService,
-                             OperationAuditApplicationService operationAuditApplicationService) {
+                             OperationAuditApplicationService operationAuditApplicationService,
+                             PaymentProviderRouter providers,
+                             ExternalPaymentService externalPayments) {
         this.paymentOrderService = paymentOrderService;
         this.paymentOrderTimeoutCloseService = paymentOrderTimeoutCloseService;
         this.operationAuditApplicationService = operationAuditApplicationService;
+        this.providers = providers;
+        this.externalPayments = externalPayments;
     }
 
     @PostMapping("/orders/{orderId}/prepare")
@@ -54,14 +67,19 @@ public class PaymentController {
                                                             @RequestBody(required = false) PaymentPrepareRequestDTO request) {
         PaymentOrderEntity result = paymentOrderService.preparePayment(toPrepareCommand(orderId, request));
         PaymentOrderResponseDTO response = toPaymentOrderResponse(result);
+        response.setPaymentForm(providers.route(result.getChannel()).buildPaymentForm(result));
+        if (response.getPaymentForm() == null) {
+            response.setPaymentUrl(providers.route(result.getChannel()).buildPaymentUrl(result));
+        }
         operationAuditApplicationService.recordSuccess("PAYMENT_PREPARE", "ORDER", String.valueOf(orderId),
-                request, response, "prepare local payment order");
+                request, null, "prepare payment order");
         return Response.success(response);
     }
 
     @PostMapping({"/callback/local", "/callback/mock"})
     @SentinelResource(value = TradeSentinelResources.PAYMENT_CALLBACK, blockHandler = "localPaySuccessCallbackBlock")
     public Response<PaymentCallbackResponseDTO> localPaySuccessCallback(@RequestBody PaymentCallbackRequestDTO request) {
+        if (!localEnabled) { throw new IllegalArgumentException("local payment is disabled"); }
         PaymentCallbackResult result = paymentOrderService.handlePaySuccessCallback(toCallbackCommand(request));
         PaymentCallbackResponseDTO response = toCallbackResponse(result);
         operationAuditApplicationService.recordSuccess("PAYMENT_CALLBACK_LOCAL", "PAYMENT_ORDER",
@@ -75,6 +93,16 @@ public class PaymentController {
 
     @GetMapping("/orders/{payOrderNo}")
     public Response<PaymentOrderResponseDTO> queryPaymentOrder(@PathVariable String payOrderNo) {
+        return Response.success(toPaymentOrderResponse(externalPayments.syncPayment(payOrderNo, UserHolder.getUserId())));
+    }
+
+    @PostMapping("/orders/{payOrderNo}/sync")
+    public Response<PaymentOrderResponseDTO> syncPayment(@PathVariable String payOrderNo) {
+        PaymentOrderEntity payment = externalPayments.syncPayment(payOrderNo, UserHolder.getUserId());
+        if ("PREPARED".equals(payment.getPayStatus()) || "CLOSED".equals(payment.getPayStatus())) {
+            PaymentCallbackCommand paid = externalPayments.queryPaidPayment(payment);
+            if (paid != null) { externalPayments.acceptPaidPayment(paid); }
+        }
         return Response.success(toPaymentOrderResponse(paymentOrderService.queryPaymentOrder(payOrderNo)));
     }
 
@@ -90,7 +118,7 @@ public class PaymentController {
         command.setUserId(UserHolder.getUserId());
         command.setOrderId(orderId);
         command.setSource(readOrDefault(request == null ? null : request.getSource(), "FOOD_LIFE"));
-        command.setChannel(readOrDefault(request == null ? null : request.getChannel(), PaymentChannelConstants.LOCAL_PAY));
+        command.setChannel(readOrDefault(request == null ? null : request.getChannel(), defaultChannel));
         return command;
     }
 
@@ -102,6 +130,7 @@ public class PaymentController {
         command.setPayTime(request == null ? null : request.getPayTime());
         command.setSignType(readOrDefault(request == null ? null : request.getSignType(), "SHA256"));
         command.setSignature(request == null ? null : request.getSignature());
+        command.setChannel(PaymentChannelConstants.LOCAL_PAY);
         return command;
     }
 

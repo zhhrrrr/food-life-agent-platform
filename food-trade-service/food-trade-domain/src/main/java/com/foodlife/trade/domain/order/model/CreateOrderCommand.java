@@ -11,4 +11,7 @@ public class CreateOrderCommand implements Serializable {
     private Long packageId;
     private Integer quantity;
     private Long userCouponId;
+    private String requestId;
+    private String requestFingerprint;
+    private Long expectedUnitPrice;
 }

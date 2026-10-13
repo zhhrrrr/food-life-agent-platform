@@ -49,8 +49,8 @@ public class AuthAutoConfiguration implements WebMvcConfigurer {
         }
 
         registry.addInterceptor(new LoginInterceptor(buildLoginExcludePaths()))
-                .addPathPatterns(authProperties.getIncludePaths())
-                .excludePathPatterns(buildLoginExcludePaths())
+                .addPathPatterns(authProperties.getIncludePaths()) // 哪些请求需要经过这个拦截器
+                .excludePathPatterns(buildLoginExcludePaths()) // 哪些请求即使匹配，也跳过这个拦截器
                 .order(2);
 
         if (authProperties.getRoleAccess() != null

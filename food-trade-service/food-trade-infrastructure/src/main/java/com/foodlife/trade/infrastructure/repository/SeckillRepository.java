@@ -275,6 +275,16 @@ public class SeckillRepository implements ISeckillRepository {
     }
 
     @Override
+    public void markSeckillOrderRequestRetry(String requestNo, String failReason) {
+        seckillOrderRequestMapper.update(null, new LambdaUpdateWrapper<SeckillOrderRequestPO>()
+            .set(SeckillOrderRequestPO::getRequestStatus, SeckillRequestStatusConstants.INIT)
+            .set(SeckillOrderRequestPO::getFailReason, limitText(failReason, 512))
+            .set(SeckillOrderRequestPO::getUpdateTime, LocalDateTime.now())
+            .eq(SeckillOrderRequestPO::getRequestNo, requestNo)
+            .eq(SeckillOrderRequestPO::getRequestStatus, SeckillRequestStatusConstants.PROCESSING));
+    }
+
+    @Override
     public boolean cancelTimeoutSeckillOrderRequest(String requestNo, String failReason) {
         int updated = seckillOrderRequestMapper.update(null, new LambdaUpdateWrapper<SeckillOrderRequestPO>()
                 .set(SeckillOrderRequestPO::getRequestStatus, SeckillRequestStatusConstants.FAILED)
@@ -487,6 +497,9 @@ public class SeckillRepository implements ISeckillRepository {
         SeckillOrderRequestPO po = new SeckillOrderRequestPO();
         po.setId(entity.getId());
         po.setRequestNo(entity.getRequestNo());
+        po.setClientRequestId(entity.getClientRequestId());
+        po.setRequestFingerprint(entity.getRequestFingerprint());
+        po.setExpectedUnitPrice(entity.getExpectedUnitPrice());
         po.setUserId(entity.getUserId());
         po.setActivityId(entity.getActivityId());
         po.setPackageId(entity.getPackageId());
@@ -507,6 +520,9 @@ public class SeckillRepository implements ISeckillRepository {
         SeckillOrderRequestEntity entity = new SeckillOrderRequestEntity();
         entity.setId(po.getId());
         entity.setRequestNo(po.getRequestNo());
+        entity.setClientRequestId(po.getClientRequestId());
+        entity.setRequestFingerprint(po.getRequestFingerprint());
+        entity.setExpectedUnitPrice(po.getExpectedUnitPrice());
         entity.setUserId(po.getUserId());
         entity.setActivityId(po.getActivityId());
         entity.setPackageId(po.getPackageId());
@@ -568,6 +584,8 @@ public class SeckillRepository implements ISeckillRepository {
         po.setId(entity.getId());
         po.setOrderNo(entity.getOrderNo());
         po.setUserId(entity.getUserId());
+        po.setRequestId(entity.getRequestId());
+        po.setRequestFingerprint(entity.getRequestFingerprint());
         po.setShopId(entity.getShopId());
         po.setPackageId(entity.getPackageId());
         po.setQuantity(entity.getQuantity());

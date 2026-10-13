@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Repository
@@ -73,10 +74,6 @@ public class PackageRepository implements IPackageRepository {
 
     @Override
     public PackageTradeSnapshotEntity queryTradeSnapshot(Long packageId) {
-        PackageTradeSnapshotEntity cached = cacheSupport.getObject(cacheSupport.packageTradeSnapshotKey(packageId), PackageTradeSnapshotEntity.class);
-        if (cached != null) {
-            return cached;
-        }
         MealPackagePO packagePO = mealPackageMapper.selectById(packageId);
         if (packagePO == null) {
             return null;
@@ -85,6 +82,30 @@ public class PackageRepository implements IPackageRepository {
         if (shopPO == null) {
             return null;
         }
+        return toTradeSnapshot(packagePO, shopPO);
+    }
+
+    @Override
+    public List<PackageTradeSnapshotEntity> queryTradeSnapshots(List<Long> packageIds) {
+        if (packageIds.isEmpty()) {
+            return List.of();
+        }
+        // Read current business facts in two queries, without snapshot cache or N+1 calls.
+        List<MealPackagePO> packages = mealPackageMapper.selectList(new LambdaQueryWrapper<MealPackagePO>()
+                .in(MealPackagePO::getId, packageIds));
+        if (packages.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, ShopPO> shops = shopMapper.selectList(new LambdaQueryWrapper<ShopPO>()
+                        .in(ShopPO::getId, packages.stream().map(MealPackagePO::getShopId).distinct().collect(Collectors.toList())))
+                .stream().collect(Collectors.toMap(ShopPO::getId, shop -> shop));
+        Map<Long, MealPackagePO> byId = packages.stream().collect(Collectors.toMap(MealPackagePO::getId, item -> item));
+        return packageIds.stream().distinct().filter(byId::containsKey)
+                .map(byId::get).filter(item -> shops.containsKey(item.getShopId()))
+                .map(item -> toTradeSnapshot(item, shops.get(item.getShopId()))).collect(Collectors.toList());
+    }
+
+    private PackageTradeSnapshotEntity toTradeSnapshot(MealPackagePO packagePO, ShopPO shopPO) {
         PackageTradeSnapshotEntity snapshot = new PackageTradeSnapshotEntity();
         snapshot.setShopId(shopPO.getId());
         snapshot.setShopName(shopPO.getName());
@@ -95,9 +116,10 @@ public class PackageRepository implements IPackageRepository {
         snapshot.setPrice(packagePO.getPrice());
         snapshot.setOriginalPrice(packagePO.getOriginalPrice());
         snapshot.setStock(packagePO.getStock());
+        snapshot.setSold(packagePO.getSold());
+        snapshot.setShopSold(shopPO.getSold());
         snapshot.setPackageStatus(packagePO.getStatus());
         snapshot.setUseRule(packagePO.getUseRule());
-        cacheSupport.putTradeSnapshot(packageId, snapshot);
         return snapshot;
     }
 

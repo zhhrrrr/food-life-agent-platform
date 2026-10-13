@@ -1,5 +1,6 @@
 package com.foodlife.trade.trigger.job;
 
+import com.foodlife.job.lock.ScheduledJobLockExecutor;
 import com.foodlife.trade.domain.order.seckill.model.SeckillOrderRequestProcessResult;
 import com.foodlife.trade.domain.order.service.OrderDomainService;
 import org.slf4j.Logger;
@@ -13,15 +14,23 @@ import org.springframework.stereotype.Component;
 public class SeckillOrderRequestProcessJob {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SeckillOrderRequestProcessJob.class);
+    private static final String LOCK_KEY = "trade:seckill-order-request-process";
 
     private final OrderDomainService orderDomainService;
+    private final ScheduledJobLockExecutor jobLockExecutor;
 
-    public SeckillOrderRequestProcessJob(OrderDomainService orderDomainService) {
+    public SeckillOrderRequestProcessJob(OrderDomainService orderDomainService,
+                                         ScheduledJobLockExecutor jobLockExecutor) {
         this.orderDomainService = orderDomainService;
+        this.jobLockExecutor = jobLockExecutor;
     }
 
     @Scheduled(fixedDelayString = "${food.trade.seckill.order-request-process.fixed-delay-ms:30000}")
     public void processPendingRequests() {
+        jobLockExecutor.execute(LOCK_KEY, this::doProcessPendingRequests);
+    }
+
+    private void doProcessPendingRequests() {
         SeckillOrderRequestProcessResult result = orderDomainService.processPendingSeckillOrderRequests(null);
         if (result.getScannedCount() > 0) {
             LOGGER.info("seckill order request process completed, scannedCount={}, successCount={}, failedCount={}, retryCount={}",

@@ -47,11 +47,11 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
 
         String redisKey = gatewayAuthProperties.getTokenPrefix() + token;
         return redisTemplate.opsForHash().entries(redisKey)
-                .collectMap(entry -> String.valueOf(entry.getKey()), entry -> String.valueOf(entry.getValue()))
-                .flatMap(userMap -> userMap.isEmpty()
+                .collectMap(entry -> String.valueOf(entry.getKey()), entry -> String.valueOf(entry.getValue())) // FLux聚合为Mono
+                .onErrorReturn(java.util.Collections.emptyMap())
+                .flatMap(userMap -> userMap.isEmpty() //flatMap 用于拿到异步结果中的数据，根据这个数据继续执行另一个异步操作，并把新的异步结果展开连接起来。
                         ? unauthorized(sanitizedExchange)
-                        : chain.filter(mutatedExchangeWithUser(sanitizedExchange, token, userMap)))
-                .onErrorResume(e -> unauthorized(sanitizedExchange));
+                        : chain.filter(mutatedExchangeWithUser(sanitizedExchange, token, userMap)));
     }
 
     @Override

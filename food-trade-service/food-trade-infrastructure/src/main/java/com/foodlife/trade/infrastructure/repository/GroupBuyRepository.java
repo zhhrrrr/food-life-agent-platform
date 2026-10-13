@@ -16,6 +16,9 @@ import com.foodlife.trade.domain.order.groupbuy.model.GroupBuyUserOrderView;
 import com.foodlife.trade.domain.order.groupbuy.repository.IGroupBuyRepository;
 import com.foodlife.trade.domain.order.model.DiningOrderEntity;
 import com.foodlife.trade.domain.order.model.DiningOrderItemEntity;
+import com.foodlife.trade.domain.order.payment.repository.IPaymentOrderRepository;
+import com.foodlife.trade.domain.order.payment.service.PaymentRefundService;
+import com.foodlife.trade.domain.order.payment.service.PaymentCancellationService;
 import com.foodlife.trade.infrastructure.dao.IDiningOrderItemMapper;
 import com.foodlife.trade.infrastructure.dao.IDiningOrderMapper;
 import com.foodlife.trade.infrastructure.dao.IGroupBuyActivityMapper;
@@ -42,17 +45,26 @@ public class GroupBuyRepository implements IGroupBuyRepository {
     private final IGroupBuyOrderListMapper groupBuyOrderListMapper;
     private final IDiningOrderMapper diningOrderMapper;
     private final IDiningOrderItemMapper diningOrderItemMapper;
+    private final IPaymentOrderRepository paymentOrderRepository;
+    private final PaymentRefundService paymentRefundService;
+    private final PaymentCancellationService paymentCancellationService;
 
     public GroupBuyRepository(IGroupBuyActivityMapper groupBuyActivityMapper,
                               IGroupBuyTeamMapper groupBuyTeamMapper,
                               IGroupBuyOrderListMapper groupBuyOrderListMapper,
                               IDiningOrderMapper diningOrderMapper,
-                              IDiningOrderItemMapper diningOrderItemMapper) {
+                              IDiningOrderItemMapper diningOrderItemMapper,
+                              IPaymentOrderRepository paymentOrderRepository,
+                              PaymentRefundService paymentRefundService,
+                              PaymentCancellationService paymentCancellationService) {
         this.groupBuyActivityMapper = groupBuyActivityMapper;
         this.groupBuyTeamMapper = groupBuyTeamMapper;
         this.groupBuyOrderListMapper = groupBuyOrderListMapper;
         this.diningOrderMapper = diningOrderMapper;
         this.diningOrderItemMapper = diningOrderItemMapper;
+        this.paymentOrderRepository = paymentOrderRepository;
+        this.paymentRefundService = paymentRefundService;
+        this.paymentCancellationService = paymentCancellationService;
     }
 
     @Override
@@ -371,6 +383,7 @@ public class GroupBuyRepository implements IGroupBuyRepository {
     }
 
     private void cancelTimeoutLockedOrder(GroupBuyOrderListPO orderListPO) {
+        paymentCancellationService.closeBeforeCancellation(orderListPO.getOrderId(), orderListPO.getUserId());
         int orderUpdated = diningOrderMapper.update(null, new LambdaUpdateWrapper<DiningOrderPO>()
                 .set(DiningOrderPO::getOrderStatus, OrderStatusConstants.CANCELED)
                 .set(DiningOrderPO::getUpdateTime, LocalDateTime.now())
@@ -392,6 +405,9 @@ public class GroupBuyRepository implements IGroupBuyRepository {
     }
 
     private void refundTimeoutPaidOrder(GroupBuyOrderListPO orderListPO) {
+        paymentRefundService.refundPaidPayment(
+                paymentOrderRepository.findByOrderIdAndUserId(orderListPO.getOrderId(), orderListPO.getUserId()),
+                "GROUP_BUY_TIMEOUT", "拼团超时未成团，原路退款");
         int orderUpdated = diningOrderMapper.update(null, new LambdaUpdateWrapper<DiningOrderPO>()
                 .set(DiningOrderPO::getOrderStatus, OrderStatusConstants.REFUNDED)
                 .set(DiningOrderPO::getUpdateTime, LocalDateTime.now())
@@ -718,6 +734,8 @@ public class GroupBuyRepository implements IGroupBuyRepository {
         po.setId(entity.getId());
         po.setOrderNo(entity.getOrderNo());
         po.setUserId(entity.getUserId());
+        po.setRequestId(entity.getRequestId());
+        po.setRequestFingerprint(entity.getRequestFingerprint());
         po.setShopId(entity.getShopId());
         po.setPackageId(entity.getPackageId());
         po.setQuantity(entity.getQuantity());
