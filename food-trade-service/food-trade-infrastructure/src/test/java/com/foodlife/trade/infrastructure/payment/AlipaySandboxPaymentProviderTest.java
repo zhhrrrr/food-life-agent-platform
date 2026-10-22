@@ -15,6 +15,10 @@ import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.Duration;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -145,6 +149,37 @@ class AlipaySandboxPaymentProviderTest {
         String html = new AlipaySandboxPaymentProvider(actualClient, properties).buildPaymentForm(order);
         assertThat(html).contains("method=\"post\"", "gateway.do?charset=utf-8", "美食生活订单", "alipay.trade.page.pay", "168.00");
         assertThat(html).doesNotContain(privateKey);
+    }
+
+    @Test
+    void checkoutDeadlineRepresentsThirtyRealMinutesInAlipayTime() throws Exception {
+        order.setCreateTime(LocalDateTime.now());
+        AlipayTradePagePayResponse response = new AlipayTradePagePayResponse();
+        response.setBody("sandbox-checkout");
+        when(client.pageExecute(any(AlipayTradePagePayRequest.class), eq("POST"))).thenReturn(response);
+        provider.buildPaymentForm(order);
+        ArgumentCaptor<AlipayTradePagePayRequest> request = ArgumentCaptor.forClass(AlipayTradePagePayRequest.class);
+        verify(client).pageExecute(request.capture(), eq("POST"));
+        String expires = ((com.alipay.api.domain.AlipayTradePagePayModel) request.getValue().getBizModel()).getTimeExpire();
+        Instant deadline = LocalDateTime.parse(expires, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                .atZone(ZoneId.of("Asia/Shanghai")).toInstant();
+        assertThat(Math.abs(Duration.between(Instant.now().plusSeconds(1800), deadline).toSeconds())).isLessThanOrEqualTo(3);
+        order.setCreateTime(LocalDateTime.now().minusMinutes(31));
+        assertThatThrownBy(() -> provider.buildPaymentForm(order)).hasMessage("payment order expired");
+    }
+
+    @Test
+    void queriedPaymentTimeUsesTheSameLocalClockAsDomainOrders() throws Exception {
+        Instant paidAt = Instant.parse("2026-10-22T07:00:00Z");
+        AlipayTradeQueryResponse response = new AlipayTradeQueryResponse();
+        response.setCode("10000");
+        response.setOutTradeNo("PAY_TEST");
+        response.setTradeNo("ALIPAY_TEST");
+        response.setTradeStatus("TRADE_SUCCESS");
+        response.setTotalAmount("168.00");
+        response.setSendPayDate(Date.from(paidAt));
+        when(client.execute(any(AlipayTradeQueryRequest.class))).thenReturn(response);
+        assertThat(provider.queryPaidPayment(order).getPayTime().atZone(ZoneId.systemDefault()).toInstant()).isEqualTo(paidAt);
     }
 
     @Test void failClosedWhenProviderCannotClosePaidTrade() throws Exception {

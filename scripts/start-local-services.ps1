@@ -198,6 +198,7 @@ foreach ($service in $Services) {
     $javaExe = Join-Path $env:JAVA_HOME "bin\java.exe"
     $javaArgs = @(
         "-Dproject.name=$($service.Name)",
+        "-Duser.timezone=Asia/Shanghai",
         "-Dcsp.sentinel.dashboard.server=$env:SENTINEL_DASHBOARD_ADDR",
         "-Dcsp.sentinel.api.port=$($service.SentinelTransportPort)",
         "-jar",

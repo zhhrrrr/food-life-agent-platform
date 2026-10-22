@@ -88,7 +88,8 @@ class SeckillRecoveryIntegrationTest {
 
     @Test void staleCreateMessageIsRetiredForAFailedRequest() {
         jdbc.update("UPDATE seckill_order_request SET request_status='FAILED'");
-        jdbc.update("INSERT INTO trade_local_message(message_type,biz_id,message_status,retry_count,max_retry_count,next_retry_time) VALUES ('SECKILL_ORDER_CREATE','REQ1','INIT',0,5,CURRENT_TIMESTAMP)");
+        jdbc.update("INSERT INTO trade_local_message(message_type,biz_id,message_status,retry_count,max_retry_count,next_retry_time) VALUES ('SECKILL_ORDER_CREATE','REQ1','INIT',0,5,?)",
+                java.time.LocalDateTime.now().minusMinutes(1));
         assertThat(service.processPendingOrderRequests(10).getFailedCount()).isEqualTo(1);
         assertThat(status()).isEqualTo("FAILED");
         assertThat(jdbc.queryForObject("SELECT message_status FROM trade_local_message", String.class)).isEqualTo("FAILED");

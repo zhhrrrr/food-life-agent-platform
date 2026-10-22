@@ -27,9 +27,12 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.ZonedDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.Date;
 import java.util.Objects;
 
 @Component
@@ -81,17 +84,22 @@ public class AlipaySandboxPaymentProvider implements IPaymentProvider {
         model.setTotalAmount(yuan(order.getPayAmount()));
         model.setSubject("美食生活订单 " + order.getOrderNo());
         model.setProductCode("FAST_INSTANT_TRADE_PAY");
-        LocalDateTime expires = order.getCreateTime().plusMinutes(30);
-        if (!expires.isAfter(LocalDateTime.now(ZoneId.of("Asia/Shanghai")))) {
+        ZonedDateTime expires = order.getCreateTime().atZone(ZoneId.systemDefault()).plusMinutes(30);
+        if (!expires.toInstant().isAfter(Instant.now())) {
             throw new IllegalArgumentException("payment order expired");
         }
-        model.setTimeExpire(expires.format(ALIPAY_TIME));
+        model.setTimeExpire(expires.withZoneSameInstant(ZoneId.of("Asia/Shanghai")).format(ALIPAY_TIME));
         AlipayTradePagePayRequest request = new AlipayTradePagePayRequest();
         request.setBizModel(model);
         request.setNotifyUrl(properties.getNotifyUrl());
         request.setReturnUrl(UriComponentsBuilder.fromUriString(properties.getReturnUrl())
                 .queryParam("payOrderNo", order.getPayOrderNo()).build().toUriString());
         return request;
+    }
+
+    private static LocalDateTime localTime(Date value) {
+        return value == null ? LocalDateTime.now()
+                : value.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
     }
 
     @Override
@@ -162,9 +170,7 @@ public class AlipaySandboxPaymentProvider implements IPaymentProvider {
             command.setPayOrderNo(order.getPayOrderNo());
             command.setOutTradeNo(response.getTradeNo());
             command.setPayAmount(order.getPayAmount());
-            command.setPayTime(response.getSendPayDate() == null
-                    ? LocalDateTime.now(ZoneId.of("Asia/Shanghai"))
-                    : response.getSendPayDate().toInstant().atZone(ZoneId.of("Asia/Shanghai")).toLocalDateTime());
+            command.setPayTime(localTime(response.getSendPayDate()));
             return command;
         } catch (AlipayApiException e) {
             throw new IllegalStateException("Alipay query unavailable", e);
@@ -230,9 +236,7 @@ public class AlipaySandboxPaymentProvider implements IPaymentProvider {
             result.setRefundOrderNo(command.getRefundOrderNo());
             result.setOutRefundNo(command.getRefundOrderNo());
             result.setRefundStatus(RefundOrderStatusConstants.SUCCESS);
-            result.setRefundTime(response.getGmtRefundPay() == null
-                    ? LocalDateTime.now(ZoneId.of("Asia/Shanghai"))
-                    : response.getGmtRefundPay().toInstant().atZone(ZoneId.of("Asia/Shanghai")).toLocalDateTime());
+            result.setRefundTime(localTime(response.getGmtRefundPay()));
             result.setRawResult("Alipay sandbox refund confirmed");
             return result;
         } catch (AlipayApiException e) {
@@ -274,8 +278,7 @@ public class AlipaySandboxPaymentProvider implements IPaymentProvider {
             result.setRefundOrderNo(command.getRefundOrderNo());
             result.setOutRefundNo(command.getRefundOrderNo());
             result.setRefundStatus(RefundOrderStatusConstants.SUCCESS);
-            result.setRefundTime(response.getGmtRefundPay() == null ? LocalDateTime.now(ZoneId.of("Asia/Shanghai"))
-                    : response.getGmtRefundPay().toInstant().atZone(ZoneId.of("Asia/Shanghai")).toLocalDateTime());
+            result.setRefundTime(localTime(response.getGmtRefundPay()));
             result.setRawResult("Alipay sandbox refund query confirmed");
             return result;
         } catch (AlipayApiException e) {

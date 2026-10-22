@@ -43,7 +43,8 @@ public class AlipayNotificationController {
             command.setPayAmount(new BigDecimal(parameters.get("total_amount")).movePointRight(2).longValueExact());
             command.setPayTime(parameters.containsKey("gmt_payment")
                     ? LocalDateTime.parse(parameters.get("gmt_payment"), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                    : LocalDateTime.now(ZoneId.of("Asia/Shanghai")));
+                            .atZone(ZoneId.of("Asia/Shanghai")).withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime()
+                    : LocalDateTime.now());
             command.setProviderParameters(parameters);
             payments.acceptPaidPayment(command);
             return "success";
