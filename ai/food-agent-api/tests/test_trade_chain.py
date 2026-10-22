@@ -1,4 +1,5 @@
 from typing import Any
+from types import SimpleNamespace
 
 from app.agents.trade_agent import trade_agent_node
 from app.core.config import get_settings
@@ -100,6 +101,13 @@ def _chain(gateway_client: FakeGatewayClient, **settings: object) -> TradeChain:
         ),
         gateway_client=gateway_client,  # type: ignore[arg-type]
     )
+
+
+def test_sales_query_reads_business_snapshot() -> None:
+    gateway = FakeGatewayClient()
+    result = _chain(gateway).run("查一下套餐12的销量")
+    assert "sales_query" in result.capabilities
+    assert gateway.calls == [("package", 12)]
 
 
 def test_trade_price_and_stock_share_one_package_snapshot_query() -> None:
@@ -288,3 +296,56 @@ def test_trade_chain_uses_structured_rewrite_and_answer() -> None:
     assert result.rewritten_query == rewrite.search_query
     assert result.capabilities == ["price_query", "stock_query"]
     assert result.response == answer.answer
+
+
+def test_open_read_model_can_choose_an_alternative_tool_and_limit():
+    gateway = FakeGatewayClient()
+
+    class Model:
+        bound_names = set()
+
+        def with_structured_output(self, schema, **kwargs):
+            if schema is TradeQueryRewrite:
+                return SimpleNamespace(invoke=lambda _: TradeQueryRewrite(
+                    search_query="查看优惠券", capabilities=["coupon_query"], reason="coupon lookup"))
+            return SimpleNamespace(invoke=lambda _: AgentAnswer(
+                answer="当前有一张优惠券。", used_reference_ids=["coupon:mine"]))
+
+        def bind_tools(self, schemas):
+            self.bound_names = {schema["function"]["name"] for schema in schemas}
+            return SimpleNamespace(invoke=lambda _: SimpleNamespace(tool_calls=[{
+                "name": "trade_list_my_coupons", "args": {"limit": 2}, "id": "coupon-call",
+            }]))
+
+    model = Model()
+    result = TradeChain(settings=get_settings().model_copy(update={"llm_router_enabled": True}),
+                        gateway_client=gateway, chat_model=model).run("查看优惠券", authorization="token")
+    assert model.bound_names == {"trade_list_my_coupons", "trade_list_coupon_templates"}
+    # The deterministic fallback is coupon templates, but the model can choose
+    # the other eligible read; no forced fallback call is appended afterward.
+    assert gateway.calls == [("my_coupons", "token", "UNUSED", 2)]
+    assert result.facts[0]["data"]["coupons"][0]["userCouponId"] == 9
+
+
+def test_explicit_order_scope_never_binds_or_executes_other_order_reads():
+    gateway = FakeGatewayClient()
+
+    class Model:
+        binds = 0
+
+        def with_structured_output(self, schema, **kwargs):
+            if schema is TradeQueryRewrite:
+                return SimpleNamespace(invoke=lambda _: TradeQueryRewrite(
+                    search_query="查询订单42", capabilities=["order_query"], reason="exact lookup"))
+            return SimpleNamespace(invoke=lambda _: AgentAnswer(
+                answer="订单42已支付。", used_reference_ids=["order:42"]))
+
+        def bind_tools(self, schemas):
+            self.binds += 1
+            raise AssertionError("exact ID lookup is deterministic")
+
+    model = Model()
+    TradeChain(settings=get_settings().model_copy(update={"llm_router_enabled": True}),
+               gateway_client=gateway, chat_model=model).run("查询订单42", authorization="token")
+    assert model.binds == 0
+    assert gateway.calls == [("order", 42, "token")]

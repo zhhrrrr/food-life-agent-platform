@@ -29,8 +29,8 @@ public interface IAgentMemoryMapper {
     int countTurn(@Param("userId") Long userId, @Param("sessionId") String sessionId, @Param("turnId") String turnId);
 
     @Insert("""
-        INSERT INTO agent_session_message(session_id,user_id,turn_id,sequence_no,role,content,intent,run_id)
-        VALUES(#{sessionId},#{userId},#{turnId},#{sequenceNo},#{role},#{content},#{intent},#{runId})
+        INSERT INTO agent_session_message(session_id,user_id,turn_id,sequence_no,role,content,intent,run_id,context_json)
+        VALUES(#{sessionId},#{userId},#{turnId},#{sequenceNo},#{role},#{content},#{intent},#{runId},CAST(#{contextJson} AS JSON))
         """)
     int insertMessage(AgentMessagePO message);
 
@@ -44,6 +44,9 @@ public interface IAgentMemoryMapper {
     List<AgentMessagePO> findRecentMessages(@Param("userId") Long userId,
                                             @Param("sessionId") String sessionId,
                                             @Param("messageLimit") int messageLimit);
+
+    @Select("SELECT * FROM agent_session_message WHERE user_id=#{userId} AND session_id=#{sessionId} AND sequence_no>#{afterSeq} ORDER BY sequence_no LIMIT 100")
+    List<AgentMessagePO> findPendingMessages(@Param("userId") Long userId, @Param("sessionId") String sessionId, @Param("afterSeq") long afterSeq);
 
     @Update("""
         UPDATE agent_session SET summary=#{summary},summary_through_seq=#{summaryThroughSeq},version=version+1
@@ -65,6 +68,12 @@ public interface IAgentMemoryMapper {
         """)
     int upsertUserMemory(AgentUserMemoryPO memory);
 
+    @Select("SELECT * FROM agent_user_memory WHERE user_id=#{userId} AND memory_type=#{memoryType} AND memory_key=#{memoryKey} FOR UPDATE")
+    AgentUserMemoryPO lockUserMemory(@Param("userId") Long userId, @Param("memoryType") String type, @Param("memoryKey") String key);
+
+    @Insert("INSERT IGNORE INTO agent_user_memory(user_id,memory_type,memory_key,value_json,version,status) VALUES(#{userId},#{memoryType},#{memoryKey},JSON_OBJECT('values',JSON_ARRAY()),0,0)")
+    int ensureUserMemory(AgentUserMemoryPO memory);
+
     @Update("UPDATE agent_user_memory SET status=0,version=version+1 WHERE user_id=#{userId} AND memory_type=#{memoryType} AND memory_key=#{memoryKey}")
     int deleteUserMemory(@Param("userId") Long userId, @Param("memoryType") String memoryType,
                          @Param("memoryKey") String memoryKey);
@@ -74,26 +83,51 @@ public interface IAgentMemoryMapper {
           source_turn_id,status,occurred_at,expires_at)
         VALUES(#{eventId},#{userId},#{eventType},#{content},#{entityType},#{entityId},
           #{sourceTurnId},#{status},#{occurredAt},#{expiresAt})
-        ON DUPLICATE KEY UPDATE content=VALUES(content),entity_type=VALUES(entity_type),
-          entity_id=VALUES(entity_id),source_turn_id=VALUES(source_turn_id),status='ACTIVE',
-          occurred_at=VALUES(occurred_at),expires_at=VALUES(expires_at),update_time=NOW()
         """)
     int upsertEvent(AgentMemoryEventPO event);
+
+    @Update("""
+        UPDATE agent_user_memory_event SET content=#{content},entity_type=#{entityType},entity_id=#{entityId},
+          source_turn_id=#{sourceTurnId},status=#{status},occurred_at=#{occurredAt},expires_at=#{expiresAt},
+          version=version+1,update_time=NOW() WHERE event_id=#{eventId} AND user_id=#{userId} AND version=#{version}
+        """)
+    int updateEvent(AgentMemoryEventPO event);
 
     @Select("SELECT * FROM agent_user_memory_event WHERE event_id=#{eventId} AND user_id=#{userId}")
     AgentMemoryEventPO findEvent(@Param("userId") Long userId, @Param("eventId") String eventId);
 
-    @Update("UPDATE agent_user_memory_event SET status='DELETED',update_time=NOW() WHERE user_id=#{userId} AND event_id=#{eventId}")
+    @Select("SELECT * FROM agent_user_memory_event WHERE event_id=#{eventId} FOR UPDATE")
+    AgentMemoryEventPO lockEvent(@Param("eventId") String eventId);
+
+    @Select("SELECT * FROM agent_user_memory_event WHERE user_id=#{userId} AND entity_type='preference' AND entity_id=#{key} AND status='ACTIVE'")
+    List<AgentMemoryEventPO> findPreferenceEvents(@Param("userId") Long userId, @Param("key") String key);
+
+    @Select("""
+        <script>
+        SELECT * FROM agent_user_memory_event WHERE user_id=#{userId} AND status='ACTIVE' AND expires_at>UTC_TIMESTAMP()
+        <choose>
+          <when test="eventIds != null and eventIds.size() > 0">
+            AND event_id IN <foreach collection="eventIds" item="item" open="(" separator="," close=")">#{item}</foreach>
+          </when>
+          <otherwise>AND MATCH(content) AGAINST(#{query} IN NATURAL LANGUAGE MODE)</otherwise>
+        </choose>
+        ORDER BY MATCH(content) AGAINST(#{query} IN NATURAL LANGUAGE MODE) DESC,occurred_at DESC LIMIT #{limit}
+        </script>
+        """)
+    List<AgentMemoryEventPO> searchEvents(@Param("userId") Long userId, @Param("query") String query,
+                                        @Param("eventIds") List<String> eventIds, @Param("limit") int limit);
+
+    @Update("UPDATE agent_user_memory_event SET status='DELETED',version=version+1,update_time=NOW() WHERE user_id=#{userId} AND event_id=#{eventId} AND status!='DELETED'")
     int deleteEvent(@Param("userId") Long userId, @Param("eventId") String eventId);
 
-    @Select("SELECT * FROM agent_user_memory_event WHERE status='ACTIVE' AND expires_at<=NOW() ORDER BY id LIMIT #{limit}")
+    @Select("SELECT * FROM agent_user_memory_event WHERE status='ACTIVE' AND expires_at<=UTC_TIMESTAMP() ORDER BY id LIMIT #{limit}")
     List<AgentMemoryEventPO> findExpiredEvents(@Param("limit") int limit);
 
-    @Select("SELECT * FROM agent_user_memory_event WHERE status='ACTIVE' AND expires_at>NOW() AND id>#{afterId} ORDER BY id LIMIT #{limit}")
+    @Select("SELECT * FROM agent_user_memory_event WHERE id>#{afterId} ORDER BY id LIMIT #{limit}")
     List<AgentMemoryEventPO> findActiveEvents(@Param("afterId") long afterId, @Param("limit") int limit);
 
-    @Update("UPDATE agent_user_memory_event SET status='EXPIRED',update_time=NOW() WHERE id=#{id} AND status='ACTIVE'")
-    int expireEvent(@Param("id") Long id);
+    @Update("UPDATE agent_user_memory_event SET status='EXPIRED',version=version+1,update_time=NOW() WHERE id=#{id} AND status='ACTIVE' AND expires_at<=UTC_TIMESTAMP() AND version=#{version}")
+    int expireEvent(@Param("id") Long id, @Param("version") Long version);
 
     @Insert("""
         INSERT INTO user_memory_local_message(message_id,event_type,event_id,content,message_status,

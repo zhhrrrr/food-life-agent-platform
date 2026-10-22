@@ -1,11 +1,15 @@
 {
   "name": "food-life-agent-web",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:ui": "node tests/runBrowserAudit.mjs",
+    "test:frontend": "npm test && npm run build && npm run test:ui",
+    "test:seckill-polling": "node --experimental-strip-types --test tests/seckillPolling.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

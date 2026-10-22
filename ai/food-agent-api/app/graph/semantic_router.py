@@ -92,7 +92,8 @@ class SemanticRouter:
 
 # 最后两轮对话
 def build_semantic_query(message: str, history: list[SessionTurn]) -> str:
-    recent_history = history[-2:]
+    from app.memory.conversation import select_conversation
+    recent_history = [t for t in select_conversation(message, history).history if t.intent != "summary"]
     if not recent_history or not should_use_session_history(message):
         return message
     previous = "\n".join(

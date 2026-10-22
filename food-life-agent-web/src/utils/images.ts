@@ -1,8 +1,8 @@
 const FOOD_IMAGES = [
-  'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1543353071-10c8ba85a904?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=1200&q=80',
+  '/images/meal-1.jpg',
+  '/images/meal-2.jpg',
+  '/images/meal-3.jpg',
+  '/images/meal-4.jpg',
 ]
 
 export function foodImage(seed?: number, source?: string) {
@@ -11,4 +11,10 @@ export function foodImage(seed?: number, source?: string) {
   }
   const index = Math.abs(seed ?? 0) % FOOD_IMAGES.length
   return FOOD_IMAGES[index]
+}
+
+export function handleFoodImageError(event: Event, seed?: number) {
+  const image = event.target as HTMLImageElement | null
+  const fallback = foodImage(seed)
+  if (image && image.getAttribute('src') !== fallback) image.src = fallback
 }

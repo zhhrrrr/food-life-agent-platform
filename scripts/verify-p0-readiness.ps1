@@ -31,9 +31,9 @@ $requiredFiles = @(
     "food-trade-service/food-trade-domain/src/main/java/com/foodlife/trade/domain/order/payment/service/PaymentRefundService.java",
     "food-trade-service/food-trade-trigger/src/main/java/com/foodlife/trade/trigger/http/OperationPaymentController.java",
     "food-user-service/food-user-infrastructure/src/main/java/com/foodlife/user/infrastructure/repository/UserRoleRepository.java",
-    "food-life-agent-web/src/utils/localPayment.ts",
-    "scripts/smoke-p0-business-flow.ps1",
-    "docs/p0-production-readiness-contract.md"
+    "food-life-agent-web/src/utils/alipayPayment.ts",
+    "food-trade-service/food-trade-infrastructure/src/main/java/com/foodlife/trade/infrastructure/payment/AlipaySandboxPaymentProvider.java",
+    "scripts/smoke-p0-business-flow.ps1"
 )
 
 foreach ($file in $requiredFiles) {
@@ -44,7 +44,9 @@ Assert-FileContains "food-trade-service/food-trade-infrastructure/src/main/java/
 Assert-FileContains "food-trade-service/food-trade-infrastructure/src/main/java/com/foodlife/trade/infrastructure/payment/LocalPaymentProvider.java" "public PaymentRefundResult refund"
 Assert-FileContains "food-trade-service/food-trade-app/src/main/resources/application-local.yml" "callback-secret"
 Assert-FileContains "deploy/nacos/configs/food-common.yaml" "callback-secret"
-Assert-FileContains "food-life-agent-web/src/views/OrdersView.vue" "buildLocalPaymentSignature"
+Assert-FileContains "food-life-agent-web/src/views/OrdersView.vue" "createAlipayPaymentForm"
+Assert-FileContains "food-life-agent-web/src/views/OrdersView.vue" "queryPaymentStatus"
+Assert-FileContains "food-life-agent-web/src/utils/alipayPayment.ts" "openapi-sandbox.dl.alipaydev.com"
 Assert-FileContains "scripts/smoke-rabbitmq-events.ps1" "signType = `"SHA256`""
 Assert-FileContains "scripts/smoke-p0-business-flow.ps1" "operation payment reconcile"
 Assert-FileContains "food-user-service/food-user-trigger/src/main/java/com/foodlife/user/trigger/http/UserAuthController.java" "userRoleRepository.findHighestRoleCodeByUserId"

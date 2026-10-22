@@ -90,6 +90,8 @@ export interface PaymentOrderResponse {
   channel: string
   payAmount: number
   payStatus: string
+  paymentUrl?: string
+  paymentForm?: string
   outTradeNo?: string
   payTime?: string
   createTime?: string

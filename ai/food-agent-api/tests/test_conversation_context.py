@@ -1,3 +1,5 @@
+import json
+
 from app.core.config import Settings
 from app.memory.query_context import build_query_context
 from app.memory.session_memory import SessionTurn
@@ -35,7 +37,7 @@ def test_follow_up_query_uses_recent_turn_for_retrieval() -> None:
         settings=Settings(llm_router_enabled=False)
     ).rewrite_query("第二个适合约会吗", context)
 
-    assert context.uses_history is True
+    assert bool(context.history_prompt) is True
     assert "推荐两款川菜双人套餐" in rewrite.search_query
     assert "第二个适合约会吗" in rewrite.search_query
     assert "scene_recommendation" in rewrite.capabilities
@@ -46,7 +48,8 @@ def test_explicit_new_query_does_not_mix_old_history() -> None:
 
     context = build_query_context("推荐一家火锅店", history)
 
-    assert context.uses_history is False
+    assert json.loads(context.history_prompt)["recent_turns"][0]["user"] == "退款规则"
+    assert context.follow_up is False
     assert context.retrieval_query == "推荐一家火锅店"
 
 

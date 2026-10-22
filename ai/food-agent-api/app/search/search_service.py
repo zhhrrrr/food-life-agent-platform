@@ -21,8 +21,10 @@ class SearchService:
     def __init__(
         self,
         settings: Settings | None = None,
+        *, strict: bool = False,
     ) -> None:
         self.settings = settings or get_settings()
+        self.strict = strict
 
     def search_many(
         self,
@@ -34,18 +36,22 @@ class SearchService:
     ) -> list[SearchHit]:
         normalized_indices = list(dict.fromkeys(indices))
         if not self.settings.es_enabled or not normalized_indices:
+            if self.strict:
+                raise RuntimeError("Evaluation requires enabled Elasticsearch and nonempty index scopes")
             return []
 
         client = get_es_client()
         if client is None:
+            if self.strict:
+                raise RuntimeError("Elasticsearch client is unavailable")
             return []
 
         request: dict[str, Any] = {
             "index": ",".join(normalized_indices),
             "size": size,
             "query": self._build_query(query, original_query, filters),
-            "ignore_unavailable": True,
-            "allow_no_indices": True,
+            "ignore_unavailable": not self.strict,
+            "allow_no_indices": not self.strict,
             "search_type": "dfs_query_then_fetch",
         }
         if self.settings.es_search_min_score > 0:
@@ -53,7 +59,11 @@ class SearchService:
 
         try:
             result = client.search(**request)
+            if self.strict and (result.get("timed_out") or result.get("_shards", {}).get("failed", 0)):
+                raise RuntimeError("Elasticsearch returned incomplete search results")
         except Exception:
+            if self.strict:
+                raise
             logger.exception(
                 "es_search_failed indices=%s query_length=%s",
                 ",".join(normalized_indices),
@@ -326,6 +336,8 @@ class SearchService:
     @staticmethod
     def _filter_clauses(filters: SearchFilters) -> list[dict[str, Any]]:
         clauses: list[dict[str, Any]] = []
+        if filters.shop_ids:
+            clauses.append({"terms": {"metadata.shopId": filters.shop_ids}})
         if filters.active_only:
             clauses.extend(
                 [
@@ -375,30 +387,59 @@ class SearchService:
                 ]
             )
 
-        if filters.max_price_cents is not None:
-            price_fields = (
-                "metadata.price",
-                "metadata.avgPrice",
-                "metadata.activityPrice",
+        specific_price_filters = (
+            filters.min_avg_price_cents is not None
+            or filters.max_avg_price_cents is not None
+            or filters.min_item_price_cents is not None
+            or filters.max_item_price_cents is not None
+        )
+        if specific_price_filters:
+            avg_clause = _price_filter_clause(
+                ("metadata.avgPrice",),
+                filters.min_avg_price_cents,
+                filters.max_avg_price_cents,
             )
-            clauses.append(
+            item_clause = _price_filter_clause(
+                ("metadata.price", "metadata.activityPrice"),
+                filters.min_item_price_cents,
+                filters.max_item_price_cents,
+            )
+            clauses.extend(clause for clause in (avg_clause, item_clause) if clause)
+        else:
+            generic_clause = _price_filter_clause(
+                ("metadata.price", "metadata.avgPrice", "metadata.activityPrice"),
+                filters.min_price_cents,
+                filters.max_price_cents,
+            )
+            if generic_clause:
+                clauses.append(generic_clause)
+        return clauses
+
+
+def _price_filter_clause(
+    fields: tuple[str, ...],
+    minimum: int | None,
+    maximum: int | None,
+) -> dict[str, Any] | None:
+    if minimum is None and maximum is None:
+        return None
+    price_range: dict[str, int] = {}
+    if minimum is not None:
+        price_range["gte"] = minimum
+    if maximum is not None:
+        price_range["lte"] = maximum
+    return {
+        "bool": {
+            "should": [
+                *[{"range": {field: price_range}} for field in fields],
                 {
                     "bool": {
-                        "should": [
-                            *[
-                                {"range": {field: {"lte": filters.max_price_cents}}}
-                                for field in price_fields
-                            ],
-                            {
-                                "bool": {
-                                    "must_not": [
-                                        {"exists": {"field": field}} for field in price_fields
-                                    ]
-                                }
-                            },
-                        ],
-                        "minimum_should_match": 1,
+                        "must_not": [
+                            {"exists": {"field": field}} for field in fields
+                        ]
                     }
-                }
-            )
-        return clauses
+                },
+            ],
+            "minimum_should_match": 1,
+        }
+    }

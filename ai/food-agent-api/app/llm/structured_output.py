@@ -1,3 +1,4 @@
+import json
 import logging
 from collections.abc import Sequence
 from typing import Any, TypeVar
@@ -18,11 +19,18 @@ def invoke_structured_output(
     chat_model: Any | None = None,
 ) -> StructuredModel:
     model = chat_model or build_chat_model(settings)
-    structured_model = model.with_structured_output(
-        schema,
-        **structured_output_kwargs(settings),
-    )
-    result = structured_model.invoke(list(messages))
+    kwargs = structured_output_kwargs(settings)
+    supplied = list(messages)
+    if kwargs.get("method") == "json_mode":
+        instructions = "\nJSON Schema:\n" + json.dumps(schema.model_json_schema(), ensure_ascii=False)
+        system_index = next((i for i, (role, _) in enumerate(supplied) if role == "system"), None)
+        if system_index is None:
+            supplied.insert(0, ("system", "Return JSON matching the supplied schema." + instructions))
+        else:
+            role, content = supplied[system_index]
+            supplied[system_index] = (role, content + instructions)
+    structured_model = model.with_structured_output(schema, **kwargs)
+    result = structured_model.invoke(supplied)
     return result if isinstance(result, schema) else schema.model_validate(result)
 
 

@@ -7,12 +7,27 @@
     <parent>
         <groupId>com.foodlife</groupId>
         <artifactId>food-user-service</artifactId>
-        <version>1.0-SNAPSHOT</version>
+        <version>1.0.0</version>
     </parent>
 
     <artifactId>food-user-infrastructure</artifactId>
 
     <dependencies>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>com.foodlife</groupId>
             <artifactId>food-user-domain</artifactId>
@@ -44,4 +59,7 @@
             <optional>true</optional>
         </dependency>
     </dependencies>
+    <build><plugins><plugin>
+        <groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.2.5</version>
+    </plugin></plugins></build>
 </project>

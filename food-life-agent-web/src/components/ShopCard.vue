@@ -2,7 +2,7 @@
 import { Location, StarFilled } from '@element-plus/icons-vue'
 import type { ShopInfo } from '../types/shop'
 import { money, score } from '../utils/format'
-import { foodImage } from '../utils/images'
+import { foodImage, handleFoodImageError } from '../utils/images'
 
 defineProps<{
   shop: ShopInfo
@@ -10,8 +10,8 @@ defineProps<{
 </script>
 
 <template>
-  <article class="shop-card" @click="$router.push(`/shops/${shop.id}`)">
-    <img class="shop-card__image" :src="foodImage(shop.id, shop.images)" :alt="shop.name" />
+  <router-link class="shop-card" :to="`/shops/${shop.id}`" :aria-label="shop.name">
+    <img class="shop-card__image" :src="foodImage(shop.id, shop.images)" :alt="shop.name" loading="lazy" decoding="async" @error="handleFoodImageError($event, shop.id)" />
     <div class="shop-card__body">
       <div class="shop-card__title-row">
         <h3>{{ shop.name }}</h3>
@@ -30,5 +30,5 @@ defineProps<{
         <span>{{ shop.comments }} 条评价</span>
       </div>
     </div>
-  </article>
+  </router-link>
 </template>

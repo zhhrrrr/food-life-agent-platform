@@ -16,10 +16,18 @@ CHAT_REQUESTS = Counter(
     "Completed Food Agent chat requests.",
     ("intent", "execution_status"),
 )
+MEMORY_OPERATIONS = Counter("food_agent_memory_operations_total", "Memory delivery, summary and indexing outcomes.", ("operation", "status"))
 TOOL_EXECUTIONS = Counter(
     "food_agent_tool_executions_total",
     "Native tool execution outcomes.",
     ("tool", "status"),
+)
+TOOL_DURATION = Histogram(
+    "food_agent_tool_duration_seconds", "Tool execution including retries and capacity checks.",
+    ("tool", "status"),
+)
+TOOL_RETRIES = Counter(
+    "food_agent_tool_retries_total", "Bounded read tool retries.", ("tool", "reason"),
 )
 
 

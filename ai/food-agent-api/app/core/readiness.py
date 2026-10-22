@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any
 
 import httpx
 
@@ -31,6 +30,8 @@ def readiness_checks(settings: Settings) -> dict[str, bool]:
     probes: dict[str, Probe] = {
         "java_gateway": lambda: _gateway_ready(settings),
     }
+    if settings.runtime_database_url:
+        probes["agent_state_store"] = lambda: _postgres_ready(settings)
     if settings.es_enabled:
         probes["elasticsearch"] = lambda: _elasticsearch_ready(settings)
     if settings.milvus_enabled:
@@ -51,6 +52,12 @@ def _probe_result(future: Future[bool]) -> bool:
         return bool(future.result())
     except Exception:  # noqa: BLE001 - readiness reports dependency failure as data
         return False
+
+
+def _postgres_ready(settings: Settings) -> bool:
+    import psycopg
+    with psycopg.connect(settings.runtime_database_url, connect_timeout=max(1, int(settings.readiness_timeout_seconds))) as connection:
+        return connection.execute("SELECT 1").fetchone() == (1,)
 
 
 def _gateway_ready(settings: Settings) -> bool:
@@ -79,16 +86,14 @@ def _elasticsearch_ready(settings: Settings) -> bool:
 
 
 def _milvus_ready(settings: Settings) -> bool:
-    from pymilvus import MilvusClient
+    from app.vector.milvus_client import create_milvus_client
 
-    options: dict[str, Any] = {
-        "uri": settings.milvus_uri,
-        "db_name": settings.milvus_database,
-        "timeout": settings.readiness_timeout_seconds,
-    }
-    if settings.milvus_token:
-        options["token"] = settings.milvus_token
-    client = MilvusClient(**options)
+    client = create_milvus_client(
+        settings.milvus_uri,
+        settings.milvus_token,
+        settings.milvus_database,
+        settings.readiness_timeout_seconds,
+    )
     try:
         client.list_collections(timeout=settings.readiness_timeout_seconds)
         return True

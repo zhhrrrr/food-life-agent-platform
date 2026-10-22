@@ -213,6 +213,26 @@ food:
       local-user-roles:
         1: ADMIN
       paths:
+        - pattern: /api/trade/normal/orders/timeout/**
+          roles:
+            - ADMIN
+            - OPERATOR
+        - pattern: /api/trade/pay/orders/timeout/**
+          roles:
+            - ADMIN
+            - OPERATOR
+        - pattern: /api/trade/seckill/order-requests/process
+          roles:
+            - ADMIN
+            - OPERATOR
+        - pattern: /api/trade/seckill/order-requests/recover
+          roles:
+            - ADMIN
+            - OPERATOR
+        - pattern: /api/trade/seckill/activities/*/stock/**
+          roles:
+            - ADMIN
+            - OPERATOR
         - pattern: /api/trade/operations/**
           roles:
             - ADMIN

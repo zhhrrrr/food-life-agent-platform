@@ -61,7 +61,10 @@ public class ReactiveTraceWebFilter implements WebFilter, Ordered {
                     TraceIdSupport.put(traceId);
                     long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
                     int status = resolveStatus(mutatedExchange);
-                    record(request.getMethod() == null ? "UNKNOWN" : request.getMethod().name(), path, status, durationMs);
+                    // Gateway and WebFlux set trusted route patterns after matching; raw IDs are not metric labels.
+                    Object pattern = mutatedExchange.getAttribute("org.springframework.cloud.gateway.support.ServerWebExchangeUtils.gatewayPredicateMatchedPathAttr");
+                    if (pattern == null) pattern = mutatedExchange.getAttribute(org.springframework.web.reactive.HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+                    record(request.getMethod() == null ? "UNKNOWN" : request.getMethod().name(), pattern == null ? "UNKNOWN" : pattern.toString(), status, durationMs);
                     logRequest(request, path, status, durationMs, traceId);
                     TraceIdSupport.clear();
                 });
@@ -79,9 +82,13 @@ public class ReactiveTraceWebFilter implements WebFilter, Ordered {
 
     private void record(String method, String path, int status, long durationMs) {
         String safePath = StringUtils.hasText(path) ? path : "UNKNOWN";
+        String safeMethod = switch (method) {
+            case "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE", "CONNECT" -> method;
+            default -> "OTHER";
+        };
         Timer.builder("food_http_server_request_duration")
                 .description("Food gateway request duration")
-                .tag("method", method)
+                .tag("method", safeMethod)
                 .tag("path", safePath)
                 .tag("status", String.valueOf(status))
                 .register(meterRegistry)
@@ -90,7 +97,7 @@ public class ReactiveTraceWebFilter implements WebFilter, Ordered {
             Counter.builder("food_http_server_slow_request_total")
                     .description("Food gateway slow request count")
                     .tag("application", applicationName)
-                    .tag("method", method)
+                    .tag("method", safeMethod)
                     .tag("path", safePath)
                     .register(meterRegistry)
                     .increment();

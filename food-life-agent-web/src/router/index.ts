@@ -84,8 +84,9 @@ router.beforeEach(async (to) => {
   }
   if (to.meta.requiresOperator) {
     if (!auth.user) {
-      await auth.fetchMe().catch(() => auth.logout())
+      await auth.fetchMe().catch(() => {})
     }
+    if (!auth.token) return { name: 'login', query: { redirect: to.fullPath } }
     const role = auth.user?.role?.toUpperCase()
     if (role !== 'ADMIN' && role !== 'OPERATOR') {
       return { name: 'home' }

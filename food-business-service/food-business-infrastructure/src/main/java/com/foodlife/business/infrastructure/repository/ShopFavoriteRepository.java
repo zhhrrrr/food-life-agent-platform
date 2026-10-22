@@ -90,12 +90,16 @@ public class ShopFavoriteRepository implements IShopFavoriteRepository {
                         new LambdaQueryWrapper<ShopFavoritePO>()
                                 .eq(ShopFavoritePO::getUserId, userId)
                                 .eq(ShopFavoritePO::getFavoriteStatus, 1)
+                                .inSql(ShopFavoritePO::getShopId, "SELECT id FROM shop WHERE status = 1")
                                 .lt(lastId != null, ShopFavoritePO::getId, lastId)
                                 .orderByDesc(ShopFavoritePO::getId))
                 .getRecords();
+        if (favorites.isEmpty()) return List.of();
+        var shops = shopMapper.selectBatchIds(favorites.stream().map(ShopFavoritePO::getShopId).toList()).stream()
+                .collect(java.util.stream.Collectors.toMap(ShopPO::getId, shop -> shop));
         List<FavoriteShopEntity> result = new ArrayList<>();
         for (ShopFavoritePO favorite : favorites) {
-            ShopPO shop = shopMapper.selectById(favorite.getShopId());
+            ShopPO shop = shops.get(favorite.getShopId());
             if (shop != null && shop.getStatus() != null && shop.getStatus() == 1) {
                 result.add(toFavoriteShopEntity(favorite, shop));
             }

@@ -9,9 +9,12 @@ target/
 logs/
 *.log
 .runtime/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
 
 # Local tools
-tools/
+/tools/
 .cache/
 
 # OS
@@ -20,3 +23,17 @@ Thumbs.db
 
 # Runtime
 *.pid
+
+# Browser verification artifacts
+.playwright-cli/
+output/playwright/
+
+# Local planning, research and acceptance documents; release contains code only.
+*.md
+.superpowers/
+.vscode/
+.env
+.env.*
+!.env.example
+*.pem
+*.key

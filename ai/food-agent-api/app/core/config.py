@@ -7,13 +7,24 @@ from pydantic import BaseModel, Field
 
 class Settings(BaseModel):
     app_name: str = "Food Life Agent API"
-    app_version: str = "0.27.0"
+    app_version: str = "1.0.0"
     app_port: int = 8500
     log_level: str = "INFO"
+    langsmith_tracing: bool = False
+    langsmith_api_key: str = Field(default="", repr=False)
+    langsmith_endpoint: str = "https://api.smith.langchain.com"
+    langsmith_trust_env: bool = True
+    langsmith_project: str = "food-life-agent"
+    langsmith_workspace_id: str = ""
+    langsmith_environment: str = "local"
+    langsmith_revision: str = ""
+    langsmith_hide_inputs: bool = False
+    langsmith_hide_outputs: bool = False
     readiness_runtime_checks_enabled: bool = True
     readiness_timeout_seconds: float = Field(default=2.0, gt=0, le=10.0)
     # 本地env 文件中配置的llm_router_enabled优先级高于此处的默认值
     llm_router_enabled: bool = False
+    model_trust_env: bool = False
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
     llm_api_key: str = ""
@@ -34,6 +45,10 @@ class Settings(BaseModel):
     orchestration_max_parallel_tasks: int = Field(default=3, ge=1, le=10)
     orchestration_max_replans: int = Field(default=1, ge=0, le=3)
     orchestration_planner_timeout_seconds: float = Field(default=60.0, gt=0, le=180.0)
+    orchestration_checkpoint_path: str = ".runtime/agent-runs.sqlite"
+    runtime_database_url: str = Field(default="", repr=False, pattern=r"^(?:postgres(?:ql)?://.+)?$")
+    java_user_base_url: str = "http://127.0.0.1:8101"
+    memory_context_max_chars: int = Field(default=6000, ge=4000, le=20000)
     mcp_enabled: bool = False
     mcp_mount_path: str = Field(default="/mcp", pattern=r"^/[A-Za-z0-9_-]+$")
     mcp_internal_token: str = ""
@@ -44,9 +59,11 @@ class Settings(BaseModel):
     agent_admin_token: str = ""
     session_memory_enabled: bool = False
     session_memory_ttl_seconds: int = Field(default=7200, ge=60)
-    session_memory_max_turns: int = Field(default=8, ge=1, le=50)
+    session_memory_max_turns: int = Field(default=8, ge=1, le=8)
     session_memory_key_prefix: str = "food-agent-api:session:"
     session_summary_enabled: bool = True
+    # Accepted for older deployments; eviction now triggers asynchronous summary
+    # delivery so these former batching thresholds cannot create history gaps.
     session_summary_trigger_turns: int = Field(default=8, ge=2, le=50)
     session_summary_trigger_chars: int = Field(default=3000, ge=500, le=20000)
     memory_java_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
@@ -58,6 +75,17 @@ class Settings(BaseModel):
     java_gateway_base_url: str = "http://127.0.0.1:8080"
     java_business_base_url: str = "http://127.0.0.1:8201"
     java_trade_base_url: str = "http://127.0.0.1:8301"
+    trade_workflow_enabled: bool = True
+    trade_checkpoint_path: str = ".runtime/trade-checkpoints.sqlite"
+    trade_confirmation_ttl_seconds: int = Field(default=300, ge=30, le=1800)
+    trade_gateway_timeout_seconds: float = Field(default=10, gt=0, le=30)
+    tool_timeout_seconds: float = Field(default=10, gt=0, le=60)
+    tool_budget_seconds: float = Field(default=30, gt=0, le=120)
+    tool_max_calls: int = Field(default=8, ge=1, le=32)
+    tool_max_invocations: int = Field(default=24, ge=1, le=96)
+    tool_read_max_attempts: int = Field(default=3, ge=1, le=3)
+    tool_retry_backoff_seconds: float = Field(default=0.1, ge=0, le=2)
+    tool_max_concurrent_calls: int = Field(default=8, ge=1, le=32)
     es_enabled: bool = False
     es_url: str = "http://127.0.0.1:9200"
     es_index_shop: str = "food_shop_index"
@@ -148,7 +176,33 @@ def get_settings() -> Settings:
     defaults = Settings()
 
     return Settings(
+        langsmith_tracing=_get_value(dotenv_values, "LANGSMITH_TRACING", "false").lower() in {"1", "true", "yes", "on"},
+        langsmith_api_key=_get_value(dotenv_values, "LANGSMITH_API_KEY", ""),
+        langsmith_endpoint=_get_value(dotenv_values, "LANGSMITH_ENDPOINT", defaults.langsmith_endpoint),
+        langsmith_trust_env=_get_value(dotenv_values, "LANGSMITH_TRUST_ENV", "true").lower() in {"1", "true", "yes", "on"},
+        langsmith_project=_get_value(dotenv_values, "LANGSMITH_PROJECT", defaults.langsmith_project),
+        langsmith_workspace_id=_get_value(dotenv_values, "LANGSMITH_WORKSPACE_ID", ""),
+        langsmith_environment=_get_value(dotenv_values, "LANGSMITH_ENVIRONMENT", defaults.langsmith_environment),
+        langsmith_revision=_get_value(dotenv_values, "LANGSMITH_REVISION", ""),
+        langsmith_hide_inputs=_get_value(dotenv_values, "LANGSMITH_HIDE_INPUTS", "false").lower() in {"1", "true", "yes", "on"},
+        langsmith_hide_outputs=_get_value(dotenv_values, "LANGSMITH_HIDE_OUTPUTS", "false").lower() in {"1", "true", "yes", "on"},
+        runtime_database_url=_get_value(dotenv_values, "RUNTIME_DATABASE_URL", defaults.runtime_database_url),
+        java_user_base_url=_get_value(dotenv_values, "JAVA_USER_BASE_URL", defaults.java_user_base_url),
+        memory_context_max_chars=int(_get_value(dotenv_values, "MEMORY_CONTEXT_MAX_CHARS", str(defaults.memory_context_max_chars))),
+        orchestration_checkpoint_path=_get_value(dotenv_values, "ORCHESTRATION_CHECKPOINT_PATH", defaults.orchestration_checkpoint_path),
+        trade_workflow_enabled=_get_value(dotenv_values, "TRADE_WORKFLOW_ENABLED", "true").lower() in {"1", "true", "yes", "on"},
+        trade_checkpoint_path=_get_value(dotenv_values, "TRADE_CHECKPOINT_PATH", defaults.trade_checkpoint_path),
+        trade_confirmation_ttl_seconds=int(_get_value(dotenv_values, "TRADE_CONFIRMATION_TTL_SECONDS", "300")),
+        trade_gateway_timeout_seconds=float(_get_value(dotenv_values, "TRADE_GATEWAY_TIMEOUT_SECONDS", "10")),
+        tool_timeout_seconds=float(_get_value(dotenv_values, "TOOL_TIMEOUT_SECONDS", str(defaults.tool_timeout_seconds))),
+        tool_budget_seconds=float(_get_value(dotenv_values, "TOOL_BUDGET_SECONDS", str(defaults.tool_budget_seconds))),
+        tool_max_calls=int(_get_value(dotenv_values, "TOOL_MAX_CALLS", str(defaults.tool_max_calls))),
+        tool_max_invocations=int(_get_value(dotenv_values, "TOOL_MAX_INVOCATIONS", str(defaults.tool_max_invocations))),
+        tool_read_max_attempts=int(_get_value(dotenv_values, "TOOL_READ_MAX_ATTEMPTS", str(defaults.tool_read_max_attempts))),
+        tool_retry_backoff_seconds=float(_get_value(dotenv_values, "TOOL_RETRY_BACKOFF_SECONDS", str(defaults.tool_retry_backoff_seconds))),
+        tool_max_concurrent_calls=int(_get_value(dotenv_values, "TOOL_MAX_CONCURRENT_CALLS", str(defaults.tool_max_concurrent_calls))),
         app_name=_get_value(dotenv_values, "APP_NAME", defaults.app_name),
+        model_trust_env=_get_value(dotenv_values, "MODEL_TRUST_ENV", str(defaults.model_trust_env)).lower() in {"1", "true", "yes", "on"},
         app_version=_get_value(dotenv_values, "APP_VERSION", defaults.app_version),
         app_port=int(_get_value(dotenv_values, "APP_PORT", str(defaults.app_port))),
         log_level=_get_value(dotenv_values, "LOG_LEVEL", defaults.log_level),

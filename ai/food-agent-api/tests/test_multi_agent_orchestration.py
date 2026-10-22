@@ -3,7 +3,9 @@ from __future__ import annotations
 from time import sleep
 
 from app.core.config import Settings
-from app.orchestration.executor import DynamicDagExecutor
+from langgraph.checkpoint.memory import InMemorySaver
+
+from app.graph.food_graph import build_food_graph, execution_view
 from app.orchestration.models import AgentTask, ExecutionPlan
 from app.orchestration.planner import DynamicPlanner
 from app.orchestration.registry import CapabilitySpec
@@ -20,6 +22,28 @@ def _plan(*tasks: AgentTask, revision: int = 1) -> ExecutionPlan:
         reason="test",
         source="rules" if revision == 1 else "replan",
     )
+
+
+def _execute_read_plan(plan, registry, *, max_replans=0, replanner=None):
+    """Exercise the same scheduler as HTTP runs, with in-memory checkpoints."""
+    class FixedPlanner:
+        def plan(self, message, history=None):
+            return plan
+
+        def replan(self, current, results):
+            return replanner(current, results) if replanner else None
+
+    graph = build_food_graph(
+        Settings(long_term_memory_enabled=False, orchestration_max_replans=max_replans),
+        InMemorySaver(), planner=FixedPlanner(), registry=registry, adapter=None,
+    )
+    state = graph.invoke(
+        {"message": plan.goal, "run_id": plan.run_id, "user_id": "1", "session_id": "test"},
+        {"configurable": {"thread_id": plan.run_id}},
+        context={"authorization": "", "lease_check": lambda: None,
+                 "paused": lambda: False, "emit": lambda kind, payload: None},
+    )
+    return execution_view(state)
 
 
 def test_rules_planner_builds_recommend_then_trade_dag() -> None:
@@ -195,13 +219,13 @@ def test_executor_passes_upstream_artifact_to_dependent_agent() -> None:
         ),
     )
 
-    result = DynamicDagExecutor(registry=registry).execute(plan)
+    result = _execute_read_plan(plan, registry)
 
-    assert result.status == "completed"
+    assert result["execution_status"] == "completed"
     assert received_messages == ["verify stock"]
     assert received_artifacts[0]["recommend"]["package_ids"] == [42]
-    assert result.task_results[0].artifact.package_ids == [42]
-    assert [item.status for item in result.task_results] == [
+    assert result["task_results"][0]["artifact"]["package_ids"] == [42]
+    assert [item["status"] for item in result["task_results"]] == [
         "succeeded",
         "succeeded",
     ]
@@ -238,11 +262,11 @@ def test_executor_skips_dependents_after_required_failure() -> None:
         ),
     )
 
-    result = DynamicDagExecutor(registry=registry).execute(plan)
+    result = _execute_read_plan(plan, registry)
 
-    assert result.status == "failed"
+    assert result["execution_status"] == "failed"
     assert downstream_calls == 0
-    assert [item.status for item in result.task_results] == ["failed", "skipped"]
+    assert [item["status"] for item in result["task_results"]] == ["failed", "skipped"]
 
 
 def test_executor_applies_each_task_timeout_independently() -> None:
@@ -275,11 +299,11 @@ def test_executor_applies_each_task_timeout_independently() -> None:
         ),
     )
 
-    result = DynamicDagExecutor(registry=registry).execute(plan)
+    result = _execute_read_plan(plan, registry)
 
-    assert [item.status for item in result.task_results] == ["failed", "succeeded"]
-    assert "timed out" in result.task_results[0].error
-    assert result.status == "partial"
+    assert [item["status"] for item in result["task_results"]] == ["failed", "succeeded"]
+    assert "timed out" in result["task_results"][0]["error"]
+    assert result["execution_status"] == "partial"
 
 
 def test_executor_applies_one_bounded_replan() -> None:
@@ -317,12 +341,9 @@ def test_executor_applies_one_bounded_replan() -> None:
             revision=2,
         )
 
-    result = DynamicDagExecutor(
-        registry=registry,
-        max_replans=1,
-    ).execute(initial, replanner=replan)  # type: ignore[arg-type]
+    result = _execute_read_plan(initial, registry, max_replans=1, replanner=replan)
 
-    assert result.status == "completed"
-    assert result.plan.revision == 2
-    assert result.replan_count == 1
+    assert result["execution_status"] == "completed"
+    assert result["plan_revision"] == 2
+    assert result["replan_count"] == 1
     assert calls == {"broken": 1, "replacement": 1}

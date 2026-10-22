@@ -81,7 +81,8 @@ def test_mcp_server_exposes_only_read_only_tool_schemas() -> None:
     tools = asyncio.run(server.list_tools())
     names = {tool.name for tool in tools}
 
-    assert len(tools) == 8
+    assert len(tools) == 9
+    assert "trade_get_package_snapshots" in names
     assert "trade_get_package_snapshot" in names
     assert not any("create" in name or "cancel" in name or "pay" in name for name in names)
     for tool in tools:

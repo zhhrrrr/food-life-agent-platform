@@ -16,4 +16,5 @@ public class AgentMemoryEventPO {
     private String status;
     private LocalDateTime occurredAt;
     private LocalDateTime expiresAt;
+    private Long version;
 }

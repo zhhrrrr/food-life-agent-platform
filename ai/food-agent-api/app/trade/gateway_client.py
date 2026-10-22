@@ -6,6 +6,7 @@ import httpx
 from pydantic import BaseModel
 
 from app.core.config import Settings, get_settings
+from app.tools.budget import bounded_http_timeout
 
 logger = logging.getLogger("food_agent.trade.gateway")
 
@@ -26,6 +27,8 @@ class GatewayQueryResult(BaseModel):
     message: str = ""
     reference_id: str = ""
     reference_title: str = ""
+    retryable: bool = False
+    error_code: str = ""
 
     @property
     def has_data(self) -> bool:
@@ -67,6 +70,15 @@ class TradeGatewayClient:
             params={"limit": limit},
             reference_id="coupon:available-templates",
             reference_title="当前可领取优惠券",
+        )
+
+    def get_package_snapshots(self, package_ids: list[int]) -> GatewayQueryResult:
+        return self._get(
+            capability="package_snapshots",
+            path="/api/package/trade-snapshots",
+            params={"packageIds": ",".join(str(item) for item in dict.fromkeys(package_ids))},
+            reference_id="package:batch:trade-snapshots",
+            reference_title="候选套餐当前交易信息",
         )
 
     def list_my_coupons(
@@ -150,6 +162,27 @@ class TradeGatewayClient:
             reference_title="当前用户订单列表",
         )
 
+    def get_group_buy_activity(self, package_id: int, authorization: str) -> GatewayQueryResult:
+        return self._authorized_get(capability="group_buy_query", path=f"/api/trade/group-buy/activities/package/{package_id}",
+            authorization=authorization, reference_id=f"group-buy:activity:package:{package_id}", reference_title="拼团活动价格与购买条件")
+
+    def list_seckill_activities(self, authorization: str, package_id: int | None = None, limit: int = 20) -> GatewayQueryResult:
+        return self._authorized_get(capability="seckill_query", path="/api/trade/seckill/activities", authorization=authorization,
+            params={**({"packageId": package_id} if package_id is not None else {}), "limit": limit},
+            reference_id=f"seckill:activities:{package_id or 'all'}", reference_title="秒杀活动价格、时间和库存")
+
+    def get_seckill_activity(self, activity_id: int, authorization: str) -> GatewayQueryResult:
+        return self._authorized_get(capability="seckill_query", path=f"/api/trade/seckill/activities/{activity_id}",
+            authorization=authorization, reference_id=f"seckill:activity:{activity_id}", reference_title="指定秒杀活动实时信息")
+
+    def get_seckill_request(self, request_no: str, authorization: str) -> GatewayQueryResult:
+        return self._authorized_get(capability="seckill_request", path=f"/api/trade/seckill/order-requests/{quote(request_no, safe='')}",
+            authorization=authorization, reference_id=f"seckill:request:{request_no}", reference_title="秒杀请求处理结果")
+
+    def get_payment(self, pay_order_no: str, authorization: str) -> GatewayQueryResult:
+        return self._authorized_get(capability="payment_query", path=f"/api/trade/pay/orders/{quote(pay_order_no, safe='')}",
+            authorization=authorization, reference_id=f"payment:{pay_order_no}", reference_title="支付单当前状态")
+
     def _authorized_get(
         self,
         *,
@@ -193,17 +226,26 @@ class TradeGatewayClient:
                 url,
                 headers=headers,
                 params=params,
-                timeout=self.timeout_seconds,
+                timeout=bounded_http_timeout(self.timeout_seconds),
                 trust_env=False,
             )
-        except httpx.HTTPError:
+        except httpx.TransportError:
             logger.exception("trade_gateway_request_failed capability=%s path=%s", capability, path)
             return GatewayQueryResult(
                 capability=capability,
                 status="unavailable",
                 endpoint=path,
                 message="Java Gateway 查询暂不可用。",
+                retryable=True,
+                error_code="TOOL_NETWORK_ERROR",
             )
+        except httpx.HTTPError:
+            return GatewayQueryResult(capability=capability, status="unavailable", endpoint=path,
+                message="Java Gateway 响应无效。", error_code="TOOL_RESPONSE_INVALID")
+
+        if response.status_code in (401, 403):
+            return GatewayQueryResult(capability=capability, status="missing_authorization",
+                endpoint=path, message="登录失效或没有查询权限。", error_code="TOOL_AUTH_DENIED")
 
         if response.status_code == 404:
             return GatewayQueryResult(
@@ -224,6 +266,8 @@ class TradeGatewayClient:
                 status="unavailable",
                 endpoint=path,
                 message="Java Gateway 查询暂不可用。",
+                retryable=response.status_code in {429, 500, 502, 503, 504},
+                error_code="TOOL_UPSTREAM_TRANSIENT" if response.status_code in {429, 500, 502, 503, 504} else "TOOL_UPSTREAM_REJECTED",
             )
 
         try:
@@ -238,6 +282,8 @@ class TradeGatewayClient:
                     status=status,
                     endpoint=path,
                     message=str(payload.get("message") or "Java 业务查询失败。"),
+                    retryable=code in {"429", "500", "502", "503", "504"},
+                    error_code="TOOL_UPSTREAM_TRANSIENT" if code in {"429", "500", "502", "503", "504"} else "TOOL_BUSINESS_REJECTED",
                 )
             data = payload.get("data")
         except (TypeError, ValueError):
@@ -247,6 +293,7 @@ class TradeGatewayClient:
                 status="unavailable",
                 endpoint=path,
                 message="Java Gateway 返回了无效数据。",
+                error_code="TOOL_RESPONSE_INVALID",
             )
 
         return GatewayQueryResult(

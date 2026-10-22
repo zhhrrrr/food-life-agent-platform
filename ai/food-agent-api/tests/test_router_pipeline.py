@@ -10,7 +10,7 @@ from app.graph.route_examples import (
     ROUTE_EXAMPLES,
     validate_route_examples,
 )
-from app.graph.semantic_router import SemanticRouteMatch, SemanticRouter
+from app.graph.semantic_router import SemanticRouter
 from app.llm.chat_model import ZHIPU_OPENAI_COMPATIBLE_BASE_URL, build_chat_model
 from app.llm.embedding_model import (
     SILICONFLOW_OPENAI_COMPATIBLE_BASE_URL,
@@ -57,34 +57,27 @@ def test_semantic_route_evaluation_set_is_balanced_and_independent() -> None:
     assert sum(bool(case.previous_user) for case in SEMANTIC_ROUTE_EVALUATION_CASES) >= 12
 
 
-def test_high_confidence_semantic_route_bypasses_llm_planner() -> None:
-    class AcceptedSemanticRouter:
-        def match(
-            self,
-            message: str,
-            history: list[SessionTurn],
-        ) -> SemanticRouteMatch:
-            assert message == "\u5e2e\u6211\u627e\u4e00\u5bb6\u9002\u5408\u7ea6\u4f1a\u7684\u9910\u5385"
-            assert history == []
-            return SemanticRouteMatch(
-                intent="recommend",
-                score=0.93,
-                margin=0.18,
-                matched_example="\u60f3\u627e\u9002\u5408\u7ea6\u4f1a\u800c\u4e14\u73af\u5883\u5b89\u9759\u7684\u9910\u5385",
-                accepted=True,
-            )
+def test_business_planning_uses_llm_without_embedding_routing(monkeypatch) -> None:
+    def embedding_must_not_run(*args, **kwargs):
+        raise AssertionError("business planning must not depend on embedding routing")
 
-    class LlmMustNotRun:
+    monkeypatch.setattr(SemanticRouter, "match", embedding_must_not_run)
+
+    class ChatModel:
         def with_structured_output(self, schema: object, **kwargs: object) -> object:
-            raise AssertionError("accepted semantic route must bypass the LLM planner")
+            class Structured:
+                def invoke(self, messages):
+                    return {"tasks": [{"id": "recommend", "agent": "recommend",
+                        "capability": "recommend.run", "objective": messages[-1][1]}],
+                        "confidence": 0.93, "reason": "recommendation"}
+            return Structured()
 
     plan = DynamicPlanner(
-        settings=Settings(llm_router_enabled=True),
-        semantic_router=AcceptedSemanticRouter(),  # type: ignore[arg-type]
-        chat_model=LlmMustNotRun(),
+        settings=Settings(llm_router_enabled=True, semantic_router_enabled=True),
+        chat_model=ChatModel(),
     ).plan("\u5e2e\u6211\u627e\u4e00\u5bb6\u9002\u5408\u7ea6\u4f1a\u7684\u9910\u5385")
 
-    assert plan.source == "semantic"
+    assert plan.source == "llm"
     assert plan.confidence == 0.93
     assert plan.tasks[0].agent == "recommend"
 
@@ -298,7 +291,7 @@ def test_chat_api_loads_and_appends_session_memory(monkeypatch) -> None:
 
         def load(self, session_id: str, **kwargs: Any) -> tuple[SessionContext, str]:
             assert session_id == "session-1"
-            return SessionContext(session_id=session_id, turns=[SessionTurn(user="\u67e5\u8be2\u8ba2\u5355 12345", intent="trade")]), "cache"
+            return SessionContext(session_id=session_id, turns=[SessionTurn(user="\u67e5\u8be2\u8ba2\u5355 12345", assistant="订单ID：12345，查询成功", intent="trade")]), "cache"
 
         def append(
             self,

@@ -55,6 +55,7 @@ class AgentChainResult(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     context: list[dict[str, object]] = Field(default_factory=list)
     references: list[dict[str, object]] = Field(default_factory=list)
+    session_constraints: dict[str, object] = Field(default_factory=dict)
 
 
 @dataclass(frozen=True)

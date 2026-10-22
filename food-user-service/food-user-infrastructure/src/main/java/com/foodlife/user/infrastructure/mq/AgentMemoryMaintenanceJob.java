@@ -5,7 +5,6 @@ import com.foodlife.user.infrastructure.dao.po.AgentMemoryEventPO;
 import com.foodlife.user.infrastructure.repository.AgentMemoryRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -25,11 +24,10 @@ public class AgentMemoryMaintenanceJob {
     @Scheduled(fixedDelayString = "${food.agent-memory.mq.retry-interval-ms:30000}")
     public void retryOutbox() { publisher.retryPending(); }
 
-    @Transactional(rollbackFor = Exception.class)
     @Scheduled(cron = "${food.agent-memory.expire-cron:0 20 3 * * ?}")
     public void expireEvents() {
-        List<AgentMemoryEventPO> events = mapper.findExpiredEvents(500);
-        events.forEach(repository::expire);
+        List<AgentMemoryEventPO> events;
+        do { events = mapper.findExpiredEvents(500); events.forEach(repository::expire); } while (events.size() == 500);
     }
 
     @Scheduled(cron = "${food.agent-memory.reconcile-cron:0 10 4 * * ?}")

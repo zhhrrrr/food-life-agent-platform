@@ -2,7 +2,7 @@
 import { Calendar, Check, Close, RefreshLeft, ShoppingBag, Wallet } from '@element-plus/icons-vue'
 import type { OrderInfo } from '../types/order'
 import { money, shortDate } from '../utils/format'
-import { foodImage } from '../utils/images'
+import { foodImage, handleFoodImageError } from '../utils/images'
 
 defineProps<{
   order: OrderInfo
@@ -33,7 +33,7 @@ const typeMap: Record<string, string> = {
 
 <template>
   <article class="order-card">
-    <img class="order-card__image" :src="foodImage(order.packageId, order.coverImageSnapshot)" :alt="order.packageNameSnapshot" />
+    <img class="order-card__image" :src="foodImage(order.packageId, order.coverImageSnapshot)" :alt="order.packageNameSnapshot" loading="lazy" decoding="async" @error="handleFoodImageError($event, order.packageId)" />
     <div class="order-card__main">
       <div class="order-card__top">
         <div>

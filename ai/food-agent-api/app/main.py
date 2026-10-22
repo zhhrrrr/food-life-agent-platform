@@ -8,7 +8,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
 from app.api.chat import router as chat_router
+from app.api.chat import session_memory
 from app.api.indexing import router as indexing_router
+from app.api.runs import router as runs_router
+from app.api.trade import router as trade_router
 from app.core.config import get_settings
 from app.core.errors import (
     FoodAgentError,
@@ -19,12 +22,17 @@ from app.core.logging import configure_logging
 from app.core.metrics import HTTP_DURATION, HTTP_REQUESTS, metrics_response
 from app.core.readiness import readiness_checks
 from app.mcp.server import build_mcp_asgi_app, create_mcp_server
+from app.memory.delivery import get_memory_delivery
+from app.memory.session_memory import close_memory_client
+from app.orchestration.service import close_orchestration_service
 from app.sync.es_reconciliation import start_es_reconciliation, stop_es_reconciliation
 from app.sync.es_sync_consumer import start_es_sync_consumer, stop_es_sync_consumer
 from app.sync.memory_sync_consumer import (
     start_memory_sync_consumer,
     stop_memory_sync_consumer,
 )
+from app.tools.runtime import close_tool_pools
+from app.trade.service import close_trade_service
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -43,12 +51,24 @@ async def lifespan(_: FastAPI):
         start_es_sync_consumer(settings)
         start_es_reconciliation(settings)
         start_memory_sync_consumer(settings)
+        if settings.session_memory_enabled:
+            get_memory_delivery().start()
         try:
             yield
         finally:
+            close_orchestration_service()
+            if get_memory_delivery.cache_info().currsize:
+                get_memory_delivery().close()
+                get_memory_delivery.cache_clear()
+            close_trade_service()
+            close_tool_pools()
             stop_memory_sync_consumer()
+            session_memory.close()
+            close_memory_client()
             stop_es_reconciliation()
             stop_es_sync_consumer()
+            from app.core.langsmith import close_langsmith
+            close_langsmith()
 
 
 app = FastAPI(
@@ -56,6 +76,8 @@ app = FastAPI(
     version=settings.app_version,
     lifespan=lifespan,
 )
+app.include_router(trade_router)
+app.include_router(runs_router)
 app.add_exception_handler(FoodAgentError, food_agent_error_handler)
 app.add_exception_handler(Exception, unhandled_error_handler)
 
@@ -75,12 +97,13 @@ async def request_context_middleware(
     response.headers["X-Request-Id"] = request_id
 
     route = getattr(request.scope.get("route"), "path", "unmatched")
+    method = request.method if request.method in {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE", "CONNECT"} else "OTHER"
     HTTP_REQUESTS.labels(
-        method=request.method,
+        method=method,
         route=route,
         status=str(response.status_code),
     ).inc()
-    HTTP_DURATION.labels(method=request.method, route=route).observe(
+    HTTP_DURATION.labels(method=method, route=route).observe(
         latency_ms / 1000
     )
 

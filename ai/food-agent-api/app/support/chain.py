@@ -49,14 +49,25 @@ class SupportChain:
         message: str,
         upstream_artifacts: dict[str, object] | None = None,
         session_history: list[SessionTurn] | None = None,
+        memory_context: dict | None = None,
     ) -> AgentChainResult:
-        query_context = build_query_context(message, session_history)
+        if memory_context and any(word in message for word in ("上次", "之前", "历史", "我说过", "还记得")) and not any(word in message for word in ("规则", "政策", "退款", "支付", "库存", "价格", "订单状态")):
+            events = memory_context.get("events", [])
+            return AgentChainResult(response="已保存的历史记录：\n" + "\n".join("- " + e["content"] for e in events)
+                                    if events else "没有找到可核实的相关历史记录。",
+                                    rag_mode="support_memory", query=message, rewritten_query=message,
+                                    capabilities=["memory_recall"])
+        query_context = build_query_context(message, session_history, memory_context, self.settings.memory_context_max_chars)
+        if query_context.clarification:
+            return AgentChainResult(response=query_context.clarification, rag_mode="reference_clarification",
+                query=message, rewritten_query=message, capabilities=["clarify"])
         rewrite = self.rewrite_query(message, query_context)
         retrieval = self.retriever.retrieve(
             "support",
             rewrite.search_query,
             size=5,
             original_query=query_context.retrieval_query,
+            rerank_query=rewrite.search_query,
         )
 
         if not retrieval.has_hits:
@@ -176,8 +187,8 @@ def _template_answer(context: RagContext, upstream_facts: str = "") -> str:
 
 def _no_evidence_message() -> str:
     return (
-        "暂未从搜索系统检索到相关平台规则或 FAQ 依据，"
-        "请先将正式运营 Markdown 或配置文档导入规则索引。"
+        "暂未取得可核实的相关规则依据，无法确认具体订单状态或承诺退款结果。"
+        "请补充商家、套餐或订单信息，或联系商家、客服核实。"
     )
 
 

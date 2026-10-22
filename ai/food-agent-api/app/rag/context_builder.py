@@ -23,9 +23,10 @@ _METADATA_FIELDS_BY_ID_PREFIX = {
         "shopName",
         "price",
         "originalPrice",
-        "sold",
         "status",
         "useRule",
+        "factSource",
+        "factStatus",
     ),
     "review-": (
         "reviewId",
@@ -170,6 +171,8 @@ def public_metadata(hit: SearchHit) -> dict[str, Any]:
         ),
         (),
     )
+    if hit.id.startswith("package-") and hit.metadata.get("factSource") == "business_api":
+        fields = (*fields, "stock", "sold", "shopSold")
     return {
         field: _display_value(field, hit.metadata[field])
         for field in fields

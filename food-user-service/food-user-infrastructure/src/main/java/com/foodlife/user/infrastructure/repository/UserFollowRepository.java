@@ -12,12 +12,9 @@ import com.foodlife.user.infrastructure.dao.po.UserFollowPO;
 import com.foodlife.user.infrastructure.dao.po.UserPO;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
-import org.springframework.util.CollectionUtils;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 @Repository
 public class UserFollowRepository implements IUserFollowRepository {
@@ -89,70 +86,42 @@ public class UserFollowRepository implements IUserFollowRepository {
 
     @Override
     public List<FollowUserEntity> listFollowingUsers(Long userId, Long lastId, Integer limit) {
-        List<UserFollowPO> follows = userFollowMapper.selectPage(new Page<>(1, limit),
-                        new LambdaQueryWrapper<UserFollowPO>()
-                                .eq(UserFollowPO::getUserId, userId)
-                                .eq(UserFollowPO::getFollowStatus, 1)
-                                .lt(lastId != null, UserFollowPO::getId, lastId)
-                                .orderByDesc(UserFollowPO::getId))
-                .getRecords();
-        List<FollowUserEntity> result = new ArrayList<>();
-        for (UserFollowPO follow : follows) {
-            UserPO user = userMapper.selectById(follow.getFollowUserId());
-            if (isNormalUser(user)) {
-                result.add(toFollowUserEntity(follow, user));
-            }
-        }
-        return result;
+        return toFollowUsers(userFollowMapper.selectPage(new Page<>(1, limit),
+                new LambdaQueryWrapper<UserFollowPO>()
+                        .eq(UserFollowPO::getUserId, userId).eq(UserFollowPO::getFollowStatus, 1)
+                        .inSql(UserFollowPO::getFollowUserId, "SELECT id FROM user WHERE status = 1")
+                        .lt(lastId != null, UserFollowPO::getId, lastId).orderByDesc(UserFollowPO::getId))
+                .getRecords(), false);
     }
 
     @Override
     public List<FollowUserEntity> listFans(Long userId, Long lastId, Integer limit) {
-        List<UserFollowPO> follows = userFollowMapper.selectPage(new Page<>(1, limit),
-                        new LambdaQueryWrapper<UserFollowPO>()
-                                .eq(UserFollowPO::getFollowUserId, userId)
-                                .eq(UserFollowPO::getFollowStatus, 1)
-                                .lt(lastId != null, UserFollowPO::getId, lastId)
-                                .orderByDesc(UserFollowPO::getId))
-                .getRecords();
-        List<FollowUserEntity> result = new ArrayList<>();
-        for (UserFollowPO follow : follows) {
-            UserPO user = userMapper.selectById(follow.getUserId());
-            if (isNormalUser(user)) {
-                result.add(toFollowUserEntity(follow, user));
-            }
-        }
-        return result;
+        return toFollowUsers(userFollowMapper.selectPage(new Page<>(1, limit),
+                new LambdaQueryWrapper<UserFollowPO>()
+                        .eq(UserFollowPO::getFollowUserId, userId).eq(UserFollowPO::getFollowStatus, 1)
+                        .inSql(UserFollowPO::getUserId, "SELECT id FROM user WHERE status = 1")
+                        .lt(lastId != null, UserFollowPO::getId, lastId).orderByDesc(UserFollowPO::getId))
+                .getRecords(), true);
     }
 
     @Override
     public List<FollowUserEntity> listCommonFollowUsers(Long userId, Long targetUserId, Integer limit) {
-        List<UserFollowPO> userFollows = listActiveFollows(userId, null, Math.max(limit * 5, 100));
-        if (CollectionUtils.isEmpty(userFollows)) {
-            return new ArrayList<>();
-        }
-        List<UserFollowPO> targetFollows = listActiveFollows(targetUserId, null, Math.max(limit * 5, 100));
-        if (CollectionUtils.isEmpty(targetFollows)) {
-            return new ArrayList<>();
-        }
+        return toFollowUsers(userFollowMapper.selectPage(new Page<>(1, limit),
+                new LambdaQueryWrapper<UserFollowPO>()
+                        .eq(UserFollowPO::getUserId, userId).eq(UserFollowPO::getFollowStatus, 1)
+                        .inSql(UserFollowPO::getFollowUserId, "SELECT id FROM user WHERE status = 1")
+                        .apply("follow_user_id IN (SELECT follow_user_id FROM user_follow WHERE user_id={0} AND follow_status=1)", targetUserId)
+                        .orderByDesc(UserFollowPO::getId)).getRecords(), false);
+    }
 
-        Set<Long> targetFollowUserIds = new HashSet<>();
-        for (UserFollowPO targetFollow : targetFollows) {
-            targetFollowUserIds.add(targetFollow.getFollowUserId());
-        }
-
+    private List<FollowUserEntity> toFollowUsers(List<UserFollowPO> follows, boolean fans) {
+        if (follows.isEmpty()) return List.of();
+        var ids = follows.stream().map(follow -> fans ? follow.getUserId() : follow.getFollowUserId()).toList();
+        var users = userMapper.selectBatchIds(ids).stream().collect(java.util.stream.Collectors.toMap(UserPO::getId, user -> user));
         List<FollowUserEntity> result = new ArrayList<>();
-        for (UserFollowPO userFollow : userFollows) {
-            if (!targetFollowUserIds.contains(userFollow.getFollowUserId())) {
-                continue;
-            }
-            UserPO user = userMapper.selectById(userFollow.getFollowUserId());
-            if (isNormalUser(user)) {
-                result.add(toFollowUserEntity(userFollow, user));
-            }
-            if (result.size() >= limit) {
-                break;
-            }
+        for (UserFollowPO follow : follows) {
+            UserPO user = users.get(fans ? follow.getUserId() : follow.getFollowUserId());
+            if (isNormalUser(user)) result.add(toFollowUserEntity(follow, user));
         }
         return result;
     }
@@ -171,16 +140,6 @@ public class UserFollowRepository implements IUserFollowRepository {
                 .eq(UserFollowPO::getFollowUserId, userId)
                 .eq(UserFollowPO::getFollowStatus, 1));
         return count == null ? 0 : count;
-    }
-
-    private List<UserFollowPO> listActiveFollows(Long userId, Long lastId, Integer limit) {
-        return userFollowMapper.selectPage(new Page<>(1, limit),
-                        new LambdaQueryWrapper<UserFollowPO>()
-                                .eq(UserFollowPO::getUserId, userId)
-                                .eq(UserFollowPO::getFollowStatus, 1)
-                                .lt(lastId != null, UserFollowPO::getId, lastId)
-                                .orderByDesc(UserFollowPO::getId))
-                .getRecords();
     }
 
     private UserFollowPO queryByUserAndFollowUser(Long userId, Long followUserId) {

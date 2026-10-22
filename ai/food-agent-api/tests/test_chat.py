@@ -20,8 +20,11 @@ from app.rag.chain_models import (
 from app.rag.context_builder import build_context
 from app.rag.retriever import RagRetriever, RetrievalResult
 from app.recommend.chain import (
+    BudgetConstraint,
+    IntentEvidence,
     RecommendChain,
     RecommendQueryRewrite,
+    _search_filters,
 )
 from app.search.index_names import (
     index_names_for_scopes,
@@ -44,7 +47,7 @@ def test_health() -> None:
 def test_settings_version() -> None:
     settings = Settings()
 
-    assert settings.app_version == "0.27.0"
+    assert settings.app_version == "1.0.0"
     assert settings.es_enabled is False
     assert settings.milvus_enabled is False
     assert settings.es_index_shop == "food_shop_index"
@@ -66,15 +69,12 @@ def test_chat_routes_to_recommend_agent() -> None:
     assert data["plan_revision"] == 1
     assert data["run_id"]
     assert data["rag_mode"] == "recommend_agent_bm25_no_hit"
-    assert (
-        "\u6682\u672a\u4ece\u641c\u7d22\u7cfb\u7edf\u68c0\u7d22\u5230\u53ef\u7528\u4e8e\u63a8\u8350"
-        in data["response"]
-    )
+    assert "没有找到有充分依据且符合条件的推荐候选" in data["response"]
     assert data["references"] == []
 
 
 def test_chat_routes_to_trade_agent() -> None:
-    message = "\u5e2e\u6211\u67e5\u8be2\u4e00\u4e0b\u8fd9\u4e2a\u8ba2\u5355"
+    message = "帮我查询订单12345"
     response = client.post("/api/agent/chat", json={"message": message})
 
     assert response.status_code == 200
@@ -95,10 +95,7 @@ def test_chat_routes_to_support_agent() -> None:
     assert data["intent"] == "support"
     assert data["agent"] == "support"
     assert data["agents"] == ["support"]
-    assert (
-        "\u6682\u672a\u4ece\u641c\u7d22\u7cfb\u7edf\u68c0\u7d22\u5230\u76f8\u5173\u5e73\u53f0\u89c4\u5219"
-        in data["response"]
-    )
+    assert "无法确认具体订单状态" in data["response"]
     assert data["references"] == []
 
 
@@ -396,6 +393,7 @@ def test_recommend_agent_uses_chain_result(monkeypatch) -> None:
             self,
             message: str,
             session_history: list[object] | None = None,
+            memory_context: dict | None = None,
         ) -> AgentChainResult:
             assert message == "\u63a8\u8350\u5ddd\u83dc"
             assert session_history == []
@@ -520,9 +518,11 @@ def test_recommend_chain_rewrites_retrieves_and_generates_llm_answer() -> None:
         "\u4e24\u4e2a\u4eba\u5403\u5ddd\u83dc\uff0c\u6700\u597d\u6709\u4f18\u60e0\u5238\u548c\u597d\u8bc4"
     )
 
-    assert retriever.query == rewrite.search_query
+    assert "\u4e24\u4e2a\u4eba" in retriever.query
+    assert "\u5ddd\u83dc" in retriever.query
+    assert "\u4f18\u60e0\u5238" in retriever.query
     assert result.response == answer.answer
-    assert result.rewritten_query == rewrite.search_query
+    assert result.rewritten_query == retriever.query
     assert result.capabilities == list(rewrite.capabilities)
     assert result.references[0]["id"] == "shop-1"
     assert chat_model.structured_kwargs == [
@@ -561,7 +561,7 @@ def test_recommend_rewrite_rejects_empty_capabilities_and_uses_fallback() -> Non
 
     assert result.search_query == "\u9884\u7b97200\u5143\uff0c\u9002\u5408\u7ea6\u4f1a"
     assert result.capabilities == ["budget_filter", "scene_recommendation"]
-    assert result.max_price_yuan == 200
+    assert result.budget.max_yuan == 200
 
 
 def test_recommend_fallback_extracts_suffix_budget() -> None:
@@ -569,15 +569,129 @@ def test_recommend_fallback_extracts_suffix_budget() -> None:
         settings=get_settings().model_copy(update={"llm_router_enabled": False})
     ).rewrite_query("200\u5143\u4ee5\u5185\u7684\u706b\u9505")
 
-    assert result.max_price_yuan == 200
+    assert result.budget.max_yuan == 200
     assert "budget_filter" in result.capabilities
+
+
+def test_recommend_fallback_extracts_structured_search_intent() -> None:
+    result = RecommendChain(
+        settings=get_settings().model_copy(update={"llm_router_enabled": False})
+    ).rewrite_query(
+        "两个人在滨江吃日料，人均100到150元，环境安静、不辣，"
+        "评分4.5分以上，价格从低到高"
+    )
+
+    assert result.cuisines == ["日料"]
+    assert result.areas == ["滨江"]
+    assert result.scenes == ["安静"]
+    assert result.party_size == 2
+    assert result.budget is not None
+    assert result.budget.min_yuan == 100
+    assert result.budget.max_yuan == 150
+    assert result.budget.budget_type == "per_person"
+    assert result.min_rating == 4.5
+    assert result.dietary_requirements == ["不辣"]
+    assert result.sort_by == "price_asc"
+    assert "cuisine_filter" in result.capabilities
+    assert "budget_filter" in result.capabilities
+    assert "scene_recommendation" in result.capabilities
+
+
+def test_recommend_rewrite_accepts_semantic_value_with_verified_evidence() -> None:
+    rewrite = RecommendQueryRewrite(
+        search_query="亲子餐厅推荐",
+        capabilities=["shop_recommendation", "scene_recommendation"],
+        scenes=["亲子"],
+        sort_by="price_asc",
+        evidence=[
+            IntentEvidence(
+                field="scene",
+                value="亲子",
+                evidence_span="带孩子",
+                source="current_query",
+            ),
+            IntentEvidence(
+                field="sort_preference",
+                value="price_asc",
+                evidence_span="性价比优先",
+                source="current_query",
+            ),
+        ],
+        reason="带孩子表达了亲子用餐场景",
+    )
+
+    class StructuredModel:
+        def invoke(self, messages: list[tuple[str, str]]) -> object:
+            return rewrite
+
+    class ChatModel:
+        def with_structured_output(self, schema: object, **kwargs: object) -> object:
+            return StructuredModel()
+
+    result = RecommendChain(
+        settings=get_settings().model_copy(
+            update={
+                "llm_router_enabled": True,
+                "llm_provider": "zhipu",
+                "llm_api_key": "test-key",
+            }
+        ),
+        chat_model=ChatModel(),
+    ).rewrite_query("想找适合带孩子吃饭、性价比优先的地方")
+
+    assert result.scenes == ["亲子"]
+    assert result.evidence == rewrite.evidence
+    assert result.sort_by == "price_asc"
+    assert "带孩子" in result.search_query
+    assert "亲子" in result.search_query
+    assert "价格低优先" in result.search_query
+
+
+def test_recommend_budget_type_maps_to_semantic_price_filters() -> None:
+    per_person = _search_filters(
+        RecommendQueryRewrite(
+            search_query="人均100元",
+            capabilities=["budget_filter"],
+            budget=BudgetConstraint(max_yuan=100, budget_type="per_person"),
+            reason="explicit per-person budget",
+        )
+    )
+    package = _search_filters(
+        RecommendQueryRewrite(
+            search_query="套餐200元以内",
+            capabilities=["budget_filter"],
+            budget=BudgetConstraint(max_yuan=200, budget_type="package"),
+            reason="explicit package budget",
+        )
+    )
+    total = _search_filters(
+        RecommendQueryRewrite(
+            search_query="两个人总预算200元",
+            capabilities=["budget_filter"],
+            party_size=2,
+            budget=BudgetConstraint(max_yuan=200, budget_type="total"),
+            reason="explicit total budget",
+        )
+    )
+
+    assert per_person.max_avg_price_cents == 10_000
+    assert per_person.max_item_price_cents is None
+    assert package.max_item_price_cents == 20_000
+    assert package.max_avg_price_cents is None
+    assert total.max_item_price_cents == 20_000
+    assert total.max_avg_price_cents == 10_000
 
 
 def test_recommend_rewrite_drops_hallucinated_budget() -> None:
     rewrite = RecommendQueryRewrite(
         search_query="hot pot recommendation",
         capabilities=["shop_recommendation"],
-        max_price_yuan=200,
+        budget={"max_yuan": 200},
+        cuisines=["法餐"],
+        areas=["不存在商圈"],
+        scenes=["海景"],
+        party_size=6,
+        dietary_requirements=["纯素"],
         reason="model guessed a budget",
     )
 
@@ -600,7 +714,12 @@ def test_recommend_rewrite_drops_hallucinated_budget() -> None:
         chat_model=ChatModel(),
     ).rewrite_query("\u63a8\u8350\u4e00\u5bb6\u706b\u9505\u5e97")
 
-    assert result.max_price_yuan is None
+    assert result.budget is None
+    assert result.cuisines == ["火锅"]
+    assert result.areas == []
+    assert result.scenes == []
+    assert result.party_size is None
+    assert result.dietary_requirements == []
 
 
 def test_support_agent_uses_rag_hits(monkeypatch) -> None:
@@ -618,6 +737,7 @@ def test_support_agent_uses_rag_hits(monkeypatch) -> None:
             message: str,
             upstream_artifacts: dict[str, object] | None = None,
             session_history: list[object] | None = None,
+            memory_context: dict | None = None,
         ) -> object:
             assert message == "\u9000\u6b3e\u89c4\u5219"
             assert upstream_artifacts == {}

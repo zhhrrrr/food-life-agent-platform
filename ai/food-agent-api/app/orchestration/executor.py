@@ -1,187 +1,70 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from collections.abc import Mapping
+from concurrent.futures import FIRST_COMPLETED, Future, wait
+from functools import partial
 from time import monotonic
 
+from langsmith import traceable
+from app.core.langsmith import redact, trace_inputs
+
+from app.memory.entities import displayed_entity_groups
 from app.orchestration.models import (
     AgentTask,
-    DagExecutionResult,
     ExecutionPlan,
     TaskArtifact,
     TaskResult,
 )
 from app.orchestration.registry import CAPABILITY_REGISTRY, CapabilitySpec
-from app.orchestration.validator import validate_plan, validate_replan
+from app.tools.runtime import get_tool_pool
 
 logger = logging.getLogger("food_agent.orchestration.executor")
-Replanner = Callable[[ExecutionPlan, list[TaskResult]], ExecutionPlan | None]
 
 
-class DynamicDagExecutor:
+class ReadTaskExecutor:
+    """Execute read workers; the persistent StateGraph owns scheduling and replans."""
     def __init__(
         self,
         *,
         registry: Mapping[str, CapabilitySpec] | None = None,
         max_parallel_tasks: int = 3,
-        max_replans: int = 1,
     ) -> None:
         self.registry = registry if registry is not None else CAPABILITY_REGISTRY
         self.max_parallel_tasks = max(1, max_parallel_tasks)
-        self.max_replans = max(0, max_replans)
 
-    def execute(
-        self,
-        plan: ExecutionPlan,
-        *,
-        authorization: str = "",
-        session_history: list[object] | None = None,
-        memory_context_by_agent: Mapping[str, str] | None = None,
-        replanner: Replanner | None = None,
-    ) -> DagExecutionResult:
-        current_plan = validate_plan(plan)
-        results: dict[str, TaskResult] = {}
-        replan_count = 0
 
-        while True:
-            self._execute_pending(
-                current_plan,
-                results,
-                authorization=authorization,
-                session_history=session_history or [],
-                memory_context_by_agent=memory_context_by_agent or {},
-            )
-            required_failures = [
-                task
-                for task in current_plan.tasks
-                if task.required
-                and results.get(task.id)
-                and results[task.id].status in {"failed", "skipped"}
-            ]
-            if not required_failures or replanner is None or replan_count >= self.max_replans:
-                break
-
-            revised = replanner(current_plan, list(results.values()))
-            if revised is None:
-                break
-            validate_replan(current_plan, revised)
-            validate_plan(revised)
-            _validate_completed_tasks_unchanged(current_plan, revised, results)
-            revised_task_ids = {task.id for task in revised.tasks}
-            results = {
-                task_id: result
-                for task_id, result in results.items()
-                if task_id in revised_task_ids and result.status == "succeeded"
-            }
-            current_plan = revised
-            replan_count += 1
-
-        ordered_results = [
-            results.get(task.id)
-            or TaskResult(
-                task_id=task.id,
-                agent=task.agent,
-                status="skipped",
-                error="task was not scheduled",
-            )
-            for task in current_plan.tasks
-        ]
-        return DagExecutionResult(
-            plan=current_plan,
-            task_results=ordered_results,
-            status=_execution_status(current_plan, ordered_results),
-            replan_count=replan_count,
-        )
-
-    def _execute_pending(
-        self,
-        plan: ExecutionPlan,
-        results: dict[str, TaskResult],
-        *,
-        authorization: str,
-        session_history: list[object],
-        memory_context_by_agent: Mapping[str, str],
-    ) -> None:
-        task_by_id = {task.id: task for task in plan.tasks}
-        while len(results) < len(task_by_id):
-            progress = False
-            for task in plan.tasks:
-                if task.id in results:
-                    continue
-                failed_dependencies = [
-                    dependency
-                    for dependency in task.depends_on
-                    if dependency in results
-                    and results[dependency].status != "succeeded"
-                ]
-                if failed_dependencies:
-                    results[task.id] = TaskResult(
-                        task_id=task.id,
-                        agent=task.agent,
-                        status="skipped",
-                        error="dependency failed: " + ", ".join(failed_dependencies),
-                    )
-                    progress = True
-
-            ready = [
-                task
-                for task in plan.tasks
-                if task.id not in results
-                and all(
-                    dependency in results
-                    and results[dependency].status == "succeeded"
-                    for dependency in task.depends_on
-                )
-            ]
-            if ready:
-                wave = ready[: self.max_parallel_tasks]
-                results.update(
-                    self._execute_wave(
-                        wave,
-                        results,
-                        authorization=authorization,
-                        session_history=session_history,
-                        memory_context_by_agent=memory_context_by_agent,
-                    )
-                )
-                progress = True
-            if not progress:
-                raise RuntimeError("DAG scheduler reached a non-progressing state")
-
-    def _execute_wave(
+    def execute_wave(
         self,
         tasks: list[AgentTask],
         completed: dict[str, TaskResult],
         *,
         authorization: str,
         session_history: list[object],
-        memory_context_by_agent: Mapping[str, str],
+        memory_context_by_agent: Mapping[str, dict],
     ) -> dict[str, TaskResult]:
-        executor = ThreadPoolExecutor(max_workers=min(len(tasks), self.max_parallel_tasks))
-        future_by_task: dict[Future[TaskResult], AgentTask] = {
-            executor.submit(
-                self._execute_task,
-                task,
-                completed,
-                authorization,
-                session_history,
-                memory_context_by_agent,
-            ): task
-            for task in tasks
-        }
-        deadline_by_future = {
-            future: monotonic() + task.timeout_seconds
-            for future, task in future_by_task.items()
-        }
-        pending = set(future_by_task)
+        pool = get_tool_pool(self.max_parallel_tasks, namespace="agent")
+        future_by_task: dict[Future[TaskResult], AgentTask] = {}
+        deadline_by_future: dict[Future[TaskResult], float] = {}
         wave_results: dict[str, TaskResult] = {}
+        for task in tasks:
+            deadline = monotonic() + task.timeout_seconds
+            try:
+                future = pool.submit(partial(self._execute_task, task, completed, authorization,
+                                             session_history, memory_context_by_agent, deadline))
+            except RuntimeError as exc:
+                wave_results[task.id] = TaskResult(task_id=task.id, agent=task.agent,
+                    status="failed", attempts=0, error=f"agent worker unavailable: {exc}")
+                continue
+            future_by_task[future] = task
+            deadline_by_future[future] = deadline
+        pending = set(future_by_task)
         while pending:
             now = monotonic()
             expired = {
                 future
                 for future in pending
-                if deadline_by_future[future] <= now
+                if deadline_by_future[future] <= now and not future.done()
             }
             for future in expired:
                 task = future_by_task[future]
@@ -216,24 +99,29 @@ class DynamicDagExecutor:
                         attempts=task.max_attempts,
                         error=f"{type(exc).__name__}: {exc}",
                     )
-        executor.shutdown(wait=False, cancel_futures=True)
         return wave_results
 
+    @traceable(name="agent.task", process_inputs=trace_inputs, process_outputs=redact)
     def _execute_task(
         self,
         task: AgentTask,
         completed: dict[str, TaskResult],
         authorization: str,
         session_history: list[object],
-        memory_context_by_agent: Mapping[str, str],
+        memory_context_by_agent: Mapping[str, dict],
+        deadline: float,
     ) -> TaskResult:
         spec = self.registry.get(task.capability)
         if spec is None or spec.agent != task.agent:
             raise ValueError(f"unregistered capability: {task.capability}")
+        if spec.execution != "read":
+            raise ValueError("controlled workflows cannot run in the retrying read executor")
         state = {
-            "message": _worker_message(task, memory_context_by_agent.get(task.agent, "")),
+            "message": task.objective,
+            "memory_context": memory_context_by_agent.get(task.agent, {}),
             "authorization": authorization,
             "session_history": session_history,
+            "trade_intent": task.trade_intent.model_dump() if task.trade_intent else {},
             "upstream_artifacts": {
                 dependency: completed[dependency].artifact.model_dump(mode="json")
                 for dependency in task.depends_on
@@ -241,9 +129,18 @@ class DynamicDagExecutor:
             },
         }
         last_error = ""
+        attempts = 0
         for attempt in range(1, task.max_attempts + 1):
+            if monotonic() >= deadline:
+                last_error = f"task timed out after {task.timeout_seconds:g}s"
+                break
+            attempts = attempt
             try:
                 payload = spec.handler(state)
+                if monotonic() >= deadline:
+                    last_error = f"task timed out after {task.timeout_seconds:g}s"
+                    break
+                payload = {**payload, "entity_groups": [g.model_dump() for g in displayed_entity_groups(payload, task.id)]}
                 return TaskResult(
                     task_id=task.id,
                     agent=task.agent,
@@ -265,22 +162,9 @@ class DynamicDagExecutor:
             task_id=task.id,
             agent=task.agent,
             status="failed",
-            attempts=task.max_attempts,
+            attempts=attempts,
             error=last_error,
         )
-
-
-def _worker_message(
-    task: AgentTask,
-    memory_context: str = "",
-) -> str:
-    objective = task.objective
-    if memory_context:
-        objective += (
-            "\n\n用户记忆上下文（仅用于个性化，不可替代 ES 检索或 Java 实时事实）：\n"
-            + memory_context[:4000]
-        )
-    return objective
 
 
 def _validate_completed_tasks_unchanged(
@@ -303,6 +187,8 @@ def _execution_status(
 ) -> str:
     if any(result.status == "waiting_input" for result in results):
         return "waiting_input"
+    if any(result.status == "waiting_external" for result in results):
+        return "waiting_external"
     failed_required = {
         task.id
         for task in plan.tasks

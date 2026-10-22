@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter, deque
 
+from app.memory.entities import explicit_ids
 from app.orchestration.models import ExecutionPlan
 from app.orchestration.registry import resolve_capability
 
@@ -39,6 +40,7 @@ def validate_plan(
     children: dict[str, list[str]] = {task.id: [] for task in plan.tasks}
     indegree: dict[str, int] = {task.id: 0 for task in plan.tasks}
     depth: dict[str, int] = {task.id: 1 for task in plan.tasks}
+    discoveries = {task.id for task in plan.tasks if task.capability == "recommend.run"}
 
     for task in plan.tasks:
         spec = resolve_capability(task.capability)
@@ -46,6 +48,29 @@ def validate_plan(
             raise PlanValidationError(
                 f"capability {task.capability} does not belong to {task.agent}"
             )
+        if spec.execution == "workflow" and task.max_attempts != 1:
+            raise PlanValidationError("controlled trade workflows cannot use worker retries")
+        intent = task.trade_intent
+        actions = {"trade.query": {"query"}, "trade.advise": {"advise"},
+                   "trade.workflow": {"create", "pay", "cancel", "refund", "sync_payment"}}
+        if ((task.capability in {"trade.advise", "trade.workflow"} and intent is None)
+                or (intent is not None and intent.action not in actions.get(task.capability, set()))):
+            raise PlanValidationError("trade intent action must match its capability")
+        if (task.capability == "trade.query" and intent is not None
+                and intent.query_kind == "orders" and intent.package_id is not None
+                and intent.order_id is None and not intent.request_no and not intent.pay_order_no):
+            raise PlanValidationError("package facts require the read chain, not an orders trade intent")
+        if (discoveries and task.capability == "trade.query" and intent is None
+                and not explicit_ids(task.objective)
+                and any(word in task.objective.casefold() for word in ("库存", "价格", "stock", "inventory", "price"))
+                and not discoveries.intersection(task.depends_on)):
+            raise PlanValidationError("candidate package facts must depend on a recommendation task")
+        for field, reference in task.input_refs.items():
+            parts = reference.split(".")
+            if (task.capability not in {"trade.advise", "trade.workflow"}
+                    or len(parts) != 2 or parts[0] not in task.depends_on
+                    or parts[1] != {"package_id": "package_ids", "order_id": "order_ids"}.get(field)):
+                raise PlanValidationError("input references must use typed artifacts from dependencies")
         for dependency in task.depends_on:
             if dependency not in task_by_id:
                 raise PlanValidationError(

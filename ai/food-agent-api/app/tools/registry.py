@@ -17,8 +17,18 @@ class ToolRegistry:
     def get(self, name: str) -> ToolSpec | None:
         return self._specs.get(name)
 
-    def llm_schemas(self) -> list[dict[str, object]]:
-        return [spec.llm_schema() for spec in self._specs.values()]
+    def select(
+        self, *, capabilities: set[str] | None = None,
+        names: set[str] | frozenset[str] | None = None, risk: str | None = None,
+    ) -> list[ToolSpec]:
+        """Intersect explicit tool names, business capabilities and risk."""
+        return [spec for spec in self._specs.values()
+                if (names is None or spec.name in names)
+                and (capabilities is None or spec.capabilities.intersection(capabilities))
+                and (risk is None or spec.risk == risk)]
+
+    def llm_schemas(self, **filters) -> list[dict[str, object]]:
+        return [spec.llm_schema() for spec in self.select(**filters)]
 
     def supports(self, name: str, capabilities: set[str]) -> bool:
         spec = self.get(name)

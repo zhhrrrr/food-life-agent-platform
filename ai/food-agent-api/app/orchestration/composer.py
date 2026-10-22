@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.memory.entities import displayed_entity_groups
 from app.orchestration.models import DagExecutionResult, TaskResult
 
 AGENT_LABELS = {
@@ -50,6 +51,9 @@ def compose_execution_result(execution: DagExecutionResult) -> dict[str, object]
         "task_results": [result.model_dump() for result in execution.task_results],
         "execution_status": execution.status,
         "replan_count": execution.replan_count,
+        "entity_groups": [g.model_dump() for result in successful for g in displayed_entity_groups(result.payload, result.task_id)],
+        "session_constraints": next((result.payload["session_constraints"] for result in reversed(successful)
+                                      if result.agent == "recommend" and result.payload.get("session_constraints")), {}),
     }
 
 

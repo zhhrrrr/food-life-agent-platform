@@ -53,7 +53,7 @@ def test_search_combines_indices_queries_and_budget_in_one_request(monkeypatch) 
         ["food_shop_index", "food_package_index"],
         "hot pot under 200 yuan",
         original_query="Recommend hot pot with a budget of 200 yuan",
-        filters=SearchFilters(max_price_cents=20_000),
+        filters=SearchFilters(min_price_cents=10_000, max_price_cents=20_000),
         size=5,
     )
 
@@ -63,9 +63,28 @@ def test_search_combines_indices_queries_and_budget_in_one_request(monkeypatch) 
     assert len(bool_query["should"]) == 2
     assert any(
         clause.get("bool", {}).get("should", [{}])[0]
-        == {"range": {"metadata.price": {"lte": 20_000}}}
+        == {"range": {"metadata.price": {"gte": 10_000, "lte": 20_000}}}
         for clause in bool_query["filter"]
     )
+
+
+def test_search_uses_distinct_average_and_item_price_ranges() -> None:
+    clauses = SearchService._filter_clauses(
+        SearchFilters(
+            max_avg_price_cents=10_000,
+            max_item_price_cents=20_000,
+        )
+    )
+
+    range_fields = {
+        next(iter(option["range"]))
+        for clause in clauses
+        for option in clause.get("bool", {}).get("should", [])
+        if "range" in option
+    }
+    assert "metadata.avgPrice" in range_fields
+    assert "metadata.price" in range_fields
+    assert "metadata.activityPrice" in range_fields
 
 
 def test_index_definition_is_strict_and_uses_cjk_text_mapping() -> None:

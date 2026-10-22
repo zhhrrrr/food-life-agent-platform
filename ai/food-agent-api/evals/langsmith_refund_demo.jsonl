@@ -1,0 +1,1 @@
+{"id":"refund-with-facts-demo","inputs":{"message":"订单123为什么不能退款，退款规则是什么"},"outputs":{"allowed_sources":["llm"],"tasks":[{"id":"facts","capability":"trade.query","depends_on":[],"trade_intent":{"order_id":123}},{"id":"policy","capability":"support.run","depends_on":["facts"]}]}}

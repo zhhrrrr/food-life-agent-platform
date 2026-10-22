@@ -13,6 +13,12 @@ import java.util.Map;
 @Configuration
 public class AgentMemoryMqConfiguration {
     @Bean
+    Queue agentMemoryRetryQueue(AgentMemoryMqProperties properties) {
+        return new Queue(properties.getQueue() + ".retry", true, false, false, Map.of(
+                "x-message-ttl", 5000, "x-dead-letter-exchange", properties.getExchange(),
+                "x-dead-letter-routing-key", properties.getRoutingKey()));
+    }
+    @Bean
     DirectExchange agentMemoryExchange(AgentMemoryMqProperties properties) {
         return new DirectExchange(properties.getExchange(), true, false);
     }

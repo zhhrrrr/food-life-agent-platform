@@ -2,9 +2,10 @@ import os
 
 os.environ.update(
     {
-        "APP_VERSION": "0.27.0",
+        "APP_VERSION": "1.0.0",
         "READINESS_RUNTIME_CHECKS_ENABLED": "false",
         "LLM_ROUTER_ENABLED": "false",
+        "LANGSMITH_TRACING": "false",
         "SEMANTIC_ROUTER_ENABLED": "false",
         "ES_ENABLED": "false",
         "MILVUS_ENABLED": "false",

@@ -91,8 +91,8 @@ public class ShopReviewRepository implements IShopReviewRepository {
         ShopReviewPO review = shopReviewMapper.selectOne(new LambdaQueryWrapper<ShopReviewPO>()
                 .eq(ShopReviewPO::getReviewNo, reviewNo)
                 .eq(ShopReviewPO::getReviewStatus, 1)
-                .last("limit 1"));
-        if (review == null) {
+                .last("limit 1 for update"));
+        if (review == null || statsAlreadyApplied(reviewNo)) {
             markConsumedSuccess(idempotentMessageId);
             return false;
         }
@@ -120,7 +120,8 @@ public class ShopReviewRepository implements IShopReviewRepository {
         ShopReviewPO review = shopReviewMapper.selectOne(new LambdaQueryWrapper<ShopReviewPO>()
                 .eq(ShopReviewPO::getId, reviewId)
                 .eq(ShopReviewPO::getUserId, userId)
-                .eq(ShopReviewPO::getReviewStatus, 1));
+                .eq(ShopReviewPO::getReviewStatus, 1)
+                .last("for update"));
         if (review == null) {
             throw new IllegalArgumentException("review not found");
         }
@@ -132,13 +133,8 @@ public class ShopReviewRepository implements IShopReviewRepository {
         if (hidden != 1) {
             throw new IllegalArgumentException("review not found");
         }
-        int updated;
-        if (review.getShopCommentsBefore() != null && review.getShopScoreBefore() != null) {
-            updated = shopMapper.restoreReviewStats(review.getShopId(), review.getShopCommentsBefore(), review.getShopScoreBefore());
-        } else {
-            updated = shopMapper.decreaseReviewStats(review.getShopId(), review.getScore());
-        }
-        if (updated != 1) {
+        if (statsAlreadyApplied(review.getReviewNo())
+                && shopMapper.decreaseReviewStats(review.getShopId(), review.getScore()) != 1) {
             throw new IllegalArgumentException("shop not found");
         }
         evictShopCache(review.getShopId());
@@ -148,6 +144,14 @@ public class ShopReviewRepository implements IShopReviewRepository {
     private void evictShopCache(Long shopId) {
         cacheSupport.evictShop(shopId);
         cacheSupport.delayedEvictShop(shopId);
+    }
+
+    private boolean statsAlreadyApplied(String reviewNo) {
+        return consumedMessageMapper.selectCount(new LambdaQueryWrapper<BusinessConsumedMessagePO>()
+                .eq(BusinessConsumedMessagePO::getTopic, BusinessMqTopics.SHOP_REVIEW_TOPIC)
+                .eq(BusinessConsumedMessagePO::getTag, BusinessMqTopics.REVIEW_CREATED)
+                .eq(BusinessConsumedMessagePO::getBizKey, reviewNo)
+                .eq(BusinessConsumedMessagePO::getConsumeStatus, "SUCCESS")) > 0;
     }
 
     @Override

@@ -3,6 +3,7 @@ from typing import Any
 
 from app.core.config import Settings, get_settings
 from app.llm.chat_model import ZHIPU_OPENAI_COMPATIBLE_BASE_URL
+from app.llm.transport import provider_async_client, provider_http_client
 
 SILICONFLOW_OPENAI_COMPATIBLE_BASE_URL = "https://api.siliconflow.cn/v1"
 
@@ -50,6 +51,7 @@ def build_embedding_model(settings: Settings | None = None) -> Any:
         str(options["api_key"]),
         str(options["base_url"] or ""),
         float(options["request_timeout"]),
+        resolved_settings.model_trust_env,
     )
 
 
@@ -59,6 +61,7 @@ def _cached_embedding_model(
     api_key: str,
     base_url: str,
     request_timeout: float,
+    trust_env: bool,
 ) -> Any:
     try:
         from langchain_openai import OpenAIEmbeddings
@@ -74,4 +77,6 @@ def _cached_embedding_model(
         request_timeout=request_timeout,
         max_retries=2,
         check_embedding_ctx_length=False,
+        http_client=provider_http_client(trust_env),
+        http_async_client=provider_async_client(trust_env),
     )

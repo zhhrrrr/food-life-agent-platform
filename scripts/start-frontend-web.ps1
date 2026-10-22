@@ -2,10 +2,16 @@ param(
     [switch]$Restart,
     [int]$Port = 5173,
     [string]$HostAddress = "0.0.0.0",
+    [ValidatePattern('^[A-Za-z0-9.-]+$')]
+    [string]$PublicHost,
     [switch]$Install
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($PublicHost) {
+    $env:__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS = $PublicHost
+}
 
 $Root = Split-Path -Parent $PSScriptRoot
 $WebRoot = Join-Path $Root "food-life-agent-web"

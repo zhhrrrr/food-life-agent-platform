@@ -61,5 +61,14 @@ Write-Host "gateway: $BaseUrl"
 Write-Host "packageId: $PackageId, activityId: $ActivityId"
 
 & $k6Exe run --summary-export (Join-Path $summaryDir "normal-order-summary.json") "$PSScriptRoot/k6/normal-order.js"
+if ($LASTEXITCODE -ne 0) {
+  throw "k6 normal-order failed with exit code $LASTEXITCODE. See logs/k6/normal-order-summary.json."
+}
 & $k6Exe run --summary-export (Join-Path $summaryDir "group-buy-order-summary.json") "$PSScriptRoot/k6/group-buy-order.js"
+if ($LASTEXITCODE -ne 0) {
+  throw "k6 group-buy-order failed with exit code $LASTEXITCODE. See logs/k6/group-buy-order-summary.json."
+}
 & $k6Exe run --summary-export (Join-Path $summaryDir "seckill-order-summary.json") "$PSScriptRoot/k6/seckill-order.js"
+if ($LASTEXITCODE -ne 0) {
+  throw "k6 seckill-order failed with exit code $LASTEXITCODE. See logs/k6/seckill-order-summary.json."
+}

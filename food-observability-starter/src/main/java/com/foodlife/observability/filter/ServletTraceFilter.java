@@ -50,7 +50,8 @@ public class ServletTraceFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
         } finally {
             long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
-            record(request.getMethod(), request.getRequestURI(), response.getStatus(), durationMs);
+            Object pattern = request.getAttribute(org.springframework.web.servlet.HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+            record(request.getMethod(), pattern == null ? "UNKNOWN" : pattern.toString(), response.getStatus(), durationMs);
             logRequest(request, response.getStatus(), durationMs, traceId);
             TraceIdSupport.clear();
         }
@@ -58,9 +59,13 @@ public class ServletTraceFilter extends OncePerRequestFilter {
 
     private void record(String method, String path, int status, long durationMs) {
         String safePath = StringUtils.hasText(path) ? path : "UNKNOWN";
+        String safeMethod = switch (method) {
+            case "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE", "CONNECT" -> method;
+            default -> "OTHER";
+        };
         Timer.builder("food_http_server_request_duration")
                 .description("Food service request duration")
-                .tag("method", method)
+                .tag("method", safeMethod)
                 .tag("path", safePath)
                 .tag("status", String.valueOf(status))
                 .register(meterRegistry)
@@ -69,7 +74,7 @@ public class ServletTraceFilter extends OncePerRequestFilter {
             Counter.builder("food_http_server_slow_request_total")
                     .description("Food service slow request count")
                     .tag("application", applicationName)
-                    .tag("method", method)
+                    .tag("method", safeMethod)
                     .tag("path", safePath)
                     .register(meterRegistry)
                     .increment();

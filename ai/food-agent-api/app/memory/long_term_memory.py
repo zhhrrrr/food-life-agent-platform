@@ -2,18 +2,16 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from collections.abc import Iterable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid4
 
 from pydantic import BaseModel
 
 from app.core.config import Settings, get_settings
 from app.memory.session_memory import AgentMemoryClient
 from app.rag.embedding import RagEmbeddingService
-from app.vector.milvus_client import get_milvus_client
+from app.vector.milvus_client import ensure_collection_loaded, get_milvus_client
 
 logger = logging.getLogger("food_agent.memory.long_term")
 HISTORY_MARKERS = ("之前", "上次", "以前", "历史", "我说过", "还记得")
@@ -31,6 +29,7 @@ class MemoryEvent(BaseModel):
     occurred_at: int
     expires_at: int
     score: float = 0.0
+    version: int = 0
 
 
 class UserMemoryVectorStore:
@@ -72,7 +71,7 @@ class UserMemoryVectorStore:
 
     def upsert(self, event: MemoryEvent, vector: list[float]) -> None:
         self.ensure_collection()
-        row = event.model_dump(exclude={"score"})
+        row = event.model_dump(exclude={"score", "version"})
         row["embedding"] = vector
         self._required_client().upsert(
             collection_name=self.settings.long_term_memory_collection,
@@ -95,6 +94,7 @@ class UserMemoryVectorStore:
         name = self.settings.long_term_memory_collection
         if not client.has_collection(collection_name=name):
             return []
+        ensure_collection_loaded(client, name, self.settings.milvus_timeout_seconds)
         now = int(datetime.now(UTC).timestamp())
         result = client.search(
             collection_name=name,
@@ -114,23 +114,17 @@ class UserMemoryVectorStore:
                 continue
             entity = dict(raw.get("entity") or {})
             events.append(MemoryEvent(**entity, score=score))
-        return events[: self.settings.long_term_memory_top_k]
+        return events[: limit if limit is not None else self.settings.long_term_memory_top_k]
 
-    def duplicate_id(
-        self,
-        user_id: int,
-        event_type: str,
-        entity_id: str,
-        vector: list[float],
-    ) -> str | None:
-        for event in self.search(user_id, vector, limit=self.settings.long_term_memory_candidate_k):
-            if (
-                event.score >= 0.92
-                and event.event_type == event_type
-                and event.entity_id == entity_id
-            ):
-                return event.event_id
-        return None
+    def get(self, event_id: str) -> dict | None:
+        client = self._required_client()
+        if not client.has_collection(collection_name=self.settings.long_term_memory_collection):
+            return None
+        ensure_collection_loaded(client, self.settings.long_term_memory_collection, self.settings.milvus_timeout_seconds)
+        rows = client.get(collection_name=self.settings.long_term_memory_collection, ids=[event_id],
+                          output_fields=["content", "user_id", "status", "expires_at", "occurred_at", "entity_id", "entity_type", "source_turn_id", "event_type", "embedding"],
+                          consistency_level="Strong", timeout=self.settings.milvus_timeout_seconds)
+        return rows[0] if rows else None
 
     def _required_client(self) -> Any:
         client = self._client or get_milvus_client(self.settings)
@@ -155,90 +149,97 @@ class LongTermMemoryService:
         self.vector_store = vector_store or UserMemoryVectorStore(self.settings)
         self.embeddings = embeddings or RagEmbeddingService(self.settings)
 
-    def context_for(self, agents: Iterable[str], message: str, user_id: str, authorization: str) -> dict[str, str]:
+    def context_for(self, agents: Iterable[str], message: str, user_id: str, authorization: str) -> dict[str, dict]:
         if not self.settings.long_term_memory_enabled or not user_id or not authorization:
             return {}
         selected = set(agents)
-        result: dict[str, str] = {}
+        result: dict[str, dict] = {}
         if "recommend" in selected:
             result["recommend"] = self._recommend_context(message, int(user_id), authorization)
         if "support" in selected and any(marker in message for marker in HISTORY_MARKERS):
-            result["support"] = self._event_context(message, int(user_id))
+            result["support"] = {"events": self._event_context(message, int(user_id), authorization, include_preferences=True)}
         return {agent: value for agent, value in result.items() if value}
 
     def remember_explicit(self, message: str, user_id: str, authorization: str, turn_id: str) -> None:
         if not self.settings.long_term_memory_enabled or not user_id or not authorization:
             return
-        extracted = _explicit_preferences(message)
-        for key, value in extracted.items():
+        from app.memory.preferences import preference_updates
+        for update in preference_updates(message, settings=self.settings):
+            if update.operation == "delete":
+                self.java_client.delete_profile(authorization, "food_preference", update.key)
+                continue
             self.java_client.upsert_profile(
                 authorization,
                 memory_type="food_preference",
-                memory_key=key,
-                value_json=json.dumps({"value": value}, ensure_ascii=False),
+                memory_key=update.key,
+                value_json=update.model_dump_json(exclude={"key", "evidence"}, exclude_none=True),
                 source_turn_id=turn_id,
             )
-        if "记住" in message and extracted:
-            now = datetime.now(UTC)
-            content = message[:1000]
-            event_type = "explicit_preference"
-            entity_id = next(iter(extracted))
-            event_id = uuid4().hex
-            try:
-                vector = self.embeddings.embed_query(content)
-                event_id = self.vector_store.duplicate_id(
-                    int(user_id), event_type, entity_id, vector
-                ) or event_id
-            except Exception as exc:  # noqa: BLE001 - MySQL remains source of truth
-                logger.warning("long_term_dedup_degraded error=%s", type(exc).__name__)
-            event = {
-                "eventId": event_id,
-                "eventType": event_type,
-                "content": content,
-                "entityType": "preference",
-                "entityId": entity_id,
-                "sourceTurnId": turn_id,
-                "occurredAt": now.isoformat(),
-                "expiresAt": (now + timedelta(days=180)).isoformat(),
-            }
-            self.java_client.save_event(authorization, event)
+        # Java updates the profile, canonical event and Outbox within one transaction.
 
-    def _recommend_context(self, message: str, user_id: int, authorization: str) -> str:
-        sections: list[str] = []
+    def _recommend_context(self, message: str, user_id: int, authorization: str) -> dict:
+        profile = {}
         try:
-            profile = self.java_client.load_profile(authorization)
-            if profile:
-                facts = [f"{item.get('memoryKey')}: {item.get('valueJson')}" for item in profile[:20]]
-                sections.append("稳定偏好（用户明确提供）：\n" + "\n".join(facts))
+            for item in self.java_client.load_profile(authorization):
+                key = item.get("memoryKey")
+                if key not in {"favorite", "avoid", "allergy", "budget"}:
+                    continue
+                value = json.loads(item["valueJson"])
+                if key == "budget":
+                    if "max_yuan" in value and "budget_type" in value:
+                        profile[key] = {k: value[k] for k in ("max_yuan", "budget_type")}
+                else:
+                    profile[key] = value.get("values", [value["value"]] if value.get("value") else [])
         except Exception as exc:  # noqa: BLE001
             logger.warning("long_term_profile_load_failed error=%s", type(exc).__name__)
-        event_context = self._event_context(message, user_id)
-        if event_context:
-            sections.append(event_context)
-        return "\n\n".join(sections)
+        return {"profile": profile, "events": self._event_context(message, user_id, authorization)}
 
-    def _event_context(self, message: str, user_id: int) -> str:
+    def _event_context(self, message: str, user_id: int, authorization: str, *, include_preferences: bool = False) -> list[dict]:
+        from app.rag.fusion import reciprocal_rank_fusion
+        from app.rag.reranker import RagReranker
+        from app.search.schemas import SearchHit
+        vector_ids = []
         try:
-            events = self.vector_store.search(user_id, self.embeddings.embed_query(message))
+            vector_ids = [e.event_id for e in self.vector_store.search(
+                user_id, self.embeddings.embed_query(message), limit=self.settings.long_term_memory_candidate_k)]
         except Exception as exc:  # noqa: BLE001
             logger.warning("long_term_vector_search_failed error=%s", type(exc).__name__)
-            return ""
-        if not events:
-            return ""
-        return "相关历史记忆（可能已过时，不可替代实时业务事实）：\n" + "\n".join(
-            f"- {event.content}" for event in events
-        )
+        try:
+            # Rehydrate vectors from MySQL: deleted/expired/superseded rows cannot leak back into a prompt.
+            current = self.java_client.events(authorization, ids=vector_ids) if vector_ids else []
+            lexical = self.java_client.events(authorization, query=message)
+            hits = lambda rows: [SearchHit(id=r["eventId"], title=r["eventType"], content=r["content"],
+                                          source="user_memory", metadata=r) for r in rows if include_preferences or r.get("entityType") != "preference"]
+            by_id = {r["eventId"]: r for r in current}
+            vector_rows = [by_id[i] for i in vector_ids if i in by_id]
+            fused = reciprocal_rank_fusion([("vector", hits(vector_rows)), ("lexical", hits(lexical))])
+            ranked = RagReranker(self.settings).rerank(message, fused, size=self.settings.long_term_memory_top_k).hits
+            budget = self.settings.memory_context_max_chars // 2
+            result = []
+            for hit in ranked:
+                item = {"event_id": hit.id, "content": hit.content, "occurred_at": hit.metadata.get("occurredAt"),
+                        "source_turn_id": hit.metadata.get("sourceTurnId"), "historical": True}
+                budget -= len(json.dumps(item, ensure_ascii=False))
+                if budget < 0:
+                    break
+                result.append(item)
+            return result
+        except Exception as exc:  # noqa: BLE001 - recall must degrade without blocking business execution
+            logger.warning("long_term_event_recall_failed error=%s", type(exc).__name__)
+            return []
 
 
-def _explicit_preferences(message: str) -> dict[str, str]:
-    patterns = {
-        "favorite": r"(?:我喜欢|我爱吃|偏好)([^，。；]{1,30})",
-        "avoid": r"(?:我不吃|不要|忌口)([^，。；]{1,30})",
-        "allergy": r"(?:我对)([^，。；]{1,20})(?:过敏)",
-        "budget": r"(?:预算|人均)(?:是|在|大约|不超过)?\s*([0-9]{1,5}\s*元?)",
-    }
-    return {
-        key: match.group(1).strip()
-        for key, pattern in patterns.items()
-        if (match := re.search(pattern, message))
-    }
+def utc_epoch(value: Any) -> int:
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, list) and len(value) >= 6:
+        return int(datetime(*value[:6], tzinfo=UTC).timestamp())
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    return int((parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)).timestamp())
+
+
+def event_from_java(data: dict) -> MemoryEvent:
+    return MemoryEvent(event_id=data["eventId"], user_id=int(data["userId"]), event_type=data["eventType"],
+                       content=data["content"], entity_type=data.get("entityType") or "", entity_id=data.get("entityId") or "",
+                       source_turn_id=data.get("sourceTurnId") or "", status=data.get("status") or "ACTIVE",
+                       occurred_at=utc_epoch(data["occurredAt"]), expires_at=utc_epoch(data["expiresAt"]), version=int(data.get("version") or 0))

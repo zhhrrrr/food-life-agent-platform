@@ -1,6 +1,5 @@
 import logging
 import math
-from functools import lru_cache
 from typing import Any
 
 import httpx
@@ -8,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config import Settings, get_settings
 from app.llm.embedding_model import SILICONFLOW_OPENAI_COMPATIBLE_BASE_URL
+from app.llm.transport import provider_http_client
 from app.search.schemas import SearchHit
 
 logger = logging.getLogger("food_agent.rag.reranker")
@@ -23,9 +23,11 @@ class RagReranker:
         self,
         settings: Settings | None = None,
         http_client: Any | None = None,
+        *, strict: bool = False,
     ) -> None:
         self.settings = settings or get_settings()
         self.http_client = http_client
+        self.strict = strict
 
     def rerank(
         self,
@@ -34,7 +36,7 @@ class RagReranker:
         *,
         size: int,
     ) -> RerankResult:
-        if not self.settings.rag_rerank_enabled or not hits:
+        if not self.settings.rag_rerank_enabled or (not hits and not self.strict):
             return RerankResult(hits=hits[:size])
 
         api_key = (
@@ -42,8 +44,13 @@ class RagReranker:
             or self.settings.embedding_api_key.strip()
         )
         if not api_key:
+            if self.strict:
+                raise RuntimeError("Enabled rerank evaluation requires an API key")
             logger.warning("rag_rerank_skipped reason=missing_api_key")
             return RerankResult(hits=hits[:size])
+
+        if not hits:
+            return RerankResult()
 
         base_url = (
             self.settings.rag_rerank_base_url.strip()
@@ -67,6 +74,8 @@ class RagReranker:
             results = response.json().get("results", [])
             reranked = self._map_results(hits, results)
         except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
+            if self.strict:
+                raise
             logger.warning("rag_rerank_failed error=%s", type(exc).__name__)
             return RerankResult(hits=hits[:size])
         relevant = [
@@ -78,7 +87,7 @@ class RagReranker:
         return RerankResult(hits=relevant[:size], applied=True)
 
     def _post(self, url: str, **kwargs: Any) -> Any:
-        client = self.http_client or _shared_http_client()
+        client = self.http_client or provider_http_client(self.settings.model_trust_env)
         return client.post(
             url,
             timeout=self.settings.rag_rerank_timeout_seconds,
@@ -120,8 +129,3 @@ class RagReranker:
 
 def _rerank_text(hit: SearchHit) -> str:
     return f"{hit.title}\n{hit.content}"[:12000]
-
-
-@lru_cache(maxsize=1)
-def _shared_http_client() -> httpx.Client:
-    return httpx.Client()

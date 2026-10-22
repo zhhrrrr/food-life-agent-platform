@@ -2,6 +2,7 @@ from functools import lru_cache
 from typing import Any
 
 from app.core.config import Settings, get_settings
+from app.llm.transport import provider_async_client, provider_http_client
 
 ZHIPU_OPENAI_COMPATIBLE_BASE_URL = "https://api.z.ai/api/paas/v4/"
 
@@ -41,6 +42,7 @@ def build_chat_model(settings: Settings | None = None) -> Any:
         str(options["base_url"] or ""),
         float(options["temperature"]),
         float(options["timeout"]),
+        resolved_settings.model_trust_env,
     )
 
 
@@ -51,6 +53,7 @@ def _cached_chat_model(
     base_url: str,
     temperature: float,
     timeout: float,
+    trust_env: bool,
 ) -> Any:
 
     try:
@@ -64,4 +67,6 @@ def _cached_chat_model(
         base_url=base_url or None,
         temperature=temperature,
         timeout=timeout,
+        http_client=provider_http_client(trust_env),
+        http_async_client=provider_async_client(trust_env),
     )

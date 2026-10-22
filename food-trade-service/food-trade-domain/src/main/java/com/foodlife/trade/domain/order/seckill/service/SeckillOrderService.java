@@ -294,8 +294,15 @@ public class SeckillOrderService {
         List<SeckillOrderRequestEntity> timeoutRequests = seckillRepository.queryTimeoutInitOrProcessingRequests(
                 now.minusSeconds(DEFAULT_REQUEST_TIMEOUT_SECONDS), normalizedLimit);
         for (SeckillOrderRequestEntity request : timeoutRequests) {
-            if (seckillRepository.cancelTimeoutSeckillOrderRequest(request.getRequestNo(), "seckill order request timeout")) {
-                seckillStockRepository.releaseActivityStock(request.getActivityId(), request.getUserId());
+            Boolean canceled = transactionTemplate.execute(status -> {
+                if (!seckillRepository.cancelTimeoutSeckillOrderRequest(request.getRequestNo(), "seckill order request timeout")) {
+                    return false;
+                }
+                seckillStockRepository.releaseActivityStock(request.getActivityId(), request.getUserId(),
+                        "seckill-request:" + request.getRequestNo());
+                return true;
+            });
+            if (Boolean.TRUE.equals(canceled)) {
                 result.setCanceledRequestCount(result.getCanceledRequestCount() + 1);
                 result.setReleasedStockCount(result.getReleasedStockCount() + 1);
             }
@@ -397,6 +404,11 @@ public class SeckillOrderService {
             processResult.setSuccessCount(processResult.getSuccessCount() + 1);
             return;
         }
+        if (SeckillRequestStatusConstants.FAILED.equals(request.getRequestStatus())) {
+            seckillRepository.markLocalMessageFailed(message.getId(), "seckill order request already failed");
+            processResult.setFailedCount(processResult.getFailedCount() + 1);
+            return;
+        }
         if (!seckillRepository.markSeckillOrderRequestProcessing(request.getRequestNo())) {
             seckillRepository.markLocalMessageRetry(message.getId(), "request status can not process", LocalDateTime.now().plusSeconds(30));
             processResult.setRetryCount(processResult.getRetryCount() + 1);
@@ -418,7 +430,8 @@ public class SeckillOrderService {
             if (message.getRetryCount() + 1 >= message.getMaxRetryCount()) {
                 seckillRepository.markSeckillOrderRequestFailed(request.getRequestNo(), failReason);
                 seckillRepository.markLocalMessageFailed(message.getId(), failReason);
-                seckillStockRepository.releaseActivityStock(request.getActivityId(), request.getUserId());
+                seckillStockRepository.releaseActivityStock(request.getActivityId(), request.getUserId(),
+                        "seckill-request:" + request.getRequestNo());
                 processResult.setFailedCount(processResult.getFailedCount() + 1);
                 return;
             }

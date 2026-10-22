@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { Close, DocumentChecked, Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { queryOperationAuditLogs } from '../api/trade'
 import type { OperationAuditLog, OperationAuditQuery } from '../types/order'
-import { shortDate } from '../utils/format'
+import { shortDate, trimOrUndefined } from '../utils/format'
 
 const logs = ref<OperationAuditLog[]>([])
 const loading = ref(false)
+let requestVersion = 0
+onBeforeUnmount(() => { requestVersion++ })
 
 const filters = reactive({
   traceId: '',
@@ -31,11 +33,6 @@ const operationTypes = [
 
 const bizTypes = ['ORDER', 'PAYMENT_ORDER', 'PACKAGE_STOCK']
 
-function trimOrUndefined(value: string) {
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : undefined
-}
-
 function buildQuery(): OperationAuditQuery {
   const operatorId = Number(filters.operatorId)
   return {
@@ -49,12 +46,15 @@ function buildQuery(): OperationAuditQuery {
 }
 
 async function loadLogs() {
+  const version = ++requestVersion
   loading.value = true
   try {
     const result = await queryOperationAuditLogs(buildQuery())
-    logs.value = result.logs
+    if (version === requestVersion) logs.value = result.logs
+  } catch {
+    // The HTTP interceptor reports request errors.
   } finally {
-    loading.value = false
+    if (version === requestVersion) loading.value = false
   }
 }
 
@@ -72,8 +72,10 @@ async function copyTraceId(traceId?: string) {
   if (!traceId) {
     return
   }
-  await navigator.clipboard.writeText(traceId)
-  ElMessage.success('traceId 已复制')
+  try {
+    await navigator.clipboard.writeText(traceId)
+    ElMessage.success('traceId 已复制')
+  } catch { ElMessage.warning('无法访问剪贴板，请手动复制 traceId') }
 }
 
 function compact(value?: string) {
@@ -94,28 +96,29 @@ onMounted(loadLogs)
   <section class="operation-audit-view">
     <div class="section-head audit-head">
       <div>
-        <p class="eyebrow">Operation Audit</p>
+        <p class="eyebrow">运营工作台 · 操作追踪</p>
         <h1>运营审计</h1>
+        <p class="page-description">按操作与业务线索，查看每一次处理记录。</p>
       </div>
-      <el-button :icon="Refresh" type="danger" size="large" :loading="loading" @click="loadLogs">
+      <el-button :icon="Refresh" type="primary" :loading="loading" @click="loadLogs">
         刷新
       </el-button>
     </div>
 
     <section class="audit-filter-panel">
-      <el-input v-model="filters.traceId" clearable placeholder="traceId" @keyup.enter="loadLogs" />
-      <el-input v-model="filters.operatorId" clearable placeholder="操作人 ID" @keyup.enter="loadLogs" />
-      <el-select v-model="filters.operationType" clearable filterable placeholder="操作类型">
-        <el-option v-for="item in operationTypes" :key="item" :label="item" :value="item" />
-      </el-select>
-      <el-select v-model="filters.bizType" clearable filterable placeholder="业务类型">
-        <el-option v-for="item in bizTypes" :key="item" :label="item" :value="item" />
-      </el-select>
-      <el-input v-model="filters.bizId" clearable placeholder="业务 ID" @keyup.enter="loadLogs" />
-      <el-input-number v-model="filters.limit" :min="10" :max="200" :step="10" controls-position="right" />
-      <div class="audit-filter-panel__actions">
-        <el-button :icon="Search" type="danger" :loading="loading" @click="loadLogs">查询</el-button>
+      <div class="filter-field"><span>追踪编号</span><el-input v-model="filters.traceId" aria-label="追踪编号" clearable placeholder="输入 traceId" @keyup.enter="loadLogs" /></div>
+      <div class="filter-field"><span>操作人</span><el-input v-model="filters.operatorId" aria-label="操作人 ID" clearable placeholder="输入操作人 ID" @keyup.enter="loadLogs" /></div>
+      <div class="filter-field"><span>操作类型</span><el-select v-model="filters.operationType" aria-label="操作类型" clearable filterable placeholder="全部操作">
+          <el-option v-for="item in operationTypes" :key="item" :label="item" :value="item" />
+      </el-select></div>
+      <div class="filter-field"><span>业务类型</span><el-select v-model="filters.bizType" aria-label="业务类型" clearable filterable placeholder="全部类型">
+          <el-option v-for="item in bizTypes" :key="item" :label="item" :value="item" />
+      </el-select></div>
+      <div class="filter-field"><span>业务编号</span><el-input v-model="filters.bizId" aria-label="业务编号" clearable placeholder="输入业务 ID" @keyup.enter="loadLogs" /></div>
+      <div class="filter-field"><span>展示条数</span><el-input-number v-model="filters.limit" aria-label="展示条数" :min="10" :max="200" :step="10" controls-position="right" /></div>
+      <div class="filter-actions">
         <el-button :icon="Close" @click="resetFilters">重置</el-button>
+        <el-button :icon="Search" type="primary" :loading="loading" @click="loadLogs">查询</el-button>
       </div>
     </section>
 

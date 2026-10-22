@@ -99,6 +99,7 @@ public class LinkedList<E> implements ILink<E> {
 
     @Override
     public E get(int index) {
+        if (index < 0 || index >= size) throw new IndexOutOfBoundsException(index);
         return node(index).item;
     }
 

@@ -248,9 +248,7 @@ public class SeckillRepository implements ISeckillRepository {
                 .set(SeckillOrderRequestPO::getRequestStatus, SeckillRequestStatusConstants.PROCESSING)
                 .set(SeckillOrderRequestPO::getUpdateTime, LocalDateTime.now())
                 .eq(SeckillOrderRequestPO::getRequestNo, requestNo)
-                .in(SeckillOrderRequestPO::getRequestStatus,
-                        SeckillRequestStatusConstants.INIT,
-                        SeckillRequestStatusConstants.FAILED));
+                .eq(SeckillOrderRequestPO::getRequestStatus, SeckillRequestStatusConstants.INIT));
         return updated > 0;
     }
 

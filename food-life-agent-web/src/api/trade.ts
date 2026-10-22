@@ -15,8 +15,6 @@ import type {
   OperationOrderQuery,
   OperationPackageStockAdjustRequest,
   OperationPackageStockAdjustResponse,
-  PaymentCallbackRequest,
-  PaymentCallbackResponse,
   PaymentOrderResponse,
   PaymentPrepareRequest,
   PaymentReconcileResponse,
@@ -75,7 +73,7 @@ export function preparePayment(
   orderId: number,
   data: PaymentPrepareRequest = {
     source: 'FOOD_LIFE_WEB',
-    channel: 'LOCAL_PAY',
+    channel: 'ALIPAY_SANDBOX',
   },
 ) {
   return request<PaymentOrderResponse>({
@@ -85,11 +83,18 @@ export function preparePayment(
   })
 }
 
-export function localPaymentCallback(data: PaymentCallbackRequest) {
-  return request<PaymentCallbackResponse>({
-    url: '/trade-api/pay/callback/local',
+export function syncPayment(payOrderNo: string) {
+  return request<PaymentOrderResponse>({
+    url: `/trade-api/pay/orders/${encodeURIComponent(payOrderNo)}/sync`,
     method: 'POST',
-    data,
+    timeout: 30000,
+  })
+}
+
+export function queryPaymentStatus(payOrderNo: string) {
+  return request<PaymentOrderResponse>({
+    url: `/trade-api/pay/orders/${encodeURIComponent(payOrderNo)}`,
+    method: 'GET',
   })
 }
 
@@ -106,7 +111,7 @@ export function applyRefund(orderId: number) {
     method: 'POST',
     data: {
       source: 'FOOD_LIFE_WEB',
-      channel: 'LOCAL_PAY',
+      channel: 'ALIPAY_SANDBOX',
       refundReason: 'web user refund',
     },
   })
@@ -141,7 +146,7 @@ export function operationConfirmRefund(orderId: number, userId?: number, refundR
     method: 'POST',
     data: {
       source: 'FOOD_LIFE_OPERATION',
-      channel: 'LOCAL_PAY',
+      channel: 'ALIPAY_SANDBOX',
       userId,
       refundReason,
     },

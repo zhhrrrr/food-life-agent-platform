@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PositiveInt
 
 
 class SearchDocument(BaseModel):
@@ -23,7 +23,14 @@ class SearchHit(BaseModel):
 
 
 class SearchFilters(BaseModel):
+    shop_ids: list[PositiveInt] = Field(default_factory=list, max_length=1000)
+    # Generic bounds are retained for callers that do not know the price semantics.
+    min_price_cents: int | None = Field(default=None, ge=0)
     max_price_cents: int | None = Field(default=None, ge=0)
+    min_avg_price_cents: int | None = Field(default=None, ge=0)
+    max_avg_price_cents: int | None = Field(default=None, ge=0)
+    min_item_price_cents: int | None = Field(default=None, ge=0)
+    max_item_price_cents: int | None = Field(default=None, ge=0)
     active_only: bool = True
 
 

@@ -1,0 +1,92 @@
+name: Agent Evaluation
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Hosted-runner suite (RAG, answers and live Java need the local data/services)
+        required: true
+        default: planner-realworld
+        type: choice
+        options:
+          - planner
+          - planner-realworld
+          - controlled
+      experiment_prefix:
+        description: LangSmith experiment prefix
+        required: true
+        default: agent-evaluation
+        type: string
+      repetitions:
+        description: Number of repetitions; every repetition must satisfy the gate
+        required: true
+        default: '3'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '3'
+
+permissions:
+  contents: read
+
+jobs:
+  agent-evaluation:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ai/food-agent-api
+    env:
+      LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+      LANGSMITH_ENDPOINT: ${{ vars.LANGSMITH_ENDPOINT || 'https://api.smith.langchain.com' }}
+      LANGSMITH_PROJECT: food-life-agent-evaluation
+      LANGSMITH_WORKSPACE_ID: ${{ vars.LANGSMITH_WORKSPACE_ID }}
+      LANGSMITH_ENVIRONMENT: ci
+      LANGSMITH_REVISION: ${{ github.sha }}
+      LLM_ROUTER_ENABLED: 'true'
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'openai' }}
+      LLM_MODEL: ${{ vars.LLM_MODEL || 'gpt-4o-mini' }}
+      LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
+      EXPERIMENT_PREFIX: ${{ inputs.experiment_prefix }}
+      EVALUATION_SUITE: ${{ inputs.suite }}
+      EVALUATION_REPETITIONS: ${{ inputs.repetitions }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify evaluation credentials
+        run: |
+          if (-not $env:LANGSMITH_API_KEY) {
+            throw 'Set repository secret LANGSMITH_API_KEY before running this workflow.'
+          }
+          if ($env:EVALUATION_SUITE -ne 'controlled' -and -not $env:LLM_API_KEY) {
+            throw 'Model evaluation also needs repository secret LLM_API_KEY.'
+          }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: ai/food-agent-api/requirements.txt
+      - name: Install Agent dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Evaluate selected suite and enforce every repetition
+        run: |
+          if ($env:EVALUATION_SUITE -eq 'controlled') {
+            python -m scripts.evaluate_full_agent --suite controlled --publish --repetitions $env:EVALUATION_REPETITIONS --experiment-prefix "$env:EXPERIMENT_PREFIX" --output .runtime/evals/controlled.json
+            if ($LASTEXITCODE -ne 0) { throw 'Controlled runtime evaluation failed; inspect the saved assertions.' }
+          } else {
+            $failedRounds = @()
+            for ($round = 1; $round -le [int]$env:EVALUATION_REPETITIONS; $round++) {
+              $caseFile = if ($env:EVALUATION_SUITE -eq 'planner-realworld') { 'evals/planner_realworld_cases.jsonl' } else { 'evals/planner_cases.jsonl' }
+              python -m scripts.evaluate_agent --kind planner --cases $caseFile --publish --experiment-prefix "$env:EXPERIMENT_PREFIX-r$round" --output ".runtime/evals/planner-r$round.json"
+              if ($LASTEXITCODE -ne 0) { $failedRounds += $round }
+            }
+            if ($failedRounds.Count -gt 0) { throw "Planner evaluation failed in rounds: $($failedRounds -join ', ')" }
+          }
+      - name: Save evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-evaluation-${{ inputs.suite }}
+          path: ai/food-agent-api/.runtime/evals/*.json

@@ -7,7 +7,7 @@ from typing import Any
 
 from app.core.config import Settings, get_settings
 from app.search.schemas import SearchDocument, SearchFilters, SearchHit
-from app.vector.milvus_client import get_milvus_client
+from app.vector.milvus_client import ensure_collection_loaded, get_milvus_client
 
 logger = logging.getLogger("food_agent.vector.milvus_service")
 
@@ -164,20 +164,23 @@ class MilvusVectorService:
         filters: SearchFilters | None = None,
     ) -> list[SearchHit]:
         client = self._required_client()
-        expression = self._filter_expression(filters or SearchFilters())
+        normalized_filters = filters or SearchFilters()
         hits: list[SearchHit] = []
         for collection in dict.fromkeys(collections):
+            expression = self._filter_expression(normalized_filters, collection)
             self._ensure_loaded(client, collection)
             result = client.search(
-                collection_name=collection,
-                data=[query_vector],
-                anns_field="embedding",
-                filter=expression,
-                limit=size,
-                output_fields=OUTPUT_FIELDS,
-                search_params={"metric_type": self.settings.milvus_metric_type},
-                consistency_level=self.settings.milvus_consistency_level,
-                timeout=self.settings.milvus_timeout_seconds,
+                collection_name=collection,  # 指定要检索的 Collection（类似 MySQL 表）
+                data=[query_vector],         # 查询向量，支持批量检索，因此需要二维列表
+                anns_field="embedding",      # 指定执行 ANN 检索的向量字段
+                filter=expression,           # Metadata Filter，按标量字段过滤数据
+                limit=size,                  # 每个查询向量返回相似度最高的 TopK 条结果
+                output_fields=OUTPUT_FIELDS, # 指定返回的字段，如 id、content、category
+                search_params={
+                    "metric_type": self.settings.milvus_metric_type
+                },                           # 相似度度量方式，如 COSINE、L2、IP
+                consistency_level=self.settings.milvus_consistency_level,  # 一致性级别，控制查询的数据可见性
+                timeout=self.settings.milvus_timeout_seconds,              # 检索超时时间，单位为秒
             )
             hits.extend(
                 hit
@@ -267,16 +270,7 @@ class MilvusVectorService:
         return str(description.get("collection_name") or "") or None
 
     def _ensure_loaded(self, client: Any, collection: str) -> None:
-        state = client.get_load_state(
-            collection_name=collection,
-            timeout=self.settings.milvus_timeout_seconds,
-        ).get("state")
-        if getattr(state, "name", state) == "Loaded":
-            return
-        client.load_collection(
-            collection_name=collection,
-            timeout=self.settings.milvus_timeout_seconds,
-        )
+        ensure_collection_loaded(client, collection, self.settings.milvus_timeout_seconds)
 
     @staticmethod
     def _row(document: SearchDocument, vector: list[float]) -> dict[str, Any]:
@@ -317,8 +311,12 @@ class MilvusVectorService:
         )
 
     @staticmethod
-    def _filter_expression(filters: SearchFilters) -> str:
+    def _filter_expression(filters: SearchFilters, collection: str = "") -> str:
         clauses: list[str] = []
+        if filters.shop_ids:
+            # JSON-path IN is unavailable in Milvus Lite; comparisons work in both backends.
+            clauses.append("(" + " or ".join(
+                f'metadata["shopId"] == {shop_id}' for shop_id in filters.shop_ids) + ")")
         if filters.active_only:
             now = int(datetime.now(UTC).timestamp() * 1000)
             clauses.extend(
@@ -328,9 +326,34 @@ class MilvusVectorService:
                     f"(valid_end == 0 or valid_end >= {now})",
                 ]
             )
-        if filters.max_price_cents is not None:
-            clauses.append(f"(price == -1 or price <= {filters.max_price_cents})")
+        minimum, maximum = _price_bounds_for_collection(filters, collection)
+        if minimum is not None:
+            clauses.append(f"(price == -1 or price >= {minimum})")
+        if maximum is not None:
+            clauses.append(f"(price == -1 or price <= {maximum})")
         return " and ".join(clauses)
+
+
+def _price_bounds_for_collection(
+    filters: SearchFilters,
+    collection: str,
+) -> tuple[int | None, int | None]:
+    has_specific_bounds = any(
+        value is not None
+        for value in (
+            filters.min_avg_price_cents,
+            filters.max_avg_price_cents,
+            filters.min_item_price_cents,
+            filters.max_item_price_cents,
+        )
+    )
+    if not has_specific_bounds:
+        return filters.min_price_cents, filters.max_price_cents
+    if "_shop_vectors" in collection:
+        return filters.min_avg_price_cents, filters.max_avg_price_cents
+    if "_package_vectors" in collection or "_activity_vectors" in collection:
+        return filters.min_item_price_cents, filters.max_item_price_cents
+    return None, None
 
 
 def _integer(value: Any, *, default: int) -> int:

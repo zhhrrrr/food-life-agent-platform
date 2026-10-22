@@ -7,10 +7,12 @@ from app.recommend.chain import RecommendChain
 class RecommendAgentInput(TypedDict, total=False):
     message: str
     session_history: list[SessionTurn]
+    memory_context: dict
 
 
 def recommend_agent_node(state: RecommendAgentInput) -> dict[str, object]:
     return RecommendChain().run(
         state["message"],
         session_history=state.get("session_history", []),
+        memory_context=state.get("memory_context", {}),
     ).model_dump()

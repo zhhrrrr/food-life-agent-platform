@@ -18,3 +18,8 @@ export function shortDate(value?: string | null) {
   }
   return value.replace('T', ' ').slice(0, 16)
 }
+
+export function trimOrUndefined(value?: string | null) {
+  const trimmed = value?.trim() ?? ''
+  return trimmed.length > 0 ? trimmed : undefined
+}

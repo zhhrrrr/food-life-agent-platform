@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Literal, TypedDict
 
 from pydantic import BaseModel, Field
@@ -23,27 +24,9 @@ class GeneralAnswer(BaseModel):
 
 def general_agent_node(state: GeneralAgentInput) -> dict[str, object]:
     message = state["message"].strip()
-    fallback = _fallback_answer(message)
-    settings = get_settings()
-    answer = invoke_structured_output_with_fallback(
-        settings=settings,
-        schema=GeneralAnswer,
-        messages=[
-            (
-                "system",
-                (
-                    "You are the lightweight receptionist for a food-life assistant. "
-                    "Handle greetings, capability guidance, harmless casual chat, and clarification. "
-                    "You have no tools and must not claim current prices, stock, coupons, orders, "
-                    "payments, refunds, or external real-time facts. Keep the answer concise."
-                ),
-            ),
-            ("human", message),
-        ],
-        fallback=fallback,
-        operation="general_agent_answer",
-        logger=logger,
-    )
+    answer = simple_general_answer(message)
+    if answer is None:
+        answer = _generate_answer(message, state.get("session_history", []))
     return {
         "response": answer.response,
         "rag_mode": f"general_agent_{answer.response_type}",
@@ -55,15 +38,50 @@ def general_agent_node(state: GeneralAgentInput) -> dict[str, object]:
     }
 
 
-def _fallback_answer(message: str) -> GeneralAnswer:
-    lowered = message.casefold()
-    if any(token in lowered for token in ("你好", "您好", "hello", "hi")):
-        return GeneralAnswer(response_type="chat", response="你好，有什么可以帮你的？")
-    if any(token in message for token in ("能做什么", "有什么功能", "支持什么")):
+def _generate_answer(message: str, history: list[object]) -> GeneralAnswer:
+    from app.memory.query_context import history_messages
+
+    return invoke_structured_output_with_fallback(
+        settings=get_settings(),
+        schema=GeneralAnswer,
+        messages=[
+            (
+                "system",
+                (
+                    "You are the lightweight receptionist for a food-life assistant. "
+                    "Handle greetings, capability guidance, harmless casual chat, and clarification. "
+                    "You have no tools and must not claim current prices, stock, coupons, orders, "
+                    "payments, refunds, or external real-time facts. Keep the answer concise."
+                ),
+            ),
+            *history_messages(history, message=message),
+            ("human", message),
+        ],
+        fallback=_fallback_answer(message),
+        operation="general_agent_answer",
+        logger=logger,
+    )
+
+
+def simple_general_answer(message: str) -> GeneralAnswer | None:
+    normalized = re.sub(r"[\s，。！？,.!?]+", "", message).casefold()
+    tokens = ("你好", "您好", "谢谢", "感谢", "你是谁", "你能做什么", "能做什么", "有什么功能", "支持什么", "hello", "hi")
+    if not normalized or not re.fullmatch("(?:" + "|".join(tokens) + ")+", normalized):
+        return None
+    if any(token in normalized for token in ("你是谁", "能做什么", "有什么功能", "支持什么")):
         return GeneralAnswer(
             response_type="capability_guide",
             response="我可以协助美食推荐、平台规则说明，以及价格、库存、优惠券和订单等只读查询。",
         )
+    if any(token in normalized for token in ("谢谢", "感谢")):
+        return GeneralAnswer(response_type="chat", response="不客气，有需要随时告诉我。")
+    return GeneralAnswer(response_type="chat", response="你好，有什么可以帮你的？")
+
+
+def _fallback_answer(message: str) -> GeneralAnswer:
+    simple = simple_general_answer(message)
+    if simple is not None:
+        return simple
     if len(message) <= 8 and any(token in message for token in ("这个", "那个", "看看", "查一下")):
         return GeneralAnswer(
             response_type="clarify",

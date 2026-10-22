@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Bowl,
@@ -18,13 +18,16 @@ import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
 const router = useRouter()
+watch(() => auth.token, token => { if (!token) void router.replace('/login') })
 const canViewOperations = computed(() => {
   const role = auth.user?.role?.toUpperCase()
   return role === 'ADMIN' || role === 'OPERATOR'
 })
 
 onMounted(() => {
-  auth.fetchMe().catch(() => auth.logout())
+  // The HTTP interceptor invalidates only a rejected credential. A network
+  // failure must not sign out this account or a newer login.
+  auth.fetchMe().catch(() => {})
 })
 
 function logout() {
@@ -45,45 +48,19 @@ function logout() {
           <small>美食拼团 Agent</small>
         </span>
       </button>
-      <nav class="topbar__nav">
-        <router-link to="/">
+      <nav class="topbar__nav" aria-label="主导航">
+        <router-link to="/" active-class="" exact-active-class="is-active">
           <el-icon><HomeFilled /></el-icon>
           首页
         </router-link>
-        <router-link to="/orders">
+        <router-link to="/orders" active-class="" exact-active-class="is-active">
           <el-icon><Tickets /></el-icon>
           订单
         </router-link>
-        <el-dropdown v-if="canViewOperations" trigger="click">
-          <button class="nav-menu-button" type="button">
-            <el-icon><DocumentChecked /></el-icon>
-            运营
-          </button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item @click="router.push('/operations/audit')">
-                <el-icon><ChatLineSquare /></el-icon>
-                审计日志
-              </el-dropdown-item>
-              <el-dropdown-item @click="router.push('/operations/orders')">
-                <el-icon><Search /></el-icon>
-                订单检索
-              </el-dropdown-item>
-              <el-dropdown-item @click="router.push('/operations/stock')">
-                <el-icon><Box /></el-icon>
-                库存调整
-              </el-dropdown-item>
-              <el-dropdown-item @click="router.push('/operations/refunds')">
-                <el-icon><Wallet /></el-icon>
-                退款确认
-              </el-dropdown-item>
-              <el-dropdown-item @click="router.push('/operations/messages')">
-                <el-icon><MessageBox /></el-icon>
-                异常消息
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <router-link v-if="canViewOperations" to="/operations/orders" active-class="" :class="{ 'is-active': $route.path.startsWith('/operations') }">
+          <el-icon><DocumentChecked /></el-icon>
+          运营
+        </router-link>
       </nav>
       <div class="topbar__user">
         <el-avatar :size="36" :src="auth.user?.icon">
@@ -91,13 +68,21 @@ function logout() {
         </el-avatar>
         <span class="hidden-sm-and-down">{{ auth.user?.nickName || 'Foodie' }}</span>
         <el-tooltip content="退出登录" placement="bottom">
-          <el-button :icon="SwitchButton" circle @click="logout" />
+          <el-button :icon="SwitchButton" aria-label="退出登录" circle @click="logout" />
         </el-tooltip>
       </div>
     </header>
 
+    <nav v-if="canViewOperations && $route.path.startsWith('/operations')" class="operations-nav" aria-label="运营功能">
+      <router-link to="/operations/orders"><el-icon><Search /></el-icon>订单检索</router-link>
+      <router-link to="/operations/stock"><el-icon><Box /></el-icon>库存调整</router-link>
+      <router-link to="/operations/refunds"><el-icon><Wallet /></el-icon>退款确认</router-link>
+      <router-link to="/operations/audit"><el-icon><ChatLineSquare /></el-icon>审计日志</router-link>
+      <router-link to="/operations/messages"><el-icon><MessageBox /></el-icon>异常消息</router-link>
+    </nav>
+
     <main>
-      <router-view />
+      <router-view v-if="auth.token" :key="auth.token" />
     </main>
   </div>
 </template>

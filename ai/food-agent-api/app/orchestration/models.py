@@ -4,6 +4,9 @@ from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, Field, model_validator
 
+from app.memory.entities import EntityGroup, displayed_entity_groups
+from app.trade.intent import TradeIntent
+
 AgentName = Literal["recommend", "support", "trade", "general"]
 PlanSource = Literal["semantic", "llm", "rules", "replan"]
 TaskStatus = Literal[
@@ -13,6 +16,7 @@ TaskStatus = Literal[
     "failed",
     "skipped",
     "waiting_input",
+    "waiting_external",
 ]
 
 
@@ -25,6 +29,8 @@ class AgentTask(BaseModel):
     required: bool = True
     timeout_seconds: float = Field(default=90.0, gt=0, le=300.0)
     max_attempts: int = Field(default=1, ge=1, le=3)
+    trade_intent: TradeIntent | None = None
+    input_refs: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_dependencies(self) -> AgentTask:
@@ -55,6 +61,8 @@ class PlannedTask(BaseModel):
         validation_alias=AliasChoices("depends_on", "dependencies"),
     )
     required: bool | list[str] = True
+    trade_intent: TradeIntent | None = None
+    input_refs: dict[str, str] = Field(default_factory=dict)
 
 
 class PlanDraft(BaseModel):
@@ -71,6 +79,8 @@ class TaskArtifact(BaseModel):
     order_ids: list[int] = Field(default_factory=list)
     facts: list[dict[str, Any]] = Field(default_factory=list)
     references: list[dict[str, Any]] = Field(default_factory=list)
+    purchase_options: list[dict[str, Any]] = Field(default_factory=list)
+    entity_groups: list[EntityGroup] = Field(default_factory=list)
 
     @classmethod
     def from_payload(cls, payload: dict[str, object]) -> TaskArtifact:
@@ -99,6 +109,12 @@ class TaskArtifact(BaseModel):
             _append_prefixed_id(package_ids, document_id, "package-")
             _append_colon_id(package_ids, document_id, "package:")
             _append_colon_id(order_ids, document_id, "order:")
+        trade = payload.get("trade") or {}
+        result = trade.get("result", {}) if isinstance(trade, dict) else {}
+        data = result.get("data", {}) if isinstance(result, dict) else {}
+        if isinstance(data, dict):
+            _append_int(order_ids, data.get("orderId"))
+            _append_int(package_ids, data.get("packageId"))
 
         return cls(
             shop_ids=list(dict.fromkeys(shop_ids)),
@@ -106,6 +122,8 @@ class TaskArtifact(BaseModel):
             order_ids=list(dict.fromkeys(order_ids)),
             facts=facts,
             references=references,
+            purchase_options=list(payload.get("purchase_options") or []),
+            entity_groups=displayed_entity_groups(payload),
         )
 
 
@@ -122,7 +140,7 @@ class TaskResult(BaseModel):
 class DagExecutionResult(BaseModel):
     plan: ExecutionPlan
     task_results: list[TaskResult]
-    status: Literal["completed", "partial", "failed", "waiting_input"]
+    status: Literal["completed", "partial", "failed", "waiting_input", "waiting_external"]
     replan_count: int = Field(default=0, ge=0)
 
 

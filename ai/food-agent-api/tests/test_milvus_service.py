@@ -180,7 +180,7 @@ def test_milvus_search_uses_alias_cosine_and_scalar_filters() -> None:
         ["food_package_vectors"],
         [1.0, 0.0],
         size=5,
-        filters=SearchFilters(max_price_cents=10_000),
+        filters=SearchFilters(min_price_cents=5_000, max_price_cents=10_000),
     )
 
     assert hits[0].id == "package-1"
@@ -189,9 +189,31 @@ def test_milvus_search_uses_alias_cosine_and_scalar_filters() -> None:
     assert client.search_request is not None
     assert client.search_request["collection_name"] == "food_package_vectors"
     assert client.search_request["search_params"] == {"metric_type": "COSINE"}
+    assert "price >= 5000" in client.search_request["filter"]
     assert "price <= 10000" in client.search_request["filter"]
     assert "valid_end" in client.search_request["filter"]
     assert client.load_count == 1
+
+
+def test_milvus_applies_price_bounds_by_collection_semantics() -> None:
+    filters = SearchFilters(
+        max_avg_price_cents=10_000,
+        max_item_price_cents=20_000,
+    )
+
+    shop_expression = MilvusVectorService._filter_expression(
+        filters, "food_shop_vectors"
+    )
+    package_expression = MilvusVectorService._filter_expression(
+        filters, "food_package_vectors"
+    )
+    review_expression = MilvusVectorService._filter_expression(
+        filters, "food_review_vectors"
+    )
+
+    assert "price <= 10000" in shop_expression
+    assert "price <= 20000" in package_expression
+    assert "price <=" not in review_expression
 
 
 def test_milvus_alias_promotes_new_collection_and_returns_previous() -> None:

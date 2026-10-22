@@ -50,3 +50,10 @@ def test_liveness_readiness_and_metrics_endpoints() -> None:
     assert ready.json()["status"] == "ready"
     assert metrics.status_code == 200
     assert "food_agent_http_requests_total" in metrics.text
+
+
+def test_unknown_http_methods_do_not_create_unbounded_metric_labels() -> None:
+    assert client.request("CUSTOM_AUDIT_1", "/missing-audit-route").status_code == 404
+    metrics = client.get("/metrics").text
+    assert 'method="CUSTOM_AUDIT_1"' not in metrics
+    assert 'method="OTHER"' in metrics

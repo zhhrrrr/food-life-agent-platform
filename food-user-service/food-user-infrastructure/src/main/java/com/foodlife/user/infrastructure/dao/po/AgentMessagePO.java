@@ -14,5 +14,6 @@ public class AgentMessagePO {
     private String content;
     private String intent;
     private String runId;
+    private String contextJson;
     private LocalDateTime createTime;
 }

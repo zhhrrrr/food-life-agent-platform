@@ -12,6 +12,7 @@ from mcp_types import ToolAnnotations
 from app.core.config import Settings
 from app.tools.executor import ToolExecutor
 from app.tools.models import ToolCall, ToolContext
+from app.tools.budget import tool_budgeted
 from app.tools.trade_tools import build_trade_tool_registry
 from app.trade.gateway_client import GatewayQueryResult, TradeGatewayClient
 
@@ -36,8 +37,9 @@ class McpTradeAdapter:
         self.registry = build_trade_tool_registry(
             gateway_client or TradeGatewayClient(settings=settings)
         )
-        self.executor = ToolExecutor(self.registry, max_calls=1)
+        self.executor = ToolExecutor(self.registry, max_calls=1, settings=settings)
 
+    @tool_budgeted
     def execute(
         self,
         name: str,
@@ -53,7 +55,8 @@ class McpTradeAdapter:
 
         executions = self.executor.execute(
             [ToolCall(name=name, arguments=arguments)],
-            ToolContext(authorization=normalized_headers.get("authorization", "")),
+            ToolContext(authorization=normalized_headers.get("authorization", ""),
+                allowed_tool_names=frozenset(spec.name for spec in self.registry.select(risk="read"))),
         )
         execution = executions[0]
         if not execution.succeeded:
@@ -78,12 +81,16 @@ def create_mcp_server(
         return adapter.execute(name, arguments, ctx.headers)
 
     def get_package_snapshot(ctx: Context, package_id: int) -> dict[str, Any]:
-        """Get the current price and stock for one package."""
+        """Get current price, stock, status and package/shop sales for one package."""
         return execute(
             "trade_get_package_snapshot",
             {"package_id": package_id},
             ctx,
         )
+
+    def get_package_snapshots(ctx: Context, package_ids: list[int]) -> dict[str, Any]:
+        """Batch-read current trading facts for 1 to 50 candidate package IDs."""
+        return execute("trade_get_package_snapshots", {"package_ids": package_ids}, ctx)
 
     def list_coupon_templates(ctx: Context, limit: int = 10) -> dict[str, Any]:
         """List coupon templates available to the signed-in user."""
@@ -147,6 +154,7 @@ def create_mcp_server(
 
     for name, function in (
         ("trade_get_package_snapshot", get_package_snapshot),
+        ("trade_get_package_snapshots", get_package_snapshots),
         ("trade_list_coupon_templates", list_coupon_templates),
         ("trade_list_my_coupons", list_my_coupons),
         ("trade_list_group_buy_teams", list_group_buy_teams),

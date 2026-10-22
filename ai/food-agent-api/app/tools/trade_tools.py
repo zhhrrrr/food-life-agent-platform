@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal, cast
+from typing import Annotated, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -10,11 +10,15 @@ from app.trade.gateway_client import TradeGatewayClient
 
 
 class TradeToolArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
 
 class PackageIdArgs(TradeToolArgs):
     package_id: int = Field(gt=0)
+
+
+class PackageIdsArgs(TradeToolArgs):
+    package_ids: list[Annotated[int, Field(gt=0)]] = Field(min_length=1, max_length=50)
 
 
 class CouponTemplatesArgs(TradeToolArgs):
@@ -43,16 +47,57 @@ class OrderIdArgs(TradeToolArgs):
     order_id: int = Field(gt=0)
 
 
+class ActivityIdArgs(TradeToolArgs):
+    activity_id: int = Field(gt=0)
+
+
+class SeckillActivitiesArgs(TradeToolArgs):
+    package_id: int | None = Field(default=None, gt=0)
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class RequestNoArgs(TradeToolArgs):
+    request_no: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
+
+
+class PaymentNoArgs(TradeToolArgs):
+    pay_order_no: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
+
+
 def build_trade_tool_registry(client: TradeGatewayClient) -> ToolRegistry:
     return ToolRegistry(
         [
+            ToolSpec(name="trade_get_group_buy_activity", description="Read actual group price, activity stock, dates and target count for a package.",
+                args_schema=PackageIdArgs, capabilities=frozenset({"group_buy_query", "purchase_options"}), requires_authorization=True,
+                handler=lambda args, ctx: client.get_group_buy_activity(args.package_id, ctx.authorization)),
+            ToolSpec(name="trade_list_seckill_activities", description="List actual seckill activities, optionally filtered by package. Availability is advisory, not a reservation.",
+                args_schema=SeckillActivitiesArgs, capabilities=frozenset({"seckill_query", "purchase_options"}), requires_authorization=True,
+                handler=lambda args, ctx: client.list_seckill_activities(ctx.authorization, args.package_id, args.limit)),
+            ToolSpec(name="trade_get_seckill_activity", description="Read actual price, stock, dates and limits for a specific seckill activity ID.",
+                args_schema=ActivityIdArgs, capabilities=frozenset({"seckill_query"}), requires_authorization=True,
+                handler=lambda args, ctx: client.get_seckill_activity(args.activity_id, ctx.authorization)),
+            ToolSpec(name="trade_get_seckill_request", description="Read signed-in user's async seckill request result. Only SUCCESS with orderId means an order exists.",
+                args_schema=RequestNoArgs, capabilities=frozenset({"seckill_request"}), requires_authorization=True,
+                handler=lambda args, ctx: client.get_seckill_request(args.request_no, ctx.authorization)),
+            ToolSpec(name="trade_get_payment", description="Read signed-in user's payment status; PREPARED is not payment success.",
+                args_schema=PaymentNoArgs, capabilities=frozenset({"payment_query"}), requires_authorization=True,
+                handler=lambda args, ctx: client.get_payment(args.pay_order_no, ctx.authorization)),
             ToolSpec(
                 name="trade_get_package_snapshot",
-                description="Get current price and stock for one package ID.",
+                description="Get current price, stock, status and package/shop sales for one package ID.",
                 args_schema=PackageIdArgs,
-                capabilities=frozenset({"price_query", "stock_query", "order_preview"}),
+                capabilities=frozenset({"price_query", "stock_query", "sales_query", "order_preview"}),
                 handler=lambda args, _ctx: client.get_package_snapshot(
                     cast(PackageIdArgs, args).package_id
+                ),
+            ),
+            ToolSpec(
+                name="trade_get_package_snapshots",
+                description="Batch-read current price, stock, status and package/shop sales for 1 to 50 candidate package IDs.",
+                args_schema=PackageIdsArgs,
+                capabilities=frozenset({"price_query", "stock_query", "sales_query", "package_recommendation"}),
+                handler=lambda args, _ctx: client.get_package_snapshots(
+                    cast(PackageIdsArgs, args).package_ids
                 ),
             ),
             ToolSpec(

@@ -29,15 +29,16 @@ export const useAuthStore = defineStore('auth', {
       }
     },
     async fetchMe() {
-      if (!this.token) {
-        return
-      }
-      this.user = await queryCurrentUser()
+      const token = this.token
+      if (!token) return
+      const user = await queryCurrentUser()
+      if (this.token === token) this.user = user
     },
     logout() {
       this.token = ''
       this.user = null
       localStorage.removeItem(TOKEN_KEY)
+      sessionStorage.removeItem('food-life-pending-payment')
     },
   },
 })
