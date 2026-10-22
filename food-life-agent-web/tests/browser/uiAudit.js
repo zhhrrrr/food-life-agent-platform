@@ -108,6 +108,8 @@ async (page) => {
     if (path.endsWith('/events')) {
       if (pauseNextStream) { pausedStream = route; return }
       const resumes = calls.filter(call => call.path.endsWith('/resume'))
+      // Exercise a slow first confirmation stream, independently of machine speed.
+      if (resumes.length === 1) await new Promise(resolve => setTimeout(resolve, 250))
       if (disconnectConfirmation && resumes.length) return route.abort('connectionreset')
       return route.fulfill({ contentType: 'text/event-stream', body: `id: 1\nevent: plan_ready\ndata: {}\n\nid: 2\nevent: turn_finished\ndata: {"status":"done"}\n\n` })
     }
@@ -168,7 +170,11 @@ async (page) => {
   await page.reload()
   await page.getByRole('button', { name: '确认操作', exact: true }).waitFor()
   check(calls.filter(call => call.path === '/api/agent/runs' && call.method === 'POST').length === 1, 'reload restores the original run without replanning')
+  const failedConfirmationStream = page.waitForEvent('requestfailed', {
+    predicate: request => new URL(request.url()).pathname === '/api/agent/runs/browserrun1/events',
+  })
   await page.getByRole('button', { name: '确认操作', exact: true }).click()
+  await failedConfirmationStream
   await page.getByRole('button', { name: '重试上次请求', exact: true }).waitFor()
   check(calls.filter(call => call.path.endsWith('/resume')).length === 1, 'disconnected confirmation preserves a retry action')
   disconnectConfirmation = false
